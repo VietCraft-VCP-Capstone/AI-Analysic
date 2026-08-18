@@ -1,0 +1,6 @@
+trendspy
+pandas
+pymongo
+dnspython
+requests
+python-dotenv
