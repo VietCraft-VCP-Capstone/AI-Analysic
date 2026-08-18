@@ -1,0 +1,58 @@
+name: collect trends
+
+# HTTP budget, verified by counting session.get calls:
+#   one interest_over_time() or related_queries() = 2 HTTP requests
+#   trends_daily   11 batches -> 22 HTTP
+#   discovery      10 calls   -> 20 HTTP
+# Two daily runs = 44 HTTP, plus discovery on Sundays = 64 that day.
+
+on:
+  schedule:
+    # GitHub runs on UTC. Vietnam is UTC+7.
+    # Two slots is NOT for extra data -- Trends returns one point per day at
+    # this timeframe. It is so the second run can heal a first run that hit a
+    # 429 or that GitHub delayed under load.
+    - cron: "0 22 * * *"      # 05:00 VN
+    - cron: "0 10 * * *"      # 17:00 VN
+  workflow_dispatch:
+
+concurrency:
+  group: collect-trends
+  cancel-in-progress: false
+
+env:
+  MONGODB_DB: data-collection
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install trendspy pandas pymongo dnspython requests python-dotenv
+
+      - name: Collect daily trends
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        run: python collect_trends.py --daily --mongo
+
+      # Runs even when collection failed, so a red run still tells you what
+      # is in the database rather than just that something broke.
+      - name: Pipeline health
+        if: always()
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        run: |
+          python collect_trends.py --mongo-health
+          python verify_data.py --quality
+
+  # discovery job removed.
+  # Measured 2026-08-18: 44 seed keywords -> 2 with related queries -> 6
+  # rising queries -> 5 usable candidates. Google Trends returns almost no
+  # related data for low-volume Vietnamese terms, so 88 HTTP a week bought
+  # nothing. Discovery moves to Etsy tags (supply side) once that app is
+  # approved. Run --related by hand if you ever want to re-check.
