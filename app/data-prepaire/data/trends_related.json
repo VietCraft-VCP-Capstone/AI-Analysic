@@ -1,0 +1,104 @@
+{
+  "collected_at": "2026-08-18",
+  "geo": "VN",
+  "related": {
+    "quà tặng mẹ": {
+      "keyword_id": "6a84581862a36e86be7b13bf",
+      "top": [
+        {
+          "query": "tặng quà cho mẹ",
+          "value": 100.0
+        },
+        {
+          "query": "quà sinh nhật cho mẹ",
+          "value": 30.0
+        },
+        {
+          "query": "làm quà tặng mẹ",
+          "value": 28.0
+        },
+        {
+          "query": "tặng quà sinh nhật cho mẹ",
+          "value": 26.0
+        },
+        {
+          "query": "tặng quà gì cho mẹ",
+          "value": 23.0
+        },
+        {
+          "query": "quà tặng mẹ chồng",
+          "value": 23.0
+        },
+        {
+          "query": "mua quà tặng mẹ",
+          "value": 20.0
+        },
+        {
+          "query": "cách làm quà tặng mẹ",
+          "value": 9.0
+        },
+        {
+          "query": "gợi ý quà tặng mẹ",
+          "value": 7.0
+        },
+        {
+          "query": "cách làm quà sinh nhật tặng mẹ",
+          "value": 3.0
+        }
+      ],
+      "rising": [
+        {
+          "query": "quà sinh nhật cho mẹ",
+          "value": 90.0
+        },
+        {
+          "query": "quà tặng mẹ chồng",
+          "value": 60.0
+        },
+        {
+          "query": "tặng quà sinh nhật cho mẹ",
+          "value": 60.0
+        },
+        {
+          "query": "cách làm quà sinh nhật tặng mẹ",
+          "value": 50.0
+        }
+      ]
+    },
+    "quà tặng người yêu": {
+      "keyword_id": "6a84581862a36e86be7b13c7",
+      "top": [
+        {
+          "query": "tặng quà cho người yêu",
+          "value": 100.0
+        },
+        {
+          "query": "quà tặng người yêu nữ",
+          "value": 25.0
+        },
+        {
+          "query": "tặng quà sinh nhật cho người yêu",
+          "value": 21.0
+        },
+        {
+          "query": "tặng quà sinh nhật người yêu nam",
+          "value": 12.0
+        },
+        {
+          "query": "sinh nhật người yêu nên tặng quà gì",
+          "value": 10.0
+        }
+      ],
+      "rising": [
+        {
+          "query": "sinh nhật người yêu nên tặng quà gì",
+          "value": 70.0
+        },
+        {
+          "query": "quà tặng người yêu nữ",
+          "value": 50.0
+        }
+      ]
+    }
+  }
+}
