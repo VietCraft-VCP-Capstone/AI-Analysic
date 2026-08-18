@@ -376,6 +376,7 @@ def check_discovery_stats(db):
               "the effort into STL/ARIMA/Gap Score instead. Etsy tags would "
               "be the stronger discovery source if that app is approved.")
     return len(relevant)
+    
 
 
 # ---------------------------------------------------------------------------
