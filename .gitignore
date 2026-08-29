@@ -62,3 +62,7 @@ desktop.ini
 # pg_data/
 # mongo_data/
 # redis_data/
+
+# Seed and external datasets
+data/external/
+data/seed_out/
