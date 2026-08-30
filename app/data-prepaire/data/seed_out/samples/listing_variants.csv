@@ -1,0 +1,101 @@
+﻿variant_id,listing_id,sku,variant_name,attributes,cost_price,selling_price,stock_qty,created_at
+VAR_0000001,PROD_00001,SKU-PROD_00001-01,Tự Nhiên / Hộp Quà Tặng Miễn Phí,"{""Màu sắc"": ""Tự Nhiên"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",1115000,3137000,65,2026-07-20T12:29:52Z
+VAR_0000002,PROD_00001,SKU-PROD_00001-02,Tự Nhiên / Hộp Thường,"{""Màu sắc"": ""Tự Nhiên"", ""Đóng gói"": ""Hộp Thường""}",1290000,2605000,83,2026-07-20T12:29:52Z
+VAR_0000003,PROD_00001,SKU-PROD_00001-03,Xanh Rêu / Hộp Gỗ Bọc Lụa Premium,"{""Màu sắc"": ""Xanh Rêu"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",1157000,2505000,99,2026-07-20T12:29:52Z
+VAR_0000004,PROD_00001,SKU-PROD_00001-04,Xanh Rêu / Hộp Quà Tặng Miễn Phí,"{""Màu sắc"": ""Xanh Rêu"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",1086000,2306000,21,2026-07-20T12:29:52Z
+VAR_0000005,PROD_00001,SKU-PROD_00001-05,Vàng Men / Hộp Gỗ Bọc Lụa Premium,"{""Màu sắc"": ""Vàng Men"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",1257000,3189000,63,2026-07-20T12:29:52Z
+VAR_0000006,PROD_00001,SKU-PROD_00001-06,Vàng Men / Hộp Quà Tặng Miễn Phí,"{""Màu sắc"": ""Vàng Men"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",920000,1847000,60,2026-07-20T12:29:52Z
+VAR_0000007,PROD_00001,SKU-PROD_00001-07,Đỏ Son / Hộp Gỗ Bọc Lụa Premium,"{""Màu sắc"": ""Đỏ Son"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",1174000,2366000,32,2026-07-20T12:29:52Z
+VAR_0000008,PROD_00001,SKU-PROD_00001-08,Đỏ Son / Hộp Thường,"{""Màu sắc"": ""Đỏ Son"", ""Đóng gói"": ""Hộp Thường""}",1075000,3132000,88,2026-07-20T12:29:52Z
+VAR_0000009,PROD_00002,SKU-PROD_00002-01,Đỏ Son / Gỗ Hương,"{""Màu sắc"": ""Đỏ Son"", ""Chất liệu"": ""Gỗ Hương""}",559000,1620000,98,2026-08-20T18:01:56Z
+VAR_0000010,PROD_00002,SKU-PROD_00002-02,Đỏ Son / Gỗ Mun,"{""Màu sắc"": ""Đỏ Son"", ""Chất liệu"": ""Gỗ Mun""}",669000,1569000,99,2026-08-20T18:01:56Z
+VAR_0000011,PROD_00002,SKU-PROD_00002-03,Cánh Gián / Gỗ Hương,"{""Màu sắc"": ""Cánh Gián"", ""Chất liệu"": ""Gỗ Hương""}",640000,1579000,5,2026-08-20T18:01:56Z
+VAR_0000012,PROD_00002,SKU-PROD_00002-04,Cánh Gián / Đồng Thau,"{""Màu sắc"": ""Cánh Gián"", ""Chất liệu"": ""Đồng Thau""}",722000,1677000,4,2026-08-20T18:01:56Z
+VAR_0000013,PROD_00002,SKU-PROD_00002-05,Mộc / Gốm Men Hỏa Biến,"{""Màu sắc"": ""Mộc"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",548000,1603000,49,2026-08-20T18:01:56Z
+VAR_0000014,PROD_00002,SKU-PROD_00002-06,Mộc / Tre Già,"{""Màu sắc"": ""Mộc"", ""Chất liệu"": ""Tre Già""}",693000,1946000,98,2026-08-20T18:01:56Z
+VAR_0000015,PROD_00002,SKU-PROD_00002-07,Xanh Rêu / Gốm Men Hỏa Biến,"{""Màu sắc"": ""Xanh Rêu"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",610000,1770000,31,2026-08-20T18:01:56Z
+VAR_0000016,PROD_00002,SKU-PROD_00002-08,Xanh Rêu / Lụa Hà Đông,"{""Màu sắc"": ""Xanh Rêu"", ""Chất liệu"": ""Lụa Hà Đông""}",564000,1185000,54,2026-08-20T18:01:56Z
+VAR_0000017,PROD_00002,SKU-PROD_00002-09,Tự Nhiên / Tre Già,"{""Màu sắc"": ""Tự Nhiên"", ""Chất liệu"": ""Tre Già""}",675000,1762000,97,2026-08-20T18:01:56Z
+VAR_0000018,PROD_00003,SKU-PROD_00003-01,Đỏ Son / Gỗ Hương,"{""Màu sắc"": ""Đỏ Son"", ""Chất liệu"": ""Gỗ Hương""}",1913000,4051000,49,2026-06-02T04:25:22Z
+VAR_0000019,PROD_00003,SKU-PROD_00003-02,Đỏ Son / Lụa Hà Đông,"{""Màu sắc"": ""Đỏ Son"", ""Chất liệu"": ""Lụa Hà Đông""}",1878000,4124000,49,2026-06-02T04:25:22Z
+VAR_0000020,PROD_00003,SKU-PROD_00003-03,Đen Huyền / Tre Già,"{""Màu sắc"": ""Đen Huyền"", ""Chất liệu"": ""Tre Già""}",1737000,3627000,54,2026-06-02T04:25:22Z
+VAR_0000021,PROD_00003,SKU-PROD_00003-04,Đen Huyền / Đồng Thau,"{""Màu sắc"": ""Đen Huyền"", ""Chất liệu"": ""Đồng Thau""}",2042000,5525000,96,2026-06-02T04:25:22Z
+VAR_0000022,PROD_00003,SKU-PROD_00003-05,Vàng Men / Lụa Hà Đông,"{""Màu sắc"": ""Vàng Men"", ""Chất liệu"": ""Lụa Hà Đông""}",2073000,4819000,97,2026-06-02T04:25:22Z
+VAR_0000023,PROD_00003,SKU-PROD_00003-06,Vàng Men / Gỗ Hương,"{""Màu sắc"": ""Vàng Men"", ""Chất liệu"": ""Gỗ Hương""}",1877000,4153000,88,2026-06-02T04:25:22Z
+VAR_0000024,PROD_00003,SKU-PROD_00003-07,Mộc / Đồng Thau,"{""Màu sắc"": ""Mộc"", ""Chất liệu"": ""Đồng Thau""}",1590000,3671000,93,2026-06-02T04:25:22Z
+VAR_0000025,PROD_00003,SKU-PROD_00003-08,Mộc / Gỗ Mun,"{""Màu sắc"": ""Mộc"", ""Chất liệu"": ""Gỗ Mun""}",1570000,4265000,79,2026-06-02T04:25:22Z
+VAR_0000026,PROD_00004,SKU-PROD_00004-01,Lớn (L) / Hộp Quà Tặng Miễn Phí,"{""Kích thước"": ""Lớn (L)"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",1075000,2460000,89,2025-11-11T06:49:08Z
+VAR_0000027,PROD_00004,SKU-PROD_00004-02,Lớn (L) / Hộp Thường,"{""Kích thước"": ""Lớn (L)"", ""Đóng gói"": ""Hộp Thường""}",1072000,2935000,36,2025-11-11T06:49:08Z
+VAR_0000028,PROD_00004,SKU-PROD_00004-03,Đặc Biệt (XL) / Hộp Thường,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Đóng gói"": ""Hộp Thường""}",756000,1745000,65,2025-11-11T06:49:08Z
+VAR_0000029,PROD_00004,SKU-PROD_00004-04,Đặc Biệt (XL) / Hộp Quà Tặng Miễn Phí,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",813000,2344000,43,2025-11-11T06:49:08Z
+VAR_0000030,PROD_00004,SKU-PROD_00004-05,Standard 20cm / Hộp Thường,"{""Kích thước"": ""Standard 20cm"", ""Đóng gói"": ""Hộp Thường""}",747000,1793000,82,2025-11-11T06:49:08Z
+VAR_0000031,PROD_00004,SKU-PROD_00004-06,Standard 20cm / Hộp Quà Tặng Miễn Phí,"{""Kích thước"": ""Standard 20cm"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",749000,1640000,15,2025-11-11T06:49:08Z
+VAR_0000032,PROD_00004,SKU-PROD_00004-07,Vừa (M) / Hộp Quà Tặng Miễn Phí,"{""Kích thước"": ""Vừa (M)"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",830000,2378000,17,2025-11-11T06:49:08Z
+VAR_0000033,PROD_00005,SKU-PROD_00005-01,Đặc Biệt (XL) / Gỗ Hương,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Chất liệu"": ""Gỗ Hương""}",1849000,5118000,56,2025-12-24T20:05:58Z
+VAR_0000034,PROD_00005,SKU-PROD_00005-02,Đặc Biệt (XL) / Gốm Men Hỏa Biến,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",1736000,4003000,24,2025-12-24T20:05:58Z
+VAR_0000035,PROD_00005,SKU-PROD_00005-03,Lớn (L) / Gỗ Mun,"{""Kích thước"": ""Lớn (L)"", ""Chất liệu"": ""Gỗ Mun""}",1675000,4211000,1,2025-12-24T20:05:58Z
+VAR_0000036,PROD_00005,SKU-PROD_00005-04,Lớn (L) / Đồng Thau,"{""Kích thước"": ""Lớn (L)"", ""Chất liệu"": ""Đồng Thau""}",2012000,4203000,29,2025-12-24T20:05:58Z
+VAR_0000037,PROD_00005,SKU-PROD_00005-05,Vừa (M) / Gỗ Mun,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Gỗ Mun""}",1505000,3936000,93,2025-12-24T20:05:58Z
+VAR_0000038,PROD_00005,SKU-PROD_00005-06,Vừa (M) / Gỗ Hương,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Gỗ Hương""}",1784000,3809000,58,2025-12-24T20:05:58Z
+VAR_0000039,PROD_00005,SKU-PROD_00005-07,Standard 30cm / Gốm Men Hỏa Biến,"{""Kích thước"": ""Standard 30cm"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",1418000,3745000,62,2025-12-24T20:05:58Z
+VAR_0000040,PROD_00005,SKU-PROD_00005-08,Standard 30cm / Đồng Thau,"{""Kích thước"": ""Standard 30cm"", ""Chất liệu"": ""Đồng Thau""}",1497000,3842000,78,2025-12-24T20:05:58Z
+VAR_0000041,PROD_00005,SKU-PROD_00005-09,Nhỏ (S) / Gốm Men Hỏa Biến,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",1606000,3363000,16,2025-12-24T20:05:58Z
+VAR_0000042,PROD_00005,SKU-PROD_00005-10,Nhỏ (S) / Tre Già,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Tre Già""}",1622000,3990000,16,2025-12-24T20:05:58Z
+VAR_0000043,PROD_00006,SKU-PROD_00006-01,Xanh Rêu / Lụa Hà Đông,"{""Màu sắc"": ""Xanh Rêu"", ""Chất liệu"": ""Lụa Hà Đông""}",428000,1189000,73,2026-07-03T17:59:02Z
+VAR_0000044,PROD_00006,SKU-PROD_00006-02,Xanh Rêu / Gốm Men Hỏa Biến,"{""Màu sắc"": ""Xanh Rêu"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",592000,1410000,48,2026-07-03T17:59:02Z
+VAR_0000045,PROD_00006,SKU-PROD_00006-03,Cánh Gián / Tre Già,"{""Màu sắc"": ""Cánh Gián"", ""Chất liệu"": ""Tre Già""}",534000,1399000,94,2026-07-03T17:59:02Z
+VAR_0000046,PROD_00006,SKU-PROD_00006-04,Cánh Gián / Gỗ Hương,"{""Màu sắc"": ""Cánh Gián"", ""Chất liệu"": ""Gỗ Hương""}",480000,1416000,6,2026-07-03T17:59:02Z
+VAR_0000047,PROD_00006,SKU-PROD_00006-05,Vàng Men / Gỗ Hương,"{""Màu sắc"": ""Vàng Men"", ""Chất liệu"": ""Gỗ Hương""}",591000,1480000,6,2026-07-03T17:59:02Z
+VAR_0000048,PROD_00006,SKU-PROD_00006-06,Vàng Men / Tre Già,"{""Màu sắc"": ""Vàng Men"", ""Chất liệu"": ""Tre Già""}",496000,999000,91,2026-07-03T17:59:02Z
+VAR_0000049,PROD_00006,SKU-PROD_00006-07,Đen Huyền / Gốm Men Hỏa Biến,"{""Màu sắc"": ""Đen Huyền"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",585000,1300000,62,2026-07-03T17:59:02Z
+VAR_0000050,PROD_00006,SKU-PROD_00006-08,Đen Huyền / Tre Già,"{""Màu sắc"": ""Đen Huyền"", ""Chất liệu"": ""Tre Già""}",557000,1570000,95,2026-07-03T17:59:02Z
+VAR_0000051,PROD_00006,SKU-PROD_00006-09,Đỏ Son / Gỗ Mun,"{""Màu sắc"": ""Đỏ Son"", ""Chất liệu"": ""Gỗ Mun""}",428000,935000,28,2026-07-03T17:59:02Z
+VAR_0000052,PROD_00006,SKU-PROD_00006-10,Đỏ Son / Gốm Men Hỏa Biến,"{""Màu sắc"": ""Đỏ Son"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",419000,1191000,30,2026-07-03T17:59:02Z
+VAR_0000053,PROD_00007,SKU-PROD_00007-01,Standard 30cm / Hộp Quà Tặng Miễn Phí,"{""Kích thước"": ""Standard 30cm"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",505000,1322000,14,2026-08-25T06:14:25Z
+VAR_0000054,PROD_00007,SKU-PROD_00007-02,Standard 30cm / Hộp Thường,"{""Kích thước"": ""Standard 30cm"", ""Đóng gói"": ""Hộp Thường""}",527000,1559000,80,2026-08-25T06:14:25Z
+VAR_0000055,PROD_00007,SKU-PROD_00007-03,Nhỏ (S) / Hộp Thường,"{""Kích thước"": ""Nhỏ (S)"", ""Đóng gói"": ""Hộp Thường""}",506000,1398000,32,2026-08-25T06:14:25Z
+VAR_0000056,PROD_00007,SKU-PROD_00007-04,Nhỏ (S) / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Nhỏ (S)"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",498000,1325000,57,2026-08-25T06:14:25Z
+VAR_0000057,PROD_00007,SKU-PROD_00007-05,Vừa (M) / Hộp Thường,"{""Kích thước"": ""Vừa (M)"", ""Đóng gói"": ""Hộp Thường""}",500000,1234000,69,2026-08-25T06:14:25Z
+VAR_0000058,PROD_00007,SKU-PROD_00007-06,Vừa (M) / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Vừa (M)"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",550000,1235000,0,2026-08-25T06:14:25Z
+VAR_0000059,PROD_00007,SKU-PROD_00007-07,Lớn (L) / Hộp Thường,"{""Kích thước"": ""Lớn (L)"", ""Đóng gói"": ""Hộp Thường""}",500000,1147000,99,2026-08-25T06:14:25Z
+VAR_0000060,PROD_00007,SKU-PROD_00007-08,Lớn (L) / Hộp Quà Tặng Miễn Phí,"{""Kích thước"": ""Lớn (L)"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",469000,1347000,53,2026-08-25T06:14:25Z
+VAR_0000061,PROD_00007,SKU-PROD_00007-09,Standard 20cm / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Standard 20cm"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",458000,1056000,66,2026-08-25T06:14:25Z
+VAR_0000062,PROD_00007,SKU-PROD_00007-10,Standard 20cm / Hộp Thường,"{""Kích thước"": ""Standard 20cm"", ""Đóng gói"": ""Hộp Thường""}",467000,1149000,52,2026-08-25T06:14:25Z
+VAR_0000063,PROD_00007,SKU-PROD_00007-11,Đặc Biệt (XL) / Hộp Thường,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Đóng gói"": ""Hộp Thường""}",426000,862000,40,2026-08-25T06:14:25Z
+VAR_0000064,PROD_00007,SKU-PROD_00007-12,Đặc Biệt (XL) / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",523000,1555000,39,2026-08-25T06:14:25Z
+VAR_0000065,PROD_00008,SKU-PROD_00008-01,Nhỏ (S) / Lụa Hà Đông,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Lụa Hà Đông""}",435000,1305000,75,2026-05-14T21:24:38Z
+VAR_0000066,PROD_00008,SKU-PROD_00008-02,Nhỏ (S) / Đồng Thau,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Đồng Thau""}",454000,961000,90,2026-05-14T21:24:38Z
+VAR_0000067,PROD_00008,SKU-PROD_00008-03,Vừa (M) / Tre Già,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Tre Già""}",495000,1207000,25,2026-05-14T21:24:38Z
+VAR_0000068,PROD_00008,SKU-PROD_00008-04,Vừa (M) / Gỗ Mun,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Gỗ Mun""}",344000,804000,0,2026-05-14T21:24:38Z
+VAR_0000069,PROD_00008,SKU-PROD_00008-05,Standard 30cm / Gỗ Hương,"{""Kích thước"": ""Standard 30cm"", ""Chất liệu"": ""Gỗ Hương""}",414000,1222000,44,2026-05-14T21:24:38Z
+VAR_0000070,PROD_00009,SKU-PROD_00009-01,Vừa (M) / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Vừa (M)"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",1511000,3808000,84,2026-08-13T04:29:44Z
+VAR_0000071,PROD_00009,SKU-PROD_00009-02,Vừa (M) / Hộp Thường,"{""Kích thước"": ""Vừa (M)"", ""Đóng gói"": ""Hộp Thường""}",1592000,4658000,53,2026-08-13T04:29:44Z
+VAR_0000072,PROD_00009,SKU-PROD_00009-03,Standard 30cm / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Standard 30cm"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",1474000,3505000,88,2026-08-13T04:29:44Z
+VAR_0000073,PROD_00009,SKU-PROD_00009-04,Standard 30cm / Hộp Thường,"{""Kích thước"": ""Standard 30cm"", ""Đóng gói"": ""Hộp Thường""}",2057000,5778000,8,2026-08-13T04:29:44Z
+VAR_0000074,PROD_00010,SKU-PROD_00010-01,Standard 30cm / Gỗ Hương,"{""Kích thước"": ""Standard 30cm"", ""Chất liệu"": ""Gỗ Hương""}",1290000,3680000,35,2025-06-03T17:07:17Z
+VAR_0000075,PROD_00010,SKU-PROD_00010-02,Standard 30cm / Gốm Men Hỏa Biến,"{""Kích thước"": ""Standard 30cm"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",1260000,2931000,69,2025-06-03T17:07:17Z
+VAR_0000076,PROD_00010,SKU-PROD_00010-03,Đặc Biệt (XL) / Lụa Hà Đông,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Chất liệu"": ""Lụa Hà Đông""}",1310000,3078000,30,2025-06-03T17:07:17Z
+VAR_0000077,PROD_00010,SKU-PROD_00010-04,Đặc Biệt (XL) / Gỗ Mun,"{""Kích thước"": ""Đặc Biệt (XL)"", ""Chất liệu"": ""Gỗ Mun""}",1368000,3443000,16,2025-06-03T17:07:17Z
+VAR_0000078,PROD_00010,SKU-PROD_00010-05,Vừa (M) / Gốm Men Hỏa Biến,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",1422000,3964000,56,2025-06-03T17:07:17Z
+VAR_0000079,PROD_00010,SKU-PROD_00010-06,Vừa (M) / Gỗ Mun,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Gỗ Mun""}",1422000,3556000,14,2025-06-03T17:07:17Z
+VAR_0000080,PROD_00010,SKU-PROD_00010-07,Nhỏ (S) / Lụa Hà Đông,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Lụa Hà Đông""}",1653000,3588000,8,2025-06-03T17:07:17Z
+VAR_0000081,PROD_00010,SKU-PROD_00010-08,Nhỏ (S) / Đồng Thau,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Đồng Thau""}",1636000,3436000,23,2025-06-03T17:07:17Z
+VAR_0000082,PROD_00010,SKU-PROD_00010-09,Lớn (L) / Gỗ Hương,"{""Kích thước"": ""Lớn (L)"", ""Chất liệu"": ""Gỗ Hương""}",1658000,4392000,67,2025-06-03T17:07:17Z
+VAR_0000083,PROD_00010,SKU-PROD_00010-10,Lớn (L) / Gốm Men Hỏa Biến,"{""Kích thước"": ""Lớn (L)"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",1625000,4751000,44,2025-06-03T17:07:17Z
+VAR_0000084,PROD_00010,SKU-PROD_00010-11,Standard 20cm / Gốm Men Hỏa Biến,"{""Kích thước"": ""Standard 20cm"", ""Chất liệu"": ""Gốm Men Hỏa Biến""}",1576000,4474000,68,2025-06-03T17:07:17Z
+VAR_0000085,PROD_00010,SKU-PROD_00010-12,Standard 20cm / Gỗ Hương,"{""Kích thước"": ""Standard 20cm"", ""Chất liệu"": ""Gỗ Hương""}",1237000,2623000,13,2025-06-03T17:07:17Z
+VAR_0000086,PROD_00011,SKU-PROD_00011-01,Vừa (M) / Tre Già,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Tre Già""}",101000,288000,44,2026-08-11T08:22:12Z
+VAR_0000087,PROD_00011,SKU-PROD_00011-02,Vừa (M) / Gỗ Hương,"{""Kích thước"": ""Vừa (M)"", ""Chất liệu"": ""Gỗ Hương""}",97000,273000,49,2026-08-11T08:22:12Z
+VAR_0000088,PROD_00011,SKU-PROD_00011-03,Standard 30cm / Tre Già,"{""Kích thước"": ""Standard 30cm"", ""Chất liệu"": ""Tre Già""}",96000,206000,72,2026-08-11T08:22:12Z
+VAR_0000089,PROD_00011,SKU-PROD_00011-04,Standard 30cm / Đồng Thau,"{""Kích thước"": ""Standard 30cm"", ""Chất liệu"": ""Đồng Thau""}",103000,254000,72,2026-08-11T08:22:12Z
+VAR_0000090,PROD_00011,SKU-PROD_00011-05,Lớn (L) / Lụa Hà Đông,"{""Kích thước"": ""Lớn (L)"", ""Chất liệu"": ""Lụa Hà Đông""}",102000,293000,88,2026-08-11T08:22:12Z
+VAR_0000091,PROD_00011,SKU-PROD_00011-06,Lớn (L) / Đồng Thau,"{""Kích thước"": ""Lớn (L)"", ""Chất liệu"": ""Đồng Thau""}",111000,328000,79,2026-08-11T08:22:12Z
+VAR_0000092,PROD_00011,SKU-PROD_00011-07,Nhỏ (S) / Gỗ Mun,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Gỗ Mun""}",88000,260000,64,2026-08-11T08:22:12Z
+VAR_0000093,PROD_00011,SKU-PROD_00011-08,Nhỏ (S) / Lụa Hà Đông,"{""Kích thước"": ""Nhỏ (S)"", ""Chất liệu"": ""Lụa Hà Đông""}",106000,259000,12,2026-08-11T08:22:12Z
+VAR_0000094,PROD_00012,SKU-PROD_00012-01,Vừa (M) / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Vừa (M)"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",1064000,2212000,66,2026-07-08T12:42:24Z
+VAR_0000095,PROD_00012,SKU-PROD_00012-02,Vừa (M) / Hộp Thường,"{""Kích thước"": ""Vừa (M)"", ""Đóng gói"": ""Hộp Thường""}",1092000,2871000,95,2026-07-08T12:42:24Z
+VAR_0000096,PROD_00012,SKU-PROD_00012-03,Nhỏ (S) / Hộp Thường,"{""Kích thước"": ""Nhỏ (S)"", ""Đóng gói"": ""Hộp Thường""}",1153000,2576000,38,2026-07-08T12:42:24Z
+VAR_0000097,PROD_00012,SKU-PROD_00012-04,Nhỏ (S) / Hộp Gỗ Bọc Lụa Premium,"{""Kích thước"": ""Nhỏ (S)"", ""Đóng gói"": ""Hộp Gỗ Bọc Lụa Premium""}",1157000,2970000,76,2026-07-08T12:42:24Z
+VAR_0000098,PROD_00013,SKU-PROD_00013-01,Xanh Rêu / Hộp Thường,"{""Màu sắc"": ""Xanh Rêu"", ""Đóng gói"": ""Hộp Thường""}",1568000,3299000,86,2026-06-02T10:34:35Z
+VAR_0000099,PROD_00013,SKU-PROD_00013-02,Xanh Rêu / Hộp Quà Tặng Miễn Phí,"{""Màu sắc"": ""Xanh Rêu"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",1586000,4171000,57,2026-06-02T10:34:35Z
+VAR_0000100,PROD_00013,SKU-PROD_00013-03,Đỏ Son / Hộp Quà Tặng Miễn Phí,"{""Màu sắc"": ""Đỏ Son"", ""Đóng gói"": ""Hộp Quà Tặng Miễn Phí""}",2081000,5949000,1,2026-06-02T10:34:35Z

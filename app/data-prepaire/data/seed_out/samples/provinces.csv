@@ -1,0 +1,64 @@
+﻿province_code,name_vi,region
+1,Thành phố Hà Nội,bac
+2,Tỉnh Hà Giang,bac
+4,Tỉnh Cao Bằng,bac
+6,Tỉnh Bắc Kạn,bac
+8,Tỉnh Tuyên Quang,bac
+10,Tỉnh Lào Cai,bac
+11,Tỉnh Điện Biên,bac
+12,Tỉnh Lai Châu,bac
+14,Tỉnh Sơn La,bac
+15,Tỉnh Yên Bái,bac
+17,Tỉnh Hòa Bình,bac
+19,Tỉnh Thái Nguyên,bac
+20,Tỉnh Lạng Sơn,bac
+22,Tỉnh Quảng Ninh,bac
+24,Tỉnh Bắc Giang,bac
+25,Tỉnh Phú Thọ,bac
+26,Tỉnh Vĩnh Phúc,bac
+27,Tỉnh Bắc Ninh,bac
+30,Tỉnh Hải Dương,bac
+31,Thành phố Hải Phòng,bac
+33,Tỉnh Hưng Yên,bac
+34,Tỉnh Thái Bình,bac
+35,Tỉnh Hà Nam,bac
+36,Tỉnh Nam Định,bac
+37,Tỉnh Ninh Bình,bac
+38,Tỉnh Thanh Hóa,trung
+40,Tỉnh Nghệ An,trung
+42,Tỉnh Hà Tĩnh,trung
+44,Tỉnh Quảng Bình,trung
+45,Tỉnh Quảng Trị,trung
+46,Tỉnh Thừa Thiên Huế,trung
+48,Thành phố Đà Nẵng,trung
+49,Tỉnh Quảng Nam,trung
+51,Tỉnh Quảng Ngãi,trung
+52,Tỉnh Bình Định,trung
+54,Tỉnh Phú Yên,trung
+56,Tỉnh Khánh Hòa,trung
+58,Tỉnh Ninh Thuận,trung
+60,Tỉnh Bình Thuận,trung
+62,Tỉnh Kon Tum,trung
+64,Tỉnh Gia Lai,trung
+66,Tỉnh Đắk Lắk,trung
+67,Tỉnh Đắk Nông,trung
+68,Tỉnh Lâm Đồng,trung
+70,Tỉnh Bình Phước,nam
+72,Tỉnh Tây Ninh,nam
+74,Tỉnh Bình Dương,nam
+75,Tỉnh Đồng Nai,nam
+77,Tỉnh Bà Rịa - Vũng Tàu,nam
+79,Thành phố Hồ Chí Minh,nam
+80,Tỉnh Long An,nam
+82,Tỉnh Tiền Giang,nam
+83,Tỉnh Bến Tre,nam
+84,Tỉnh Trà Vinh,nam
+86,Tỉnh Vĩnh Long,nam
+87,Tỉnh Đồng Tháp,nam
+89,Tỉnh An Giang,nam
+91,Tỉnh Kiên Giang,nam
+92,Thành phố Cần Thơ,nam
+93,Tỉnh Hậu Giang,nam
+94,Tỉnh Sóc Trăng,nam
+95,Tỉnh Bạc Liêu,nam
+96,Tỉnh Cà Mau,nam
