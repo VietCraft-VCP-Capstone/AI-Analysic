@@ -1,0 +1,78 @@
+tag_id,name_vi,category_id,source_keywords,aliases
+ao-thun,Áo thun,apparel.evergreen,áo thun,ao thun|ao phong|ao tee|tshirt|ao co tron|ao phong tron|ao thun nam nu
+ao-t-shirt,Áo T-shirt,apparel.evergreen,áo thun,ao t shirt|t-shirt|t shirt vao|ao co coc|ao tee thun|tshirt basic
+ao-phong-nam,Áo phông nam,apparel.evergreen,áo phông nam,ao phong nam|ao thun nam|men shirt|men tee|ao phong cho nam|ao phong basic nam
+fashion-nam,Thời trang nam,apparel.evergreen,áo phông nam,thoi trang nam|men fashion|clothes nam|do nam|style nam|menswear
+ao-phong-nu,Áo phông nữ,apparel.evergreen,áo phông nữ,ao phong nu|ao thun nu|women shirt|women tee|ao phong cho nu|ao phong basic nu
+fashion-nu,Thời trang nữ,apparel.evergreen,áo phông nữ,thoi trang nu|women fashion|clothes nu|do nu|style nu|womenswear
+in-ao-thun,In áo thun,apparel.evergreen,in áo thun,in ao thun|in ao phong|in ao|custom tee|in ao quang cao|dich vu in ao
+in-theo-yeu-cau,In theo yêu cầu,apparel.evergreen,in áo thun,in theo yeu cau|custom print|print on demand|in ao thiet ke|in lay ngay|in ao theo yeu cau
+ao-doi,Áo đôi,apparel.couple,áo đôi,ao doi|couple tee|ao tinh nhan|ao thun cap|ao doi dep|ao doi thun
+ao-cap-doi,Áo cặp đôi,apparel.couple,áo đôi,ao cap doi|ao thun doi|ao thun cap doi|couple shirt|set ao doi|do doi nam nu
+ao-nhom,Áo nhóm,apparel.group,áo nhóm,ao nhom|group tee|ao dong doi|ao thun nhom|ao di bien|set ao nhom
+ao-team,Áo team,apparel.group,áo nhóm,ao team|ao team building|building tee|team shirt|ao thun team|ao team nhom
+ao-lop,Áo lớp,apparel.school,áo lớp,ao lop|ao thun lop|class tee|ao dong phuc lop|ao nien khoa|ao lop dep
+ao-hoc-sinh,Áo học sinh,apparel.school,áo lớp,ao hoc sinh|ao dong phuc hoc sinh|ao hoc duong|ao thun hoc sinh|do hoc sinh|ao tee hoc sinh
+ao-dong-phuc,Áo đồng phục,apparel.school,áo đồng phục,ao dong phuc|dong phuc cong ty|uniform|ao group|dong phuc ca nhan|ao thun uniform
+ao-gia-dinh,Áo gia đình,apparel.family,áo gia đình,ao gia dinh|ao thun gia dinh|family tee|set ao gia dinh|ao cho ca nha|ao thun ca nha
+family-set,Set gia đình,apparel.family,áo gia đình,family set|set do gia dinh|mat do gia dinh|set ao ca nha|do di bien gia dinh|set gia dinh dep
+tui-tote,Túi tote,bag.evergreen,túi tote,tui tote|tote bag|tui xach tote|tui vai tote|tui tote tron|tui tote in hinh
+tote-canvas,Túi vải Canvas,bag.evergreen,túi tote,tote canvas|tui canvas|tui vai canvas|canvas bag|tui vai bo|tui tote canvas dep
+tranh-treo-tuong,Tranh treo tường,wallart.evergreen,tranh treo tường,tranh treo tuong|tranh phong canh|tranh treo|tranh phong khach|tranh phong ngu|wall art
+tranh-decor,Tranh decor,wallart.evergreen,tranh treo tường,tranh decor|tranh trang tri phong|decor art|tranh treo decor|khung anh decor|tranh thiet ke
+tranh-canvas,Tranh Canvas,wallart.decor,tranh canvas,tranh canvas|decor canvas|canvas print|tranh canvas bo|tranh canvas dep|canvas treo tuong
+decor-khong-gian,Trang trí không gian,wallart.decor,tranh canvas,decor khong gian|trang tri phong|nhieu khong gian|trang tri nha|decor co dien|space decor
+moc-khoa,Móc khóa,accessory.evergreen,móc khóa,moc khoa|keychain|moc xich khoa|moc thoi trang|moc chia khoa|moc balo
+keychain,Keychain,accessory.evergreen,móc khóa,keychain ca nhan|moc khoa mica|acrylic keychain|moc khoa custom|keychain dep|moc khoa handmade
+ao-tet,Áo Tết,apparel.tet,áo tết,ao tet|ao thun tet|ao phong tet|ao dai cach tan|ao tet xuan|ao tet in hinh
+thoi-trang-tet,Thời trang Tết,apparel.tet,áo tết,thoi trang tet|do tet|vay tet|set do di choi tet|style tet|quan ao tet
+qua-tet,Quà Tết,drinkware.tet,quà tết,qua tet|qua mung nam moi|mung tuoi|qua tet y nghia|qua tang nam moi|tet gift
+set-qua-tet,Set quà Tết,drinkware.tet,quà tết,set qua tet|gio qua tet|hop qua tet|set qua tet sang trong|qua bieu tet|combo qua tet
+bao-li-xi,Bao lì xì,accessory.tet,lì xì tết,bao li xi|li xi do|lixi|bao li xi doc doc|phong bao li xi|li xi tet
+li-xi-tet,Lì xì Tết,accessory.tet,lì xì tết,li xi tet|mung tuoi tet|phong li xi|li xi hot|bao mung tuoi|lixi2027
+trang-tri-tet,Trang trí Tết,wallart.tet,trang trí tết,trang tri tet|trang tri xuan|decor tet|treo tet|phu kien tet|trang tri nha ngay tet
+decor-tet,Decor Tết,wallart.tet,trang trí tết,decor tet|trang tri nha ngay tet|do treo tet|tranh treo tet|tranh tet|decor xuan
+qua-8-3,Quà 8/3,drinkware.womens_day,quà 8/3,qua 8 3|qua quoc te phu nu|8/3 gift|qua tang 8/3|qua tang nu|qua 8 thang 3
+qua-tang-phu-nu,Quà tặng Phụ nữ,drinkware.womens_day,quà 8/3,qua tang phu nu|qua cho nu|qua nu gioi|qua tang phu nu viet nam|qua cho chi em|women gift
+qua-tang-me,Quà tặng mẹ,drinkware.womens_day,quà tặng mẹ,qua tang me|qua vu lan|sinh nhat me|qua tang me yeu|bao hieu me|mother gift
+qua-hieu-thao,Quà hiếu thảo,drinkware.womens_day,quà tặng mẹ,qua hieu thao|qua bao hieu|mon qua gia dinh|qua cho cha me|qua chu dao|mon quan y nghia
+qua-20-10,Quà 20/10,drinkware.womens_day,quà 20/10,qua 20 10|qua phu nu viet nam|phu nu viet nam|qua tang 20/10|qua tang nu|20/10 gift
+qua-20-11,Quà 20/11,stationery.teachers_day,quà 20/11,qua 20 11|qua nha giao viet nam|20/11 gift|qua tang 20/11|qua thay co 20/11|teacher day
+qua-tang-thay-co,Quà tặng thầy cô,stationery.teachers_day,quà 20/11,qua tang thay co|qua thay co giao|tri an|qua bieu thay co|qua luu niem thay co|teacher gift
+tri-an-thay-co,Tri ân thầy cô,stationery.teachers_day,quà tặng thầy cô,tri an thay co|ton su trong dao|on thay co|tri an nha giao|qua tri an|tranh tri an
+qua-giang-sinh,Quà Giáng sinh,drinkware.christmas,quà giáng sinh,qua giang sinh|qua noel|giang sinh gift|christmas gift|noel gift|tang qua giang sinh
+qua-noel,Quà Noel,drinkware.christmas,quà giáng sinh,qua noel|tang noel|hop qua noel|set qua noel|qua thiet ke noel|quatanggiangsinh
+trang-tri-noel,Trang trí Noel,wallart.christmas,trang trí noel,trang tri noel|trang tri giang sinh|decor noel|phu kien noel|treo noel|tranh noel
+decor-noel,Decor Noel,wallart.christmas,trang trí noel,decor noel|decor giang sinh|phu kien noel|do trang tri noel|tranh giang sinh|noel decor
+qua-valentine,Quà Valentine,drinkware.valentine,quà valentine,qua valentine|qua valentine 14 2|valentine gift|qua tinh nhan|qua le tinh nhan|qua tang valentine
+qua-le-tinh-nhan,Quà Lễ tình nhân,drinkware.valentine,quà valentine,qua le tinh nhan|qua 14 thang 2|qua tinh nhan|le tinh nhan gift|combo valentine|set valentine
+qua-tang-nguoi-yeu,Quà tặng người yêu,drinkware.valentine,quà tặng người yêu,qua tang nguoi yeu|qua tang gau|qua cho ex|qua tinh yeu|qua valentine nguoi yeu|love gift
+qua-cho-gau,Quà cho gấu,drinkware.valentine,quà tặng người yêu,qua cho gau|qua tang nguoi thuong|qua crush|qua tang crush|qua tang gaulove|quachogau
+qua-tang,Quà tặng,stationery.gift,quà tặng,qua tang|qua doc|quatang|quatangdoc|hop qua tang|gift shop
+gift-box,Hộp quà,stationery.gift,quà tặng,gift box|hop qua|hop qua tang|set qua tang|hop qua dep|hop carton qua
+qua-cuoi,Quà cưới,home.wedding,quà cưới,qua cuoi|qua mung dam cuoi|wedding gift|qua cuoi thiet ke|qua mung cuoi|anniversary gift
+qua-ki-niem-ngay-cuoi,Quà kỷ niệm ngày cưới,home.wedding,quà cưới,qua ki niem ngay cuoi|ky niem ngay cuoi|anniversary gift|qua cuoi ki niem|tranh ki niem|tranh ky niem
+qua-tan-gia,Quà tân gia,home.housewarming,quà tân gia,qua tan gia|mung tan gia|housewarming gift|qua den nha moi|mon qua tan gia|tang qua tan gia
+decor-nha-moi,Decor nhà mới,home.housewarming,quà tân gia,decor nha moi|decor nha cap 4|trang tri nha moi|khai truong nha moi|decor phong khach|decor nha
+qua-tang-ban-than,Quà tặng bạn thân,accessory.friendship,quà tặng bạn thân,qua tang ban than|qua cho ban|ban than tri ki|qua thiet ke ban than|bday ban than|friend gift
+ban-than,Bạn thân,accessory.friendship,quà tặng bạn thân,ban than|best friend|besties|ban be than thiet|bff gift|bff keychain
+qua-handmade,Quà handmade,stationery.gift,quà handmade,qua handmade|do handmade|handmade gift|qua tu lam|diy gift|quacustom
+do-handmade,Đồ handmade,stationery.gift,quà handmade,do handmade|qua tu lam|diy gift|do decor handmade|handmade decor|tranh handmade
+qua-luu-niem,Quà lưu niệm,sport.travel,quà lưu niệm,qua luu niem|souvenir|do luu niem|luu niem viet nam|qua viet nam|vietnam souvenir
+souvenir,Souvenir,sport.travel,quà lưu niệm,souvenir viet nam|quoc te luu niem|travel gift|vietnam gift|souvenirs|vietnam travel gift
+ao-anime,Áo Anime,apparel.anime,áo anime,ao anime|ao manga|anime tee|otaku shirt|wibu tee|fan anime
+otaku,Otaku,apparel.anime,áo anime,otaku|wibu|ao wibu|fan anime|anime fan|shirt otaku
+ao-oversize,Áo Oversize,apparel.streetwear,áo oversize,ao oversize|oversized tee|ao rong|ao thun rong|ao form rong|oversize basic
+unisex-style,Phong cách Unisex,apparel.streetwear,áo oversize,phong cach unisex|thoi trang unisex|unisex cloth|clothes unisex|style unisex|unisex tee
+ao-local-brand,Áo Local Brand,apparel.streetwear,áo local brand,ao local brand|local brand viet nam|tee local brand|ao thun local|streetwear localbrand|ao localbrand
+vietnam-local-brand,Vietnam Local Brand,apparel.streetwear,áo local brand,vietnam local brand|local brand chat|ao thun streetstyle|brand viet|ao brand viet|local brand shirt
+ao-vintage,Áo Vintage,apparel.vintage,áo vintage,ao vintage|retrotee|vintage wear|ao thun co dien|classic tee|ao kieu co dien
+retro-style,Phong cách Retro,apparel.vintage,áo vintage,phong cach retro|co dien|vintage 90s|retro wear|style classic|retro art
+ao-hoodie,Áo Hoodie,apparel.streetwear,áo hoodie,ao hoodie|ao ni co mu|hoodie nam nu|ao lanh hoodie|hoodie tron|ao khoac mu
+hoodie-unisex,Hoodie Unisex,apparel.streetwear,áo hoodie,hoodie unisex|ao hoodie beo|hoodie oversize|hoodie rong|hoodie form rong|unisex hoodie
+ao-bong-da,Áo bóng đá,apparel.sport,áo bóng đá việt nam,ao bong da|ao da banh|football shirt|ao bong da clb|ao sport bong da|jersey bong da
+viet-nam-vo-dich,Việt Nam vô địch,apparel.sport,áo bóng đá việt nam,viet nam vo dich|co vu viet nam|ao do sao vang|tuyen viet nam|ao co vu|vietnam champion
+ao-the-thao,Áo thể thao,apparel.sport,áo thun thể thao,ao the thao|sport tee|clothes training|ao activewear|ao thun the thao|ao chay bo
+do-tap-gym,Đồ tập gym,apparel.sport,áo thun thể thao,do tap gym|gym wear|quan ao active|ao thun gym|ao gym nam nu|gym tee
+qua-sinh-nhat,Quà sinh nhật,drinkware.gift,quà sinh nhật,qua sinh nhat|sinh nhat gift|birthday present|qua bday|mon qua sinh nhat|sinh nhat ban
+qua-tang-sinh-nhat,Quà tặng sinh nhật,drinkware.gift,quà sinh nhật,qua tang sinh nhat|sinh nhat ban|happy birthday|birthday gift|gift happy birthday|tang qua sinh nhat
