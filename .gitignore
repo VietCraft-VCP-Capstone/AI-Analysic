@@ -58,7 +58,8 @@ Thumbs.db
 desktop.ini
 .env
 
-# Docker local data (if setup mounts db volumes locally)
-# pg_data/
-# mongo_data/
-# redis_data/
+# Large generated seed datasets (Full CSVs & JSONs go to Google Drive, keep samples in git)
+app/data-prepaire/data/seed_out/
+app/data-prepaire/data/vc_*.json
+app/data-prepaire/data/printify_variants.json
+app/data-prepaire/.checkpoints/
