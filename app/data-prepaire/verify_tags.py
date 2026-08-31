@@ -20,7 +20,7 @@ TEST_CASES = [
 def load_csv_data(filepath):
     if not os.path.exists(filepath):
         return []
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, "r", encoding="utf-8-sig") as f:
         return list(csv.DictReader(f))
 
 def clean_tag(raw_tag, tags_list):

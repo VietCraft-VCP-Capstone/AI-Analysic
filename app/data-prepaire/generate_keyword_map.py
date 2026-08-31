@@ -5,7 +5,7 @@ import os
 def load_tags_info(csv_path):
     """Loads all tags from tags.csv and maps tag_id to its properties."""
     tags = []
-    with open(csv_path, "r", encoding="utf-8") as f:
+    with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
             tags.append(row)
@@ -156,7 +156,7 @@ def main():
     
     # Save to CSV
     fields = ["map_id", "tag_id", "keyword", "topic", "weight"]
-    with open(map_csv_path, "w", encoding="utf-8", newline="") as f:
+    with open(map_csv_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         for idx, m in enumerate(final_mappings, 1):

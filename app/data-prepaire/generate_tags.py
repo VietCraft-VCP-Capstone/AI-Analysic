@@ -263,7 +263,7 @@ def main():
         
     print(f"Loading categories from {categories_path}...")
     valid_categories = set()
-    with open(categories_path, "r", encoding="utf-8") as f:
+    with open(categories_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
             valid_categories.add(row["category_id"])
@@ -330,7 +330,7 @@ def main():
     print(f"Tag average per keyword: {avg_tags:.1f}")
     
     header = ["tag_id", "name_vi", "category_id", "source_keywords", "aliases"]
-    with open(tags_path, "w", encoding="utf-8", newline="") as f:
+    with open(tags_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=header)
         writer.writeheader()
         for row in TAG_MAPPINGS:

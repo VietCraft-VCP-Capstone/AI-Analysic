@@ -214,7 +214,7 @@ def test_gen():
     csv_path = os.path.join(script_dir, "categories.csv")
     
     header = ["category_id", "parent_id", "name_vi", "slug", "level"]
-    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+    with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=header)
         writer.writeheader()
         for row in db:
