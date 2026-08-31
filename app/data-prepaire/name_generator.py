@@ -369,6 +369,218 @@ DESCRIPTION_TEMPLATES: list[str] = [
 # HÀM CHÍNH
 # ============================================================
 
+GROUP_MAP = {
+    "apparel_top": [
+        "tshirt_unisex", "tshirt_men", "tshirt_women", "tshirt_kids",
+        "tshirt_longsleeve", "tshirt_oversize", "tshirt_organic",
+        "tanktop_men", "tanktop_women", "croptop", "polo", "hoodie",
+        "hoodie_zip", "hoodie_kids", "sweatshirt", "crewneck",
+        "jacket_windbreaker", "jacket_bomber", "cardigan", "shirt",
+        "jersey", "sportshirt", "baby_bodysuit", "baby_bib", "poncho"
+    ],
+    "apparel_bottom": ["jogger", "shorts", "legging", "swim_trunks", "skirt", "dress", "bikini", "pyjama_set"],
+    "drinkware": [
+        "mug_11oz", "mug_15oz", "mug_colorchange", "mug_lid", "mug_espresso", 
+        "glass", "tumbler", "tumbler_straw", "bottle_sport", "wine_glass", "beer_mug", "coaster"
+    ],
+    "wallart": [
+        "poster", "poster_framed", "canvas", "canvas_multi", "metal_print", 
+        "wood_print", "acrylic_print", "wall_clock", "tapestry", "wall_decal", "door_sign"
+    ],
+    "bag": ["tote", "tote_zip", "drawstring", "backpack", "crossbody", "cosmetic_bag", "laptop_sleeve", "lunch_bag", "luggage_tag", "shoe_bag"],
+    "tech": ["phonecase_hard", "phonecase_soft", "phonecase_wallet", "tablet_case", "mousepad", "deskmat", "laptop_sticker", "powerbank", "bt_speaker", "earbud_case"],
+    "accessory": [
+        "keychain_metal", "keychain_acrylic", "pin_badge", "sticker", "sticker_pack", 
+        "cap", "bucket_hat", "beanie", "headband", "face_mask", 
+        "scarf", "socks", "gloves", "belt", "slippers", "sneakers", 
+        "umbrella", "sunglasses", "watch", "bracelet", "lanyard", "wallet"
+    ],
+    "home": [
+        "pillow_cover", "pillow_full", "blanket_fleece", "blanket_sherpa", 
+        "bath_towel", "hand_towel", "doormat", "area_rug", 
+        "shower_curtain", "tablecloth", "apron", "oven_mitt", 
+        "cutting_board", "pen_holder", "night_light", "plant_pot", "candle"
+    ],
+    "stationery": [
+        "notebook_hard", "notebook_soft", "spiral_notebook", "planner", 
+        "desk_calendar", "wall_calendar", "greeting_card", "postcard", 
+        "pen", "bookmark", "file_folder", "sticky_note"
+    ],
+    "pet": ["pet_bowl", "pet_collar", "pet_leash", "pet_shirt", "pet_bed", "pet_tag"],
+    "sport": ["yoga_mat", "sport_bottle", "sport_towel", "gym_bag", "camp_chair"],
+}
+
+TYPE_TO_GROUP = {}
+for g, types in GROUP_MAP.items():
+    for t in types:
+        TYPE_TO_GROUP[t] = g
+
+HIGHLIGHTS_BY_GROUP = {
+    "apparel_top": [
+        "form rộng", "chất cotton 100%", "in theo yêu cầu", "phong cách vintage", 
+        "thiết kế độc quyền", "vải mềm mát", "thêu tay tinh xảo", 
+        "hoạ tiết phiên bản giới hạn", "in cả hai mặt", "bản phối màu độc quyền"
+    ],
+    "apparel_bottom": [
+        "form rộng", "in theo yêu cầu", "phong cách vintage", "thiết kế độc quyền", 
+        "vải mềm mát", "thêu tay tinh xảo", "hoạ tiết phiên bản giới hạn", 
+        "bản phối màu độc quyền"
+    ],
+    "drinkware": [
+        "giữ nhiệt tốt", "chất sứ cao cấp", "in theo yêu cầu", "phong cách vintage", 
+        "thiết kế độc quyền", "độc lạ độc đáo", "hoạ tiết phiên bản giới hạn", 
+        "bản phối màu độc quyền"
+    ],
+    "wallart": [
+        "giấy ảnh cao cấp", "khung gỗ tự nhiên", "in theo yêu cầu", "phong cách nghệ thuật", 
+        "thiết kế độc quyền", "in UV sắc nét", "hoạ tiết phiên bản giới hạn", 
+        "bản phối màu độc quyền"
+    ],
+    "bag": [
+        "vải canvas dày", "khóa kéo chắc chắn", "in theo yêu cầu", "phong cách thời trang", 
+        "thiết kế độc quyền", "tiện lợi đi học đi chơi", "hoạ tiết phiên bản giới hạn", 
+        "bản phối màu độc quyền"
+    ],
+    "tech": [
+        "chống sốc ôm máy", "nhôm sơn tĩnh điện", "in theo yêu cầu", "phong cách hiện đại", 
+        "thiết kế độc quyền", "in UV sắc nét", "hoạ tiết phiên bản giới hạn", 
+        "bản phối màu độc quyền"
+    ],
+    "accessory": [
+        "acrylic chống xước", "inox mạ chống gỉ", "in theo yêu cầu", "phong cách cá tính", 
+        "thiết kế độc quyền", "in UV sắc nét", "hoạ tiết phiên bản giới hạn", 
+        "bản phối màu độc quyền", "khắc laser tỉ mỉ"
+    ],
+    "home": [
+        "vải cotton mềm mịn", "chăn lông cừu ấm áp", "in theo yêu cầu", 
+        "thiết kế độc quyền", "hoạ tiết phiên bản giới hạn", "bản phối màu độc quyền"
+    ],
+    "stationery": [
+        "giấy chống lóa", "bìa cứng chắc chắn", "in theo yêu cầu", "thiết kế độc quyền", 
+        "hoạ tiết phiên bản giới hạn", "bản phối màu độc quyền"
+    ],
+    "pet": [
+        "chất liệu an toàn", "in theo yêu cầu", "thiết kế độc quyền", 
+        "dễ thương đáng yêu", "hoạ tiết phiên bản giới hạn"
+    ],
+    "sport": [
+        "chống trơn trượt", "thấm hút mồ hôi", "in theo yêu cầu", "thiết kế độc quyền", 
+        "tinh thần thể thao", "hoạ tiết phiên bản giới hạn"
+    ],
+}
+
+TEMPLATES_BY_GROUP = {
+    "apparel_top": [
+        (
+            "{product} chất cotton 100%, vải mềm, thấm hút mồ hôi tốt, phù hợp mặc hằng ngày và đi chơi. "
+            "Hình in bằng công nghệ in chuyển nhiệt, màu lên chuẩn, bền màu sau nhiều lần giặt. "
+            "Có đủ size từ S đến 3XL, form rộng thoải mái, nam nữ mặc đều đẹp. "
+            "Sản phẩm được in theo đơn nên thời gian chuẩn bị hàng từ 2 đến 3 ngày làm việc. "
+            "Hướng dẫn bảo quản: giặt bằng nước lạnh, lộn trái khi giặt và khi phơi, "
+            "không dùng chất tẩy mạnh, không là trực tiếp lên hình in."
+        ),
+        (
+            "{product} chất nỉ bông dày dặn hai lớp, giữ ấm tốt và co giãn thoải mái. "
+            "Hình in bằng công nghệ DTF (Direct to Film), màu lên đẹp, "
+            "chi tiết sắc nét và bền sau nhiều lần giặt máy. "
+            "Có size từ S đến 3XL, form oversize unisex phù hợp với nhiều vóc dáng. "
+            "Mũ hai lớp chắn gió, túi kangaroo tiện lợi. "
+            "Hướng dẫn bảo quản: giặt máy chế độ nhẹ, nước lạnh dưới 30°C, "
+            "lộn trái trước khi giặt, phơi bóng mát, không sấy nhiệt cao."
+        )
+    ],
+    "apparel_bottom": [
+        (
+            "{product} chất liệu thun nỉ hoặc cotton cao cấp, mềm mại và co giãn tốt, mang lại sự thoải mái tối đa cho người mặc. "
+            "Đường may tỉ mỉ, chắc chắn, phù hợp cho mọi hoạt động thể thao hay đi chơi. "
+            "Thiết kế hiện đại, trẻ trung, dễ dàng phối hợp với nhiều trang phục khác nhau. "
+            "Sản phẩm được hoàn thiện tinh tế từng chi tiết để hướng đến trải nghiệm mặc tối ưu nhất. "
+            "Có nhiều size lựa chọn từ S đến XXL. "
+            "Hướng dẫn bảo quản: giặt tay hoặc giặt máy bằng nước lạnh, lộn trái sản phẩm khi giặt, "
+            "tránh ánh nắng gay gắt trực tiếp."
+        )
+    ],
+    "drinkware": [
+        (
+            "{product} chất sứ hoặc kim loại giữ nhiệt cao cấp, dày dặn, an toàn cho sức khỏe và không thấm mùi. "
+            "Hình in bằng công nghệ hiện đại bền màu nung nhiệt độ cao, bám chắc không lo bong tróc dù rửa nhiều lần. "
+            "Thiết kế đẹp mắt tiện lợi và dung tích phù hợp cho cà phê, trà hay các loại nước uống khác nhau. "
+            "Thời gian xử lý in đơn hàng từ 1 đến 2 ngày làm việc. "
+            "Hướng dẫn bảo quản: rửa nhẹ nhàng bằng nước rửa chén thông thường, tránh cọ xát sắt nhọn lên bề mặt hình in."
+        )
+    ],
+    "wallart": [
+        (
+            "{product} in trên chất liệu giấy ảnh cao cấp hoặc canvas bền chắc, màu sắc trung thực, độ phân giải cao không bị vỡ hạt. "
+            "Phù hợp trang trí phòng ngủ, phòng khách, quán cà phê hoặc làm quà tặng ý nghĩa. "
+            "Có sẵn các khổ A4, A3, A2 và có thể đặt kích thước tuỳ chọn số lượng lớn. "
+            "Thời gian in và giao hàng từ 2 đến 4 ngày làm việc tuỳ khổ in. "
+            "Hướng dẫn bảo quản: treo nơi khô ráo thoáng mát, tránh ẩm ướt và ánh nắng trực tiếp chiếu vào để giữ màu lâu dài."
+        )
+    ],
+    "bag": [
+        (
+            "{product} chất vải canvas hoặc polyester cao cấp chịu tải tốt, thích hợp đựng sách, laptop và đồ dùng hằng ngày. "
+            "Hình in sắc nét sinh động bằng công nghệ hiện đại, bền đẹp không phai màu hay nứt vỡ khi giặt. "
+            "Quai đeo chắc chắn êm ái, khoang chứa rộng rãi đáp ứng nhiều nhu cầu học tập, làm việc hay du lịch dã ngoại. "
+            "Hướng dẫn bảo quản: giặt tay nhẹ nhàng bằng nước lạnh, không vắt mạnh, phơi nơi thoáng mát tránh ánh nắng gay gắt."
+        )
+    ],
+    "tech": [
+        (
+            "{product} chất liệu nhựa cứng hoặc silicon cao cấp dẻo bảo vệ hoàn hảo cho phụ kiện công nghệ của bạn. "
+            "Công nghệ in UV tiên tiến cho hình ảnh sắc nét, màu sắc tươi tắn và khó bong tróc hay bay màu. "
+            "Các chi tiết hoàn thiện tỉ mỉ ôm sát máy vô cùng tinh tế và cá tính. "
+            "Khớp nối chuẩn xác dễ tháo lắp. Thiết kế mỏng nhẹ không làm tăng đáng kể độ dày của thiết bị mà vẫn đem lại sự bảo vệ tối đa. "
+            "Hướng dẫn bảo quản: lau chùi thường xuyên bằng vải mềm ẩm, tránh tiếp xúc gần nguồn nhiệt cao hay dung môi tẩy rửa."
+        )
+    ],
+    "accessory": [
+        (
+            "{product} chất liệu chọn lọc cao cấp (mica acrylic, kim loại chống rỉ hoặc vải sợi chất lượng), sử dụng lâu dài bền đẹp. "
+            "Hình ảnh in rõ nét chi tiết tạo dấu ấn cá tính thời trang đặc trưng riêng phù hợp làm quà tặng bạn bè thân thiết. "
+            "Đồ dùng tiện dụng, nhỏ gọn dễ dàng kết hợp nâng tầm phong cách sống hằng ngày. "
+            "Thiết kế nhỏ gọn, mang tính ứng dụng cao, dễ dàng mang theo bên người mọi lúc mọi nơi. "
+            "Hướng dẫn bảo quản: lau sản phẩm bằng khăn khô mềm, cất giữ nơi khô ráo, tránh các chất tẩy rửa hóa học mạnh."
+        )
+    ],
+    "home": [
+        (
+            "{product} chất liệu vải cotton hoặc fleece mềm mịn không gây kích ứng da, an toàn khi sử dụng lâu dài trong phòng ngủ phòng khách. "
+            "Hình in thăng hoa sắc nét tràn viền không phai nhạt dù giặt nhiều lần. "
+            "Mang đến cảm giác thư giãn thoải mái đồng thời trang trí nhà cửa thêm ấm cúng sinh động. "
+            "Hướng dẫn bảo quản: giặt bằng tay hoặc giặt máy chế độ nhẹ, lộn bề trái hình in phơi bóng mát để màu sắc luôn bền đẹp."
+        )
+    ],
+    "stationery": [
+        (
+            "{product} chất lượng giấy cao cấp chống lóa giúp viết trơn mượt không thấm nhòe mực, chống mỏi mắt tốt khi học tập làm việc. "
+            "Bìa in sắc nét màu sắc tươi sáng mang cảm hứng sáng tạo tràn đầy. "
+            "Lựa chọn tuyệt vời để làm quà tặng ghi chép hay lên kế hoạch. "
+            "Sản phẩm đồng hành cùng bạn trên con đường chinh phục tri thức và công việc mỗi ngày. "
+            "Hướng dẫn bảo quản: bảo quản nơi khô ráo không ẩm ướt, tránh gập nếp gãy góc sổ sách ảnh hưởng thẩm mỹ."
+        )
+    ],
+    "pet": [
+        (
+            "{product} chất liệu an toàn mềm mại, thân thiện và thoải mái không gây cọ xát tổn thương da của cún miêu. "
+            "Độ bền cao thích hợp hoạt động chạy nhảy vui chơi. "
+            "Hình in sắc nét đáng yêu làm nổi bật cá tính cưng xỉu của bé. "
+            "Hãy dành tặng cho thú cưng của bạn sự chăm sóc chu đáo tốt đẹp nhất bằng sản phẩm này. "
+            "Hướng dẫn bảo quản: giặt sạch bằng tay hoặc túi giặt chế độ nhẹ với xà phòng trung tính, phơi khô ráo hoàn toàn trước khi dùng."
+        )
+    ],
+    "sport": [
+        (
+            "{product} thiết kế chuyên dụng bền chắc cho các buổi luyện tập năng lượng. "
+            "Chất liệu chống trơn trượt có đàn hồi cao chịu lực tốt nâng đỡ tuyệt vời. "
+            "In ấn sắc sảo đẹp mắt tạo sự hứng khởi khi rèn luyện thể chất hằng ngày. "
+            "Sản phẩm giúp tối ưu hóa hiệu suất luyện tập và mang đến nguồn cảm hứng vận động dồi dào. "
+            "Hướng dẫn bảo quản: lau khô sau khi sử dụng bằng khăn ẩm sạch, cuộn gọn hoặc đặt cất giữ nơi khô thoáng."
+        )
+    ],
+}
+
 def _pick(lst: list) -> str:
     """Bốc ngẫu nhiên một phần tử."""
     return random.choice(lst)
@@ -388,11 +600,27 @@ def generate_product(
         topic = _pick(list(OCCASIONS.keys()))
     occasion_label = _pick(OCCASIONS[topic])
 
-    # Ghép tên: [Loại SP] [Điểm nhấn] [Dịp] — [Tên thiết kế]
-    name = f"{product_label} {_pick(HIGHLIGHTS)} {occasion_label} — {_pick(DESIGN_NAMES)}"
+    # Dynamic highlight selection
+    group = TYPE_TO_GROUP.get(product_type, "accessory")
+    highlights = HIGHLIGHTS_BY_GROUP.get(group, ["thiết kế độc quyền"])
+    
+    # Avoid duplicate "in" words
+    has_print_in_label = any(x in product_label.lower() for x in ["in hình", "in ảnh", "in logo", "in họa tiết", "in decal"])
+    if has_print_in_label:
+        highlights_filtered = [h for h in highlights if "in " not in h.lower()]
+        if not highlights_filtered:
+            highlights_filtered = highlights
+    else:
+        highlights_filtered = highlights
+        
+    highlight = _pick(highlights_filtered)
 
-    # Mô tả
-    description = _pick(DESCRIPTION_TEMPLATES).format(product=product_label)
+    # Ghép tên: [Loại SP] [Điểm nhấn] [Dịp] — [Tên thiết kế]
+    name = f"{product_label} {highlight} {occasion_label} — {_pick(DESIGN_NAMES)}"
+
+    # Mô tả theo nhóm
+    templates = TEMPLATES_BY_GROUP.get(group, TEMPLATES_BY_GROUP["apparel_top"])
+    description = _pick(templates).format(product=product_label)
 
     return name, description
 
