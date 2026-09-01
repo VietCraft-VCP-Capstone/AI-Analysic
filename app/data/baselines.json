@@ -1,0 +1,1211 @@
+{
+  "metadata": {
+    "generated_at": "2026-09-01T16:21:45.144055+00:00",
+    "total_keywords": 40,
+    "weekly_test_horizon_weeks": 12,
+    "daily_test_horizon_days": 30,
+    "description": "Naive benchmark baselines for Google Trends time series forecasting."
+  },
+  "keywords": {
+    "áo thun": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 15.4533,
+          "rmse": 19.8338,
+          "mape": 12.6685
+        },
+        "naive_same_period_last_year": {
+          "mae": 29.2608,
+          "rmse": 37.8214,
+          "mape": 22.2926
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 20.34,
+          "rmse": 37.0937,
+          "mape": 12.2398
+        },
+        "naive_same_day_last_week": {
+          "mae": 21.2683,
+          "rmse": 39.0299,
+          "mape": 13.0721
+        }
+      }
+    },
+    "áo phông nam": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.405,
+          "rmse": 1.987,
+          "mape": 31.9444
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.8733,
+          "rmse": 3.2447,
+          "mape": 54.1667
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.5577,
+          "rmse": 1.4395,
+          "mape": 17.7951
+        },
+        "naive_same_day_last_week": {
+          "mae": 2.2297,
+          "rmse": 4.0062,
+          "mape": 58.9095
+        }
+      }
+    },
+    "áo phông nữ": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.1708,
+          "rmse": 1.8138,
+          "mape": 27.7778
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.3417,
+          "rmse": 2.81,
+          "mape": 73.6111
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.5563,
+          "rmse": 1.4369,
+          "mape": 26.6069
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.207,
+          "rmse": 2.5425,
+          "mape": 46.6667
+        }
+      }
+    },
+    "in áo thun": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 3.8,
+          "rmse": 5.4553,
+          "mape": 32.4852
+        },
+        "naive_same_period_last_year": {
+          "mae": 6.5,
+          "rmse": 9.7673,
+          "mape": 49.8189
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.9333,
+          "rmse": 2.0976,
+          "mape": 20.6888
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.9333,
+          "rmse": 3.4545,
+          "mape": 55.4847
+        }
+      }
+    },
+    "áo đôi": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.7483,
+          "rmse": 2.5952,
+          "mape": 12.6561
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.7433,
+          "rmse": 3.3467,
+          "mape": 20.5528
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 6.3777,
+          "rmse": 12.7024,
+          "mape": 22.5014
+        },
+        "naive_same_day_last_week": {
+          "mae": 8.4067,
+          "rmse": 13.9321,
+          "mape": 45.0058
+        }
+      }
+    },
+    "áo nhóm": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 3.7358,
+          "rmse": 4.6679,
+          "mape": 32.7669
+        },
+        "naive_same_period_last_year": {
+          "mae": 6.4033,
+          "rmse": 9.1733,
+          "mape": 44.5029
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 1.2,
+          "rmse": 2.2657,
+          "mape": 27.0197
+        },
+        "naive_same_day_last_week": {
+          "mae": 2.7333,
+          "rmse": 4.8442,
+          "mape": 59.1058
+        }
+      }
+    },
+    "áo lớp": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 3.0667,
+          "rmse": 3.8919,
+          "mape": 12.6248
+        },
+        "naive_same_period_last_year": {
+          "mae": 3.8667,
+          "rmse": 4.996,
+          "mape": 15.9089
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 8.6373,
+          "rmse": 14.0332,
+          "mape": 17.7949
+        },
+        "naive_same_day_last_week": {
+          "mae": 11.4707,
+          "rmse": 16.6439,
+          "mape": 25.7906
+        }
+      }
+    },
+    "áo đồng phục": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 61.8708,
+          "rmse": 76.6782,
+          "mape": 46.2367
+        },
+        "naive_same_period_last_year": {
+          "mae": 119.4992,
+          "rmse": 141.9083,
+          "mape": 67.224
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 17.6813,
+          "rmse": 29.3168,
+          "mape": 24.2327
+        },
+        "naive_same_day_last_week": {
+          "mae": 69.5637,
+          "rmse": 107.2997,
+          "mape": 100.2765
+        }
+      }
+    },
+    "áo gia đình": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 3.06,
+          "rmse": 3.9101,
+          "mape": 46.7899
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.3533,
+          "rmse": 3.4096,
+          "mape": 32.8395
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.8667,
+          "rmse": 2.0166,
+          "mape": 17.4613
+        },
+        "naive_same_day_last_week": {
+          "mae": 2.7667,
+          "rmse": 4.9766,
+          "mape": 56.2677
+        }
+      }
+    },
+    "túi tote": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.0833,
+          "rmse": 3.4278,
+          "mape": 12.2985
+        },
+        "naive_same_period_last_year": {
+          "mae": 3.1667,
+          "rmse": 4.1833,
+          "mape": 18.774
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 8.1667,
+          "rmse": 12.9216,
+          "mape": 23.728
+        },
+        "naive_same_day_last_week": {
+          "mae": 11.7667,
+          "rmse": 16.001,
+          "mape": 34.908
+        }
+      }
+    },
+    "tranh treo tường": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.5833,
+          "rmse": 2.0207,
+          "mape": 14.8705
+        },
+        "naive_same_period_last_year": {
+          "mae": 4.0,
+          "rmse": 4.6188,
+          "mape": 39.3402
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 4.2333,
+          "rmse": 8.8034,
+          "mape": 25.0661
+        },
+        "naive_same_day_last_week": {
+          "mae": 9.2667,
+          "rmse": 13.2991,
+          "mape": 59.8611
+        }
+      }
+    },
+    "tranh canvas": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.085,
+          "rmse": 2.6577,
+          "mape": 9.0909
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.5425,
+          "rmse": 1.8793,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 2.1667,
+          "rmse": 5.2122,
+          "mape": 34.0823
+        },
+        "naive_same_day_last_week": {
+          "mae": 3.4,
+          "rmse": 6.1482,
+          "mape": 65.692
+        }
+      }
+    },
+    "móc khóa": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.7208,
+          "rmse": 3.4729,
+          "mape": 9.1224
+        },
+        "naive_same_period_last_year": {
+          "mae": 6.3458,
+          "rmse": 8.3079,
+          "mape": 21.2248
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 9.7047,
+          "rmse": 15.0379,
+          "mape": 20.6505
+        },
+        "naive_same_day_last_week": {
+          "mae": 10.9377,
+          "rmse": 16.6954,
+          "mape": 21.7002
+        }
+      }
+    },
+    "áo tết": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.7442,
+          "rmse": 2.2837,
+          "mape": 23.5779
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.2442,
+          "rmse": 3.1145,
+          "mape": 31.9205
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 2.608,
+          "rmse": 5.723,
+          "mape": 31.232
+        },
+        "naive_same_day_last_week": {
+          "mae": 4.9277,
+          "rmse": 7.938,
+          "mape": 65.6088
+        }
+      }
+    },
+    "quà tết": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.5333,
+          "rmse": 1.8475,
+          "mape": 8.3333
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.0667,
+          "rmse": 2.6128,
+          "mape": 12.5
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 3.3687,
+          "rmse": 6.7783,
+          "mape": 33.1916
+        },
+        "naive_same_day_last_week": {
+          "mae": 5.1687,
+          "rmse": 8.8784,
+          "mape": 59.84
+        }
+      }
+    },
+    "lì xì tết": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.1,
+          "rmse": 0.3464,
+          "mape": 33.3333
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.3,
+          "rmse": 0.6,
+          "mape": 100.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.4667,
+          "rmse": 1.0646,
+          "mape": 45.0
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.8,
+          "rmse": 1.2383,
+          "mape": 75.0
+        }
+      }
+    },
+    "trang trí tết": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.17,
+          "rmse": 3.7586,
+          "mape": 66.6667
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.17,
+          "rmse": 3.7586,
+          "mape": 33.3333
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.7333,
+          "rmse": 1.4832,
+          "mape": 29.6429
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.7667,
+          "rmse": 2.8694,
+          "mape": 71.3095
+        }
+      }
+    },
+    "quà 8/3": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      }
+    },
+    "quà tặng mẹ": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.6667,
+          "rmse": 4.1312,
+          "mape": 33.3333
+        },
+        "naive_same_period_last_year": {
+          "mae": 3.7333,
+          "rmse": 4.8881,
+          "mape": 45.8333
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 5.9043,
+          "rmse": 10.4819,
+          "mape": 33.7249
+        },
+        "naive_same_day_last_week": {
+          "mae": 7.5367,
+          "rmse": 11.4062,
+          "mape": 56.6967
+        }
+      }
+    },
+    "quà 20/10": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.6,
+          "rmse": 1.0328,
+          "mape": 72.2222
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.4,
+          "rmse": 0.8165,
+          "mape": 77.7778
+        }
+      }
+    },
+    "quà 20/11": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      }
+    },
+    "quà tặng thầy cô": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.5333,
+          "rmse": 1.8475,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.2667,
+          "rmse": 0.7303,
+          "mape": 77.7778
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.2333,
+          "rmse": 0.7071,
+          "mape": 100.0
+        }
+      }
+    },
+    "quà giáng sinh": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.8,
+          "rmse": 1.4142,
+          "mape": 71.4286
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.7667,
+          "rmse": 1.354,
+          "mape": 85.7143
+        }
+      }
+    },
+    "trang trí noel": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.17,
+          "rmse": 3.7586,
+          "mape": 66.6667
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.6275,
+          "rmse": 3.255,
+          "mape": 100.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.7333,
+          "rmse": 1.3166,
+          "mape": 58.1818
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.1,
+          "rmse": 1.8886,
+          "mape": 89.3939
+        }
+      }
+    },
+    "quà valentine": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      }
+    },
+    "quà tặng người yêu": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.6667,
+          "rmse": 4.1312,
+          "mape": 66.6667
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.6667,
+          "rmse": 4.1312,
+          "mape": 33.3333
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 2.5007,
+          "rmse": 6.8752,
+          "mape": 36.9271
+        },
+        "naive_same_day_last_week": {
+          "mae": 3.0673,
+          "rmse": 7.0876,
+          "mape": 63.8542
+        }
+      }
+    },
+    "quà tặng": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 16.0158,
+          "rmse": 19.4927,
+          "mape": 8.4355
+        },
+        "naive_same_period_last_year": {
+          "mae": 19.0433,
+          "rmse": 22.9348,
+          "mape": 10.2144
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 53.7213,
+          "rmse": 91.4221,
+          "mape": 14.9894
+        },
+        "naive_same_day_last_week": {
+          "mae": 65.6247,
+          "rmse": 92.2222,
+          "mape": 20.1172
+        }
+      }
+    },
+    "quà cưới": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.2533,
+          "rmse": 2.1708,
+          "mape": 25.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.1933,
+          "rmse": 2.8717,
+          "mape": 41.6667
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.6333,
+          "rmse": 1.1402,
+          "mape": 24.9048
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.5333,
+          "rmse": 2.6833,
+          "mape": 56.9524
+        }
+      }
+    },
+    "quà tân gia": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.595,
+          "rmse": 3.6699,
+          "mape": 37.5
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.73,
+          "rmse": 2.9964,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.6267,
+          "rmse": 1.7162,
+          "mape": 15.3846
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.41,
+          "rmse": 2.5743,
+          "mape": 53.8462
+        }
+      }
+    },
+    "quà tặng bạn thân": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.2975,
+          "rmse": 2.595,
+          "mape": 50.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 3.0275,
+          "rmse": 3.9639,
+          "mape": 0.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.7833,
+          "rmse": 1.9188,
+          "mape": 25.0
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.41,
+          "rmse": 2.5743,
+          "mape": 58.3333
+        }
+      }
+    },
+    "quà handmade": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.6267,
+          "rmse": 1.535,
+          "mape": 100.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.6267,
+          "rmse": 1.535,
+          "mape": 100.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.4667,
+          "rmse": 0.8944,
+          "mape": 46.6667
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.6667,
+          "rmse": 1.1832,
+          "mape": 75.0
+        }
+      }
+    },
+    "quà lưu niệm": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.7333,
+          "rmse": 3.0022,
+          "mape": 25.0401
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.2992,
+          "rmse": 2.5983,
+          "mape": 20.8614
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 5.325,
+          "rmse": 10.7822,
+          "mape": 29.4118
+        },
+        "naive_same_day_last_week": {
+          "mae": 7.5183,
+          "rmse": 12.1319,
+          "mape": 53.1378
+        }
+      }
+    },
+    "áo anime": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 2.0,
+          "rmse": 2.6141,
+          "mape": 12.6885
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.9167,
+          "rmse": 3.6856,
+          "mape": 17.5479
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 9.2667,
+          "rmse": 15.0886,
+          "mape": 28.7167
+        },
+        "naive_same_day_last_week": {
+          "mae": 10.6333,
+          "rmse": 14.6048,
+          "mape": 49.2121
+        }
+      }
+    },
+    "áo oversize": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.9333,
+          "rmse": 1.3856,
+          "mape": 50.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 0.8,
+          "rmse": 1.3064,
+          "mape": 66.6667
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.5333,
+          "rmse": 0.9661,
+          "mape": 44.8718
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.6667,
+          "rmse": 1.1832,
+          "mape": 63.4615
+        }
+      }
+    },
+    "áo local brand": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.3333,
+          "rmse": 1.8475,
+          "mape": 44.4444
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.0667,
+          "rmse": 1.6,
+          "mape": 72.2222
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.2667,
+          "rmse": 0.7303,
+          "mape": 18.8889
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.8,
+          "rmse": 1.5055,
+          "mape": 52.7778
+        }
+      }
+    },
+    "áo vintage": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.2458,
+          "rmse": 1.93,
+          "mape": 50.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.495,
+          "rmse": 2.1142,
+          "mape": 100.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        },
+        "naive_same_day_last_week": {
+          "mae": 0.0,
+          "rmse": 0.0,
+          "mape": 0.0
+        }
+      }
+    },
+    "áo hoodie": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 1.6483,
+          "rmse": 1.9141,
+          "mape": 18.8473
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.4683,
+          "rmse": 3.2325,
+          "mape": 28.4623
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 5.7,
+          "rmse": 10.2681,
+          "mape": 30.6417
+        },
+        "naive_same_day_last_week": {
+          "mae": 9.9,
+          "rmse": 13.61,
+          "mape": 64.757
+        }
+      }
+    },
+    "áo bóng đá việt nam": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.8333,
+          "rmse": 1.2247,
+          "mape": 27.2222
+        },
+        "naive_same_period_last_year": {
+          "mae": 2.0,
+          "rmse": 2.2361,
+          "mape": 73.8889
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 2.2,
+          "rmse": 4.3818,
+          "mape": 45.4518
+        },
+        "naive_same_day_last_week": {
+          "mae": 3.8333,
+          "rmse": 6.3535,
+          "mape": 92.6376
+        }
+      }
+    },
+    "áo thun thể thao": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 0.9367,
+          "rmse": 1.6224,
+          "mape": 40.0
+        },
+        "naive_same_period_last_year": {
+          "mae": 1.8733,
+          "rmse": 2.2944,
+          "mape": 100.0
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-08-02",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 0.5573,
+          "rmse": 1.2462,
+          "mape": 26.8886
+        },
+        "naive_same_day_last_week": {
+          "mae": 1.0223,
+          "rmse": 1.8351,
+          "mape": 61.5109
+        }
+      }
+    },
+    "quà sinh nhật": {
+      "weekly": {
+        "test_cutoff_date": "2026-05-24",
+        "test_points": 12,
+        "naive_last_week": {
+          "mae": 4.1832,
+          "rmse": 5.0394,
+          "mape": 34.8083
+        },
+        "naive_same_period_last_year": {
+          "mae": 3.4461,
+          "rmse": 4.8636,
+          "mape": 24.577
+        }
+      },
+      "daily": {
+        "test_cutoff_date": "2026-07-19",
+        "test_points": 30,
+        "naive_yesterday": {
+          "mae": 5.4072,
+          "rmse": 6.2896,
+          "mape": 23.5033
+        },
+        "naive_same_day_last_week": {
+          "mae": 3.0863,
+          "rmse": 4.4369,
+          "mape": 12.9845
+        }
+      }
+    }
+  }
+}

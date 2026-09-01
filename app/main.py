@@ -1,3 +1,11 @@
+import sys
+from pathlib import Path
+
+# Thêm thư mục gốc vào sys.path để cho phép chạy trực tiếp `python app/main.py`
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings

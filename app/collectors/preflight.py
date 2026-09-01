@@ -92,8 +92,9 @@ def _env():
                        "is safest, otherwise the URI parses wrong and the "
                        "error names the wrong host")
 
-    db_name = os.environ.get("MONGODB_DB", "vietcraft")
+    db_name = os.environ.get("MONGODB_DB", "data-collection")
     return f"MONGODB_DB={db_name}"
+
 
 
 @check("Atlas connection + permissions")

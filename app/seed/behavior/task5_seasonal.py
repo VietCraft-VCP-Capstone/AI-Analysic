@@ -12,13 +12,19 @@ import os
 from typing import cast
 
 import pandas as pd
+import sys
 from pymongo import MongoClient
 
-# Sửa biến môi trường MONGO_URI nếu connection string khác, hoặc export
-# MONGO_URI=mongodb+srv://... trước khi chạy.
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
-DB_NAME = os.environ.get("MONGO_DB", "vietcraft")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+AI_ANALYSIC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(BASE_DIR)))
+sys.path.insert(0, AI_ANALYSIC_DIR)
+from app.config import settings
+
+
+MONGO_URI = settings.MONGO_URI
+DB_NAME = settings.MONGO_DB_DATA
 COLLECTION = "trend_interest"
+
 
 
 def _get_collection():

@@ -27,7 +27,7 @@ try:
 except ImportError:
     pass
 
-DB_NAME = os.environ.get("MONGODB_DB", "vietcraft")
+DB_NAME = os.environ.get("MONGODB_DB", "data-collection")
 
 
 def get_db(uri=None, db_name=None):
