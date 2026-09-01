@@ -35,15 +35,18 @@ except ImportError:
 
 API = "https://api.printify.com/v1"
 
-# Blueprint titles are matched loosely against these to keep the pull small.
-# These map to VietCraft's four product types.
-WANTED = {
-    "t-shirt": "tshirt",
-    "tee": "tshirt",
-    "mug": "mug",
-    "poster": "poster",
-    "tote": "tote",
-}
+import re
+
+PATTERNS = [
+    # Drinkware (mugs, tumblers, bottles)
+    (r"\b(mug|mugs|tumbler|tumblers|cup|cups|bottle|bottles|glass|flask|coaster)\b", "mug"),
+    # Bags and Totes (checked before poster so 'canvas tote bag' maps to tote)
+    (r"\b(tote|totes|backpack|drawstring|duffle|waist\s*bag|handbag|cosmetic\s*bag|shoulder\s*bag)\b", "tote"),
+    # T-shirts & Tops (word boundary prevents matching 'steel')
+    (r"\b(t-shirt|t-shirts|tshirt|tshirts|tee|tees|tank\s*top|hoodie|sweatshirt|crewneck|longsleeve|crop\s*top|polo)\b", "tshirt"),
+    # Posters & Wallart
+    (r"\b(poster|posters|canvas|metal\s*print|acrylic\s*print|wood\s*print|wall\s*art|tapestry)\b", "poster"),
+]
 
 # One print provider per blueprint is plenty for a cost floor.
 PROVIDERS_PER_BLUEPRINT = 1
@@ -67,8 +70,8 @@ def get(path):
 
 def classify(title):
     low = (title or "").lower()
-    for needle, product_type in WANTED.items():
-        if needle in low:
+    for pattern, product_type in PATTERNS:
+        if re.search(pattern, low):
             return product_type
     return None
 
