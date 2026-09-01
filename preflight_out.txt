@@ -1,0 +1,20 @@
+PREFLIGHT -- nothing here spends Google Trends quota
+
+  OK    Python packages              trendspy 0.1.6, all present
+  FAIL  .env file                    no .env -- run: cp .env.example .env, then fill it in
+  FAIL  Atlas connection + permissions Set MONGODB_URI, e.g.
+  export MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net/"
+  FAIL  config.py sanity             UnicodeEncodeError: 'charmap' codec can't encode character '\u1ead' in position 69: character maps to <undefined>
+  OK    Trends client                constructs OK (no network call made)
+
+     command                     calls   HTTP  minutes
+     -------------------------------------------------
+     --backfill weekly              11     22        4
+     --backfill daily               11     22        4
+     --daily (cron)                 11     22        4
+     --related                      44     88       15
+  OK    Request budget               counts printed above
+  FAIL  Existing data                Set MONGODB_URI, e.g.
+  export MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net/"
+
+4 failure(s). Fix these before collecting -- a failed backfill still spends the requests.
