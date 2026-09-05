@@ -27,15 +27,15 @@ def main():
         {"ordered_at": 1, "total_vnd": 1, "shipping_fee_vnd": 1, "_id": 0}
     )
     df_orders = pd.DataFrame(list(orders_cursor))
-    df_orders["date"] = pd.to_datetime(df_orders["ordered_at"]).dt.date
+    df_orders["date"] = pd.to_datetime(df_orders["ordered_at"]).dt.normalize()
     df_orders["revenue"] = df_orders["total_vnd"] - df_orders["shipping_fee_vnd"]
     daily_revenue = df_orders.groupby("date")["revenue"].sum().sort_index()
 
-    idx = pd.date_range(daily_revenue.index.min(), daily_revenue.index.max(), freq="D").date
+    idx = pd.date_range(daily_revenue.index.min(), daily_revenue.index.max(), freq="D")
     daily_revenue = daily_revenue.reindex(idx, fill_value=0.0)
 
     print(f"\n1. Chuỗi Doanh Thu Daily (vietcraft-seed.orders):")
-    print(f"   - Số ngày: {len(daily_revenue)} ngày ({daily_revenue.index[0]} -> {daily_revenue.index[-1]})")
+    print(f"   - Số ngày: {len(daily_revenue)} ngày ({daily_revenue.index[0].strftime('%Y-%m-%d')} -> {daily_revenue.index[-1].strftime('%Y-%m-%d')})")
     print(f"   - Tổng doanh thu: {daily_revenue.sum():,.0f} VND")
     print(f"   - Trung bình ngày: {daily_revenue.mean():,.0f} VND/ngày")
 
@@ -53,10 +53,9 @@ def main():
     print(f"\n2. Chuỗi Google Trends Tổng Hợp ({n_kw}/40 từ khoá chuẩn):")
     print(f"   - Số bản ghi: {len(df_trends):,} điểm")
 
-    df_trends["observed_on"] = pd.to_datetime(df_trends["observed_on"])
+    df_trends["observed_on"] = pd.to_datetime(df_trends["observed_on"]).dt.normalize()
     trends_weekly_avg = df_trends.groupby("observed_on")["scaled"].mean().sort_index()
     trends_daily = trends_weekly_avg.resample("D").interpolate()
-    trends_daily.index = trends_daily.index.date
     s_trends = trends_daily.reindex(daily_revenue.index).interpolate()
 
     # 3. Phân tích tương quan theo độ trễ (Lag)
