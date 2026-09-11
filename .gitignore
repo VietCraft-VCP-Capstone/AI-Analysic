@@ -65,6 +65,7 @@ desktop.ini
 
 # Seed and external datasets
 data/external/
-data/seed_out/
+data/seed_out/*
+!data/seed_out/samples/
 
 !qc/.gitkeep

@@ -7,10 +7,27 @@ Kết quả: data/seed_out/v1/buyers.csv có 6.000 dòng
 import csv
 import os
 import random
+import sys
 from datetime import datetime, timedelta
 
-PROVINCES_PATH = "data/seed_out/v1/provinces.csv"
-OUT_PATH = "data/seed_out/v1/buyers.csv"
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+AI_ANALYSIC_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "..", ".."))
+
+
+def resolve_path(rel_path: str) -> str:
+    if os.path.exists(rel_path):
+        return rel_path
+    alt_path = os.path.join(AI_ANALYSIC_DIR, rel_path)
+    if os.path.exists(alt_path):
+        return alt_path
+    return rel_path
+
+
+PROVINCES_PATH = resolve_path("data/seed_out/v1/provinces.csv")
+OUT_PATH = resolve_path("data/seed_out/v1/buyers.csv")
 
 SO_LUONG_BUYER = 6000
 
@@ -35,6 +52,10 @@ TEN = [
 TY_LE_DEVICE = {"mobile": 70, "desktop": 25, "tablet": 5}
 TY_LE_SEGMENT = {"one_time": 60, "seasonal": 30, "frequent": 10}
 
+NGAY_BAT_DAU_BUYER = datetime(2024, 9, 1, 0, 0, 0)
+NGAY_KET_THUC_BUYER = datetime(2026, 8, 20, 23, 59, 59)
+TONG_GIAY_RANGE = int((NGAY_KET_THUC_BUYER - NGAY_BAT_DAU_BUYER).total_seconds())
+
 
 def doc_ma_tinh() -> list[str]:
     # Bước 3 - đọc danh sách mã tỉnh từ file của Hạt
@@ -47,11 +68,9 @@ def doc_ma_tinh() -> list[str]:
 
 
 def sinh_ngay_dang_ky() -> str:
-    # created_at - ngẫu nhiên trong 12 tháng qua (tính từ lúc chạy script)
-    bay_gio = datetime.now()
-    so_ngay_lui = random.randint(0, 365)
-    so_giay_trong_ngay = random.randint(0, 86399)
-    ngay = bay_gio - timedelta(days=so_ngay_lui, seconds=-so_giay_trong_ngay)
+    # created_at - ngẫu nhiên từ trước ngày sản phẩm cũ nhất được tạo (bắt đầu từ 09/2024 đến 08/2026)
+    delta_giay = random.randint(0, TONG_GIAY_RANGE)
+    ngay = NGAY_BAT_DAU_BUYER + timedelta(seconds=delta_giay)
     return ngay.strftime("%Y-%m-%d %H:%M:%S")
 
 
