@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-verify_seed.py — Phép kiểm mật độ đơn hàng cho dữ liệu seed VietCraft.
-Yêu cầu:
-1. Đếm số đơn mỗi listing trong 12 tháng, nhóm theo tầng hot/medium/tail.
-2. In TRUNG VỊ chứ không in trung bình — trung bình bị vài listing bán chạy kéo lên và che mất chuyện đa số listing rỗng.
-3. ĐẠT khi trung vị hot >= 12 đơn/năm.
-"""
-
 import argparse
 import os
 import sys
