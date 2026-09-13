@@ -232,6 +232,22 @@ python app/core/compute_baselines.py \
 ✅ Hoàn thành Task 25 / Task 9!
 ```
 
+### 6.2. Chạy Kiểm định Thực nghiệm Doanh thu Olist (`benchmark_olist.py`)
+
+Kiểm định chuỗi doanh thu thực tế Olist mức toàn sàn và category bằng đúng 3 mô hình Bài toán A (Naive 1, Naive 2, STL Loess):
+
+```bash
+python app/core/benchmark_olist.py
+```
+
+### 🎯 Expected Output:
+```text
+Hoàn thành kiểm định doanh thu Olist mức toàn sàn và category.
+- Báo cáo định lượng nghiệm thu: docs/qc/olist_backtest.md
+- Biểu đồ đối chiếu 3 tầng: docs/qc/olist_backtest_forecast.png
+- Dữ liệu JSON chuẩn hóa: app/data/olist_benchmark_metrics.json
+```
+
 ---
 
 ## Phần 7: Kiểm tra Tính Toàn vẹn Liên kết Dữ liệu 5 Thành viên
@@ -284,5 +300,5 @@ uvicorn app.main:app --reload --port 8000
 Để kiểm tra nhanh 100% tính đúng đắn của toàn hệ thống trước khi push code hoặc báo cáo:
 
 ```bash
-cd_to_your_dir/ && .venv/bin/python app/seed/catalog/verify_tags.py && .venv/bin/python app/seed/catalog/verify_catalog.py && .venv/bin/python app/core/init_seed_db.py && .venv/bin/python app/core/loader.py && .venv/bin/python app/core/writer.py && .venv/bin/python app/core/calendar_vn.py && .venv/bin/python app/services/stl_service.py && .venv/bin/python app/core/compute_baselines.py && .venv/bin/python app/core/benchmark_m5.py && .venv/bin/python app/core/verify_trends_freq.py && .venv/bin/python app/seed/verify_integration_5_members.py
+cd_to_your_dir/ && .venv/bin/python app/seed/catalog/verify_tags.py && .venv/bin/python app/seed/catalog/verify_catalog.py && .venv/bin/python app/core/init_seed_db.py && .venv/bin/python app/core/loader.py && .venv/bin/python app/core/writer.py && .venv/bin/python app/core/calendar_vn.py && .venv/bin/python app/services/stl_service.py && .venv/bin/python app/core/compute_baselines.py && .venv/bin/python app/core/benchmark_m5.py && .venv/bin/python app/core/benchmark_olist.py && .venv/bin/python app/core/verify_trends_freq.py && .venv/bin/python app/seed/verify_integration_5_members.py
 ```

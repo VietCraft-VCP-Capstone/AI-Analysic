@@ -1,0 +1,193 @@
+{
+  "metadata": {
+    "dataset": "Olist Brazilian E-Commerce",
+    "type": "Daily Revenue (Platform & Category)",
+    "total_items": 112650,
+    "period_days": 586,
+    "start_date": "2017-01-05",
+    "end_date": "2018-08-13",
+    "test_horizon_days": 30,
+    "models_used": [
+      "Naive 1 (Yesterday)",
+      "Naive 2 (Lag 7)",
+      "STL Loess"
+    ],
+    "executed_at": "2026-09-13T08:14:49.923264+00:00"
+  },
+  "platform_revenue_30_days": {
+    "Naive 1 (Yesterday)": {
+      "mae": 14145.4,
+      "rmse": 15895.84,
+      "wape_pct": 38.94,
+      "nrmse_pct": 43.76,
+      "smape_pct": 45.94,
+      "mase": 1.0,
+      "cum_vol_err_pct": 38.73
+    },
+    "Naive 2 (Lag 7)": {
+      "mae": 15268.72,
+      "rmse": 17613.74,
+      "wape_pct": 42.03,
+      "nrmse_pct": 48.49,
+      "smape_pct": 52.6,
+      "mase": 1.079,
+      "cum_vol_err_pct": 41.82
+    },
+    "STL Loess": {
+      "mae": 17519.05,
+      "rmse": 18996.64,
+      "wape_pct": 48.23,
+      "nrmse_pct": 52.29,
+      "smape_pct": 66.3,
+      "mase": 1.238,
+      "cum_vol_err_pct": 48.23
+    }
+  },
+  "category_revenue_30_days": {
+    "health_beauty": {
+      "Naive 1 (Yesterday)": {
+        "mae": 2287.57,
+        "rmse": 2799.65,
+        "wape_pct": 48.5,
+        "nrmse_pct": 59.36,
+        "smape_pct": 56.62,
+        "mase": 1.0,
+        "cum_vol_err_pct": 45.68
+      },
+      "Naive 2 (Lag 7)": {
+        "mae": 2906.4,
+        "rmse": 3415.56,
+        "wape_pct": 61.62,
+        "nrmse_pct": 72.42,
+        "smape_pct": 78.46,
+        "mase": 1.271,
+        "cum_vol_err_pct": 48.55
+      },
+      "STL Loess": {
+        "mae": 2310.12,
+        "rmse": 2916.75,
+        "wape_pct": 48.98,
+        "nrmse_pct": 61.84,
+        "smape_pct": 61.2,
+        "mase": 1.01,
+        "cum_vol_err_pct": 45.67
+      }
+    },
+    "watches_gifts": {
+      "Naive 1 (Yesterday)": {
+        "mae": 928.79,
+        "rmse": 1078.84,
+        "wape_pct": 26.99,
+        "nrmse_pct": 31.35,
+        "smape_pct": 27.72,
+        "mase": 1.0,
+        "cum_vol_err_pct": 3.81
+      },
+      "Naive 2 (Lag 7)": {
+        "mae": 1349.33,
+        "rmse": 1649.58,
+        "wape_pct": 39.21,
+        "nrmse_pct": 47.94,
+        "smape_pct": 40.02,
+        "mase": 1.453,
+        "cum_vol_err_pct": 4.75
+      },
+      "STL Loess": {
+        "mae": 1114.85,
+        "rmse": 1337.1,
+        "wape_pct": 32.4,
+        "nrmse_pct": 38.86,
+        "smape_pct": 32.63,
+        "mase": 1.2,
+        "cum_vol_err_pct": 2.73
+      }
+    },
+    "bed_bath_table": {
+      "Naive 1 (Yesterday)": {
+        "mae": 1185.74,
+        "rmse": 1536.37,
+        "wape_pct": 50.77,
+        "nrmse_pct": 65.78,
+        "smape_pct": 57.59,
+        "mase": 1.0,
+        "cum_vol_err_pct": 49.5
+      },
+      "Naive 2 (Lag 7)": {
+        "mae": 1313.43,
+        "rmse": 1625.17,
+        "wape_pct": 56.23,
+        "nrmse_pct": 69.58,
+        "smape_pct": 71.38,
+        "mase": 1.108,
+        "cum_vol_err_pct": 53.86
+      },
+      "STL Loess": {
+        "mae": 1348.26,
+        "rmse": 1658.62,
+        "wape_pct": 57.73,
+        "nrmse_pct": 71.01,
+        "smape_pct": 75.36,
+        "mase": 1.137,
+        "cum_vol_err_pct": 55.56
+      }
+    },
+    "sports_leisure": {
+      "Naive 1 (Yesterday)": {
+        "mae": 652.4,
+        "rmse": 873.23,
+        "wape_pct": 32.4,
+        "nrmse_pct": 43.36,
+        "smape_pct": 33.35,
+        "mase": 1.0,
+        "cum_vol_err_pct": 6.91
+      },
+      "Naive 2 (Lag 7)": {
+        "mae": 1123.27,
+        "rmse": 1333.51,
+        "wape_pct": 55.78,
+        "nrmse_pct": 66.22,
+        "smape_pct": 73.28,
+        "mase": 1.722,
+        "cum_vol_err_pct": 39.23
+      },
+      "STL Loess": {
+        "mae": 1102.97,
+        "rmse": 1320.48,
+        "wape_pct": 54.77,
+        "nrmse_pct": 65.57,
+        "smape_pct": 69.72,
+        "mase": 1.691,
+        "cum_vol_err_pct": 39.26
+      }
+    },
+    "computers_accessories": {
+      "Naive 1 (Yesterday)": {
+        "mae": 952.5,
+        "rmse": 1248.38,
+        "wape_pct": 54.66,
+        "nrmse_pct": 71.64,
+        "smape_pct": 62.86,
+        "mase": 1.0,
+        "cum_vol_err_pct": 51.15
+      },
+      "Naive 2 (Lag 7)": {
+        "mae": 854.44,
+        "rmse": 1142.11,
+        "wape_pct": 49.03,
+        "nrmse_pct": 65.54,
+        "smape_pct": 56.75,
+        "mase": 0.897,
+        "cum_vol_err_pct": 41.82
+      },
+      "STL Loess": {
+        "mae": 813.46,
+        "rmse": 1047.36,
+        "wape_pct": 46.68,
+        "nrmse_pct": 60.1,
+        "smape_pct": 54.83,
+        "mase": 0.854,
+        "cum_vol_err_pct": 41.09
+      }
+    }
+  }
+}

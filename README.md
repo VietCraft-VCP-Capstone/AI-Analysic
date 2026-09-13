@@ -39,6 +39,7 @@ AI-Analysic/
 │   ├── collectors/           # Bộ crawler Google Trends & Printify API
 │   ├── core/                 # Tầng logic lõi AI & Abstraction I/O
 │   │   ├── benchmark_m5.py   # Thử nghiệm mức độ gộp chuỗi M5 (Item/Group/Category)
+│   │   ├── benchmark_olist.py # Backtest thực nghiệm trên dữ liệu đơn hàng Olist (Feature 37)
 │   │   ├── calendar_vn.py    # Xử lý lịch Tết âm lịch & đổi trục days_to_tet
 │   │   ├── compute_baselines.py # Tính sai số mốc Naive cho 40 từ khóa Trends
 │   │   ├── init_seed_db.py   # Khởi tạo 6 collections & indexes trên MongoDB
@@ -140,6 +141,7 @@ Chạy bộ lệnh kiểm thử 100% không lỗi trước khi tạo Pull Reques
   && .venv/bin/python app/core/calendar_vn.py \
   && .venv/bin/python app/services/stl_service.py \
   && .venv/bin/python app/core/benchmark_m5.py \
+  && .venv/bin/python app/core/benchmark_olist.py \
   && .venv/bin/python app/core/compute_baselines.py \
   && .venv/bin/python app/core/verify_trends_freq.py
 
