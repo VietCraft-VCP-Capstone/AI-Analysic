@@ -270,6 +270,29 @@ python app/seed/verify_integration_5_members.py
 ✓ Đã xuất báo cáo Integration QC ra: docs/qc/integration_qc.md
 ```
 
+### 7.2. Phép Kiểm Mật Độ Đơn Hàng Seed Data (`verify_seed.py`)
+
+Đếm số đơn mỗi listing trong 12 tháng theo các tầng (`hot`, `medium`, `tail`), in TRUNG VỊ (Median) để kiểm tra độ thưa thớt (Sparsity) và kiểm tra tiêu chí `trung vị hot >= 12 đơn/năm`:
+
+```bash
+python verify_seed.py
+```
+*(Hoặc: `python app/seed/verify_seed.py`)*
+
+### 🎯 Expected Output:
+```text
+TẦNG SẢN PHẨM  SỐ LISTING  TRUNG VỊ        IQR (Q1 - Q3)     TỶ LỆ 0 ĐƠN    
+---------------------------------------------------------------------------
+HOT            500          30.0 đơn/năm   11.0 - 49.0         2.0%
+MEDIUM         1500          6.0 đơn/năm   3.0 - 9.0           3.4%
+TAIL           3000          2.0 đơn/năm   1.0 - 3.0          13.6%
+---------------------------------------------------------------------------
+TOÀN SÀN       5000          3.0 đơn/năm   1.0 - 6.0           9.4%
+---------------------------------------------------------------------------
+✅ KẾT QUẢ ĐÁNH GIÁ: [ĐẠT] (30.0 >= 12 đơn/năm)
+✓ Đã xuất báo cáo kiểm định ra: docs/qc/seed_density.md
+```
+
 ---
 
 ## Phần 8: Khởi chạy & Verify Web API Server (FastAPI)
@@ -300,5 +323,5 @@ uvicorn app.main:app --reload --port 8000
 Để kiểm tra nhanh 100% tính đúng đắn của toàn hệ thống trước khi push code hoặc báo cáo:
 
 ```bash
-cd_to_your_dir/ && .venv/bin/python app/seed/catalog/verify_tags.py && .venv/bin/python app/seed/catalog/verify_catalog.py && .venv/bin/python app/core/init_seed_db.py && .venv/bin/python app/core/loader.py && .venv/bin/python app/core/writer.py && .venv/bin/python app/core/calendar_vn.py && .venv/bin/python app/services/stl_service.py && .venv/bin/python app/core/compute_baselines.py && .venv/bin/python app/core/benchmark_m5.py && .venv/bin/python app/core/benchmark_olist.py && .venv/bin/python app/core/verify_trends_freq.py && .venv/bin/python app/seed/verify_integration_5_members.py
+cd_to_your_dir/ && .venv/bin/python app/seed/catalog/verify_tags.py && .venv/bin/python app/seed/catalog/verify_catalog.py && .venv/bin/python app/core/init_seed_db.py && .venv/bin/python app/core/loader.py && .venv/bin/python app/core/writer.py && .venv/bin/python app/core/calendar_vn.py && .venv/bin/python app/services/stl_service.py && .venv/bin/python app/core/compute_baselines.py && .venv/bin/python app/core/benchmark_m5.py && .venv/bin/python app/core/benchmark_olist.py && .venv/bin/python app/core/verify_trends_freq.py && .venv/bin/python app/seed/verify_integration_5_members.py && .venv/bin/python verify_seed.py
 ```
