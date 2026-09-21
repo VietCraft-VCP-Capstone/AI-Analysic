@@ -177,12 +177,12 @@ favorited_count
 
 | F | Method · Path | Tham số | Đọc mart | Người làm |
 |---|---|---|---|---|
-| F26 | `GET /api/analytics/shop/overview` | `timeRange` | `mart_listing_daily` | Hiếu |
-| F27 | `GET /api/analytics/listings/{id}/timeseries` | `timeRange` | `mart_listing_daily` | Hiếu |
+| F26 | `GET /api/analytics/shop/overview` | `timeRange` | `listing_daily` ⁽¹⁾ | Hiếu |
+| F27 | `GET /api/analytics/listings/{id}/timeseries` | `timeRange` | `listing_daily` ⁽¹⁾ | Hiếu |
 | F28 | `GET /api/analytics/listings/{id}/conversion` | — | `mart_listing_quality` | Hạt |
 | F29 | `GET /api/analytics/listings/{id}/health` | — | `listing_health` | Hạt |
 | F30 | `GET /api/notifications/alerts` | `period` | `anomaly_event` | Hiếu |
-| F31 | `GET /api/analytics/shop/categories/revenue` | `timeRange` | `mart_listing_daily` | Hiếu |
+| F31 | `GET /api/analytics/shop/categories/revenue` | `timeRange` | `listing_daily` ⁽¹⁾ | Hiếu |
 | F32 | `GET /api/analytics/competitors` | `categoryId` | `mart_competitor` | Nhi |
 | F33 | `GET /api/analytics/shop-comparison` | — | `mart_competitor` | Nhi |
 | F34 | `GET /api/analytics/tag-gap` | `categoryId` | `mart_competitor` | Đạt |
@@ -193,6 +193,9 @@ favorited_count
 | F39 | `GET /api/analytics/forecast/niches` | `categoryId?` | `niche_score` | Hưng |
 | F40 | `GET /api/analytics/forecast/radar` | — | `mart_demand` | Hưng |
 | F41 | `GET /api/analytics/forecast/recommendations` | — | gộp 3 mart | Đạt |
+
+⁽¹⁾ Trước ghi là `mart_listing_daily`. Bảng đó **bị chặn** trong `writer.BLOCKED` —
+xem mục 7. Đọc thẳng `vietcraft-seed.listing_daily`, đã backfill đủ 4 cột khoá và có index.
 
 **F36 là endpoint duy nhất có ghi** (`POST` thêm shop theo dõi, `DELETE` bỏ theo dõi).
 15 cái còn lại chỉ đọc.
@@ -437,13 +440,69 @@ Shop mới chưa có lịch sử → trả khuyến nghị chung toàn sàn, `sc
 
 ---
 
-## 6. Chỗ chưa chốt — Đạt quyết
+## 6. Sáu chỗ đã chốt — 21/09/2026
 
-| # | Câu hỏi | Ảnh hưởng |
-|---|---|---|
-| 1 | `est_sales_90d` tính thế nào? Đề xuất: `SUM(quantity)` từ `order_items` nối `orders` trong 90 ngày | **Chặn F32, F33, F34, F35, F36** — `BR-188/191/198` đều xếp hạng bằng nó mà SRS không định nghĩa |
-| 2 | Bọc `{data, meta}` hay trải phẳng rồi thêm `_meta`? | Cả 16 endpoint + toàn bộ code FE |
-| 2b | `meta` giờ gộp cả `source` + `quality` từ `HYBRID_AI_MVP_DATA_CONTRACT.md` — có cần đủ 8 trường con ở MỌI endpoint, hay chỉ ở endpoint đọc dữ liệu mồi? | Kích thước mọi phản hồi |
-| 3 | F30 đi qua `GET /api/notifications/alerts` (theo SRS) hay `/api/analytics/alerts` cho đồng bộ? | SRS ghi đường đầu; đường sau nhất quán hơn |
-| 4 | WebSocket cho F30 làm ở Sprint nào? SRS có nhắc, chưa ai nhận | F30 hiện chỉ có polling |
-| 5 | `mart_listing_quality` và `mart_competitor` khoá có kèm `date` không? | Khoá trong `writer.MART_SCHEMA` đang tạm để `["listing_id"]` |
+Mục này trước đây tên là *"Chỗ chưa chốt — Đạt quyết"*. Đã quyết, ghi lại kèm lý do
+để không ai chốt ngược. Chỗ nào chốt khác với tài liệu cũ thì nói rõ tài liệu nào.
+
+| # | Câu hỏi | Chốt | Vì sao |
+|---|---|---|---|
+| 1 | `est_sales_90d` tính thế nào? | `SUM(order_items.quantity)` nối `orders` trong 90 ngày, tính trên đơn **đã giao thành công** | Đúng đề xuất có sẵn. Đây là cột **bắt buộc** của `mart_competitor`, `BR-188` xếp hạng bằng nó. Mở khoá F32–F36 |
+| 2 | Bọc `{data, meta}` hay trải phẳng? | **Bọc** `{"data":…, "meta":…, "error":null}` | FE đọc một chỗ cho cả 16 màn hình. Cài trong `app/api/v1/_template.py` — import là đúng, không phải nhớ |
+| 2b | `meta` có đủ 8 trường con ở mọi endpoint? | **Có**, nhưng `status` chỉ còn **một** chỗ | `_template.build_meta()` tự sinh nên chi phí bằng 0. Xem bảng quy đổi bên dưới |
+| 3 | F30 đi đường nào? | `GET /api/notifications/alerts` — **theo SRS** | FE sàn đã trỏ theo SRS. Nhất quán thua tương thích |
+| 4 | WebSocket cho F30? | **Không làm trong phạm vi này.** Giữ polling | Chưa ai nhận, và không có trong 50 task. Ghi vào mục Hạn chế (QA-06) chứ không im lặng bỏ |
+| 5 | `mart_listing_quality` / `mart_competitor` có `date` trong khoá? | **Không.** Giữ `["listing_id"]` | 5.000 listing × 365 ngày = 1,8 triệu dòng trên cụm M0 512 MB **dùng chung cả nhóm**. Lịch sử điểm đã nằm ở `listing_health` (khoá có `date`); hai bảng này là **ảnh chụp hiện tại** của phần đầu vào. Lý do đầy đủ ghi ngay trong `writer.MART_SCHEMA` |
+
+### `status` chỉ nằm một chỗ: `meta.status`
+
+Trước 21/09 ba tài liệu ghi ba kiểu cho cùng một khái niệm — mục 1 của chính file này
+để `quality.status` (`ready`/`limited`/`insufficient_data`), mục *"THIẾU ≠ 0"* để
+`status` ở gốc, task SPEC-02 để `meta.status`. Ba từ vựng thì FE phải viết ba nhánh.
+
+**Còn hiệu lực: `meta.status` ∈ `ok` · `partial` · `insufficient_data`.**
+
+| Bản cũ | Bản dùng |
+|---|---|
+| `quality.status: ready` | `meta.status: ok` |
+| `quality.status: limited` | `meta.status: partial` |
+| `status` ở gốc phản hồi | `meta.status` |
+
+`quality` vẫn còn, giữ `sample_size` · `identity_linked` · `confidence`.
+
+---
+
+## 7. Hai chỗ hợp đồng tự mâu thuẫn — đã xử lý
+
+**1. `mart_listing_daily` không tồn tại và sẽ không tồn tại.**
+Mục 3 ở trên từng ghi F26 · F27 · F31 đọc bảng này. Nhưng `app/core/writer.py`
+`BLOCKED` **chặn** nó: bảng đó là bản sao 1:1 của `listing_daily` (796.025 dòng, nguồn
+đã ở đúng độ mịn nên gộp không giảm được dòng nào). Thử ngày 21/09 làm cụm Atlas M0
+vọt lên **526/512 MB và chặn ghi với tất cả mọi người**.
+
+→ **F26 · F27 · F31 đọc thẳng `listing_daily`.** Bốn cột khoá đã backfill, index đã có.
+Bảng 16 endpoint ở mục 3 đã sửa theo. Một bảng bị chặn vì lý do **đo được** thì không
+mở lại bằng một dòng trong tài liệu.
+
+**2. Dải tin cậy tên là `lo95` / `hi95`, không phải `yhat_lower` / `yhat_upper`.**
+`BR-206` và mục 4 (F37) dùng `lo95`/`hi95`. `writer.save_forecast_points()` bản cũ ghi
+`yhat_lower`/`yhat_upper` — hai tên cho một thứ, API đọc `lo95` sẽ không thấy gì.
+Bản ghi duy nhất đang có trong `forecast_point` mắc đúng lỗi này.
+
+→ Tên chính thức là **`lo95` / `hi95`**. `save_forecast_points()` vẫn nhận tên cũ và tự
+đổi kèm cảnh báo, để code đã viết không gãy. `scripts/validate_mart.py` bắt được chỗ này.
+
+---
+
+## 8. Chữ ký xác nhận
+
+Ký nghĩa là: đã đọc hợp đồng, hiểu bảng mình ghi vào và endpoint mình phải trả,
+và không thấy chỗ nào mâu thuẫn với phần việc của mình.
+
+| Người | Mảng | Ngày | Ký |
+|---|---|---|---|
+| Đạt | khung API · F34 · F36 · F37 · F41 | 21/09 | ✔ (người viết) |
+| Hiếu | F26 · F27 · F30 · F31 | | |
+| Nhi | F32 · F33 · F35 + SPEC-04 (JWT) | | |
+| Hưng | F38 · F39 · F40 | | |
+| Hạt | F28 · F29 | | |

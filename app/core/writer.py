@@ -40,29 +40,106 @@ def _get_seed_db():
 # ---------------------------------------------------------------------------
 MART_SCHEMA: Dict[str, Dict[str, Any]] = {
     "forecast_point": {
+        # Khoá KHÔNG có horizon_days (index tạo sẵn trên Mongo từ 01/09 là như vậy).
+        # Hệ quả: chỉ được lưu MỘT chuỗi dự báo cho mỗi (entity, ngày). Ghi thêm bản
+        # 30 và 60 ngày cho cùng ngày sẽ upsert đè lên nhau và mất dữ liệu trong
+        # im lặng — đã xảy ra 21/09, mất 7.200/14.400 dòng.
+        # Cách làm đúng: job ghi chuỗi 90 ngày, API cắt ra cửa sổ người dùng xin.
         "key": ["entity_type", "entity_id", "forecast_date"],
         "writes": "F37 · F38",
         "reads": "F37 · F38 · F41",
+        "fields": {
+            "yhat": "float — giá trị dự báo",
+            "lo95": "float >= 0 — cận dưới 95%, KẸP Ở 0 (BR-207), không dự báo doanh thu âm",
+            "hi95": "float — cận trên 95%",
+            "model": "str — arima · lstm · seasonal_naive (BR-205)",
+            "horizon_days": "int — độ dài chuỗi đã dự báo (90); API cắt ra 30/60/90",
+            "horizon_index": "int — bước thứ mấy trong chuỗi, 1..90",
+            "mase": "float — sai số của mô hình đã chọn, đo trên phần giữ lại",
+            "mase_baseline": "float — sai số của seasonal_naive; mô hình phải thấp hơn số này",
+            # Bảng so sánh đầy đủ 3 mô hình nằm ở `model_run.parameters.model_comparison`,
+            # ghi MỘT LẦN cho mỗi shop thay vì lặp trên cả 14.400 dòng dự báo.
+            "validation": "dict|None — chỉ dùng cho bản ghi lẻ; job ghi vào model_run",
+        },
+        # BR-206: khoảng tin cậy LUÔN phải có. Thiếu lo95/hi95 thì FE không vẽ
+        # được vùng mờ, và một con số dự báo trần trụi đọc như lời hứa chắc chắn.
+        "fields_bat_buoc": ["yhat", "lo95", "hi95", "model", "horizon_days"],
     },
     "anomaly_event": {
         "key": ["entity_type", "entity_id", "event_date"],
         "writes": "F30",
         "reads": "F30",
+        "fields": {
+            "direction": "str — drop · spike",
+            "z": "float — điểm z, ngưỡng |z| > 7.0 (KHÔNG phải 2.0 của BR-183, xem SPEC_CHANGES.md)",
+            "expected": "int|None — doanh thu kỳ vọng, VND nguyên",
+            "actual": "int|None — doanh thu thật, VND nguyên",
+            "severity": "str — high · medium · low",
+            "calendar_sensitive": "bool — rơi vào dịp lễ/Tết hay không",
+            "confidence": "str — ok · calendar_sensitive · limited_few_cycles · unreliable_high_rate",
+            "reliability_note": "str|None — vì sao chuỗi này đáng tin tới mức đó",
+            "cycles_observed": "float — số chu kỳ mùa vụ quan sát được; dưới 12 thì kém tin",
+        },
+        "fields_bat_buoc": ["direction", "z", "severity", "confidence"],
     },
     "listing_health": {
         "key": ["listing_id", "date"],
         "writes": "F29",
         "reads": "F28 · F29",
+        "fields": {
+            "health_score": "float 0-100",
+            "band": "str — tốt (>=80) · cần cải thiện (50-79) · kém (<50), BR-182",
+            "conversion_rate": "float|None",
+            "category_avg_cr": "float|None",
+            "cr_index": "float|None",
+            "rating_shrunk": "float|None — CHƯA có đánh giá thì null, KHÔNG mặc định 4.0",
+            "n_reviews": "int",
+            "breakdown": "dict 5 trục — conversion·rating·content·stock·freshness, weight cộng đúng 1.0",
+            "todo": "list — [{priority, action, expected_gain}]",
+            "title": "str|None",
+            "axes_missing": "list[str] — trục thiếu dữ liệu, ĐÃ loại khỏi phép tính và chia lại trọng số (không cho 0 điểm)",
+        },
+        "fields_bat_buoc": ["health_score", "band", "breakdown"],
     },
     "niche_score": {
         "key": ["keyword", "date"],
         "writes": "F39",
         "reads": "F39 · F40 · F41",
+        "fields": {
+            "tag_id": "str",
+            "demand_pct": "float 0-100",
+            "supply_pct": "float 0-100",
+            "gap_score": "float — cầu trừ cung, xếp hạng theo cái này",
+            "n_listings": "int",
+            "demand_index": "float",
+            "trend": "str — rising · flat · falling",
+            "sparkline_7d": "list[int] — 7 điểm gần nhất",
+            "tag_ids": "list[str] — mọi tag ánh xạ từ từ khoá này",
+            "growth_pct": "float — 12 tuần gần nhất so 12 tuần trước",
+            "quadrant": "str — opportunity · crowded · niche_quiet · oversupplied",
+            "rank": "int — xếp theo gap_score giảm dần",
+        },
+        # BR-211: ngách chứa từ khoá cấm (bản quyền/NSFW) phải bị loại TRƯỚC khi ghi.
+        # Lọc ở tầng đọc là quá muộn — số đã nằm trong bảng thì job khác đọc được.
+        "fields_bat_buoc": ["tag_id", "demand_pct", "supply_pct", "gap_score"],
     },
     "seasonal_profile": {
         "key": ["entity_type", "entity_id", "period_type", "period_value"],
         "writes": "F38",
         "reads": "F38",
+        "fields": {
+            "trend": "list[float] — thành phần xu hướng sau phân rã STL",
+            "seasonal": "list[float] — thành phần mùa vụ",
+            "residual": "list[float] — phần dư",
+            "amplitude": "float — biên độ đỉnh mùa",
+            "events": "list — [{name, date, driver, peak_offset_days, launch_window}]",
+            "content_calendar": "list — [{week, action}]",
+            "tag_ids": "list[str]",
+            "n_points": "int — số điểm tuần đưa vào phân rã",
+            "peak_date_sample": "str YYYY-MM-DD — một ngày rơi vào đỉnh mùa",
+            "has_seasonality": "bool — biên độ có đủ lớn để gọi là có mùa vụ không",
+        },
+        "fields_bat_buoc": ["seasonal", "amplitude"],
     },
 
     # --- 3 BẢNG NỀN (Sprint 2) ---
@@ -70,19 +147,106 @@ MART_SCHEMA: Dict[str, Dict[str, Any]] = {
     # Khoá đọc từ đặc tả `plan/IMPLEMENT_F26_F41.md` mục 2, CHƯA có index trên Mongo.
     # Người dựng bảng nào thì tạo index cho khoá bảng đó, và xác nhận lại khoá ở đây.
     "mart_listing_quality": {
+        # KHOÁ ĐÃ CHỐT (SPEC-01 bước 2, 21/09): giữ ["listing_id"], KHÔNG thêm "date".
+        #
+        # BR-181 đòi chấm lại mỗi 24h, nên thoạt nhìn phải có "date". Nhưng:
+        #   5.000 listing x 365 ngày = 1,8 triệu dòng, trên cụm Atlas M0 512 MB
+        #   DÙNG CHUNG CẢ NHÓM. Bảng `listing_daily` 796.025 dòng đã làm cụm
+        #   vọt lên 526/512 MB ngày 21/09 và chặn ghi với TẤT CẢ mọi người.
+        #
+        # Lịch sử điểm KHÔNG mất: `listing_health` đã có "date" trong khoá và
+        # chính là bảng kết quả có lịch sử. Bảng này chỉ là ẢNH CHỤP HIỆN TẠI của
+        # phần đầu vào — F28 và F29 đều chỉ đọc bản mới nhất.
         "key": ["listing_id"],
-        "writes": "Hạt (Sprint 2 · T2)",
+        "writes": "Hạt (Sprint 2 · DATA-03)",
         "reads": "F28 · F29",
+        "fields": {
+            "funnel": "dict — {views, carts, orders}",
+            "view_to_cart_pct": "float|None — 0 lượt xem thì null, KHÔNG chia cho 0",
+            "cart_to_order_pct": "float|None",
+            "view_to_order_pct": "float|None",
+            "category_avg_pct": "float|None",
+            "cr_index": "float|None — tỉ lệ so với trung bình danh mục",
+            "weakest_step": "str — view_to_cart · cart_to_order",
+            "tips": "list — CHỈ điền khi CR thấp hơn danh mục >= 20% (BR-179), không thì []",
+            "category_id": "str — mốc so sánh lấy theo danh mục này",
+            "window_from": "str YYYY-MM-DD",
+            "window_to": "str YYYY-MM-DD — neo theo ngày mới nhất có thật trong dữ liệu",
+        },
+        "fields_bat_buoc": ["funnel", "weakest_step"],
     },
     "mart_competitor": {
+        # KHOÁ ĐÃ CHỐT (SPEC-01 bước 2, 21/09): giữ ["listing_id"]. Cùng lý do
+        # hạn mức Atlas như trên — thêm "date" là 5.000 x 365 dòng.
+        # F36 cần lịch sử "đối thủ ra sản phẩm mới lúc nào" thì ghi vào
+        # `competitor_trackers` trên sàn live (thưa, mỗi lần phát hiện một dòng),
+        # không phải nhân đôi cả bảng theo ngày.
         "key": ["listing_id"],
-        "writes": "Nhi (Sprint 2 · T3)",
+        "writes": "Nhi (Sprint 2 · DATA-04)",
         "reads": "F32 · F33 · F34 · F35 · F36",
+        "fields": {
+            "shop_id": "str",
+            "shop_name": "str",
+            "category_id": "str",
+            "product_type_id": "str",
+            "price_vnd": "int — VND NGUYÊN, không thập phân",
+            "est_sales_90d": "int — SUM(quantity) từ order_items nối orders trong 90 ngày",
+            "rating_shrunk": "float|None",
+            "n_reviews": "int",
+            "favorite_count": "int",
+            "rank_in_cat": "int — xếp theo est_sales_90d giảm dần (BR-188)",
+            "n_in_cat": "int — tổng số listing cùng danh mục, để hiểu rank_in_cat",
+            "tags": "list[str] — dùng cho phép trừ tập hợp của F34",
+            "title": "str|None — tiêu đề listing, F32/F36 hiển thị",
+            "status": "str — active · paused · removed",
+            "views_90d": "int — phễu 90 ngày, F32 dùng để so",
+            "carts_90d": "int",
+            "orders_90d": "int",
+            "revenue_90d_vnd": "int — VND nguyên",
+            "window_from": "str YYYY-MM-DD — mốc đầu cửa sổ 90 ngày đã dùng",
+            "window_to": "str YYYY-MM-DD — mốc cuối; neo theo ngày MỚI NHẤT có thật trong dữ liệu, không phải hôm nay",
+        },
+        "fields_bat_buoc": ["shop_id", "category_id", "price_vnd", "est_sales_90d"],
+    },
+    "mart_shop_hour": {
+        # Nhịp đặt hàng theo thứ/giờ. Bảng RIÊNG vì nó là thứ duy nhất cần nối
+        # orders -> order_items -> listings: `orders.shop_id` là float NaN ở cả
+        # 24.736 dòng nên không quy đơn về shop trực tiếp được. Nối lúc đọc thì
+        # mỗi request tốn một phép join 3 bảng — đẩy về job chạy đêm.
+        # Kích thước: 80 shop x 7 thứ x 24 giờ = tối đa 13.440 dòng, thực tế thưa hơn.
+        "key": ["shop_id", "dow", "hour"],
+        "writes": "Hiếu (F31)",
+        "reads": "F31",
+        "fields": {
+            "orders": "int — số đơn rơi vào khung thứ/giờ này",
+            "units": "int",
+            "revenue_vnd": "int — VND nguyên",
+            "share_pct": "float — % tổng đơn của shop rơi vào khung này",
+            "tz": "str — múi giờ đã quy đổi, luôn là Asia/Ho_Chi_Minh (BR-185)",
+        },
+        "fields_bat_buoc": ["orders", "tz"],
     },
     "mart_demand": {
         "key": ["tag_id"],
-        "writes": "Hưng (Sprint 2 · T4)",
+        "writes": "Hưng (Sprint 2 · DATA-05)",
         "reads": "F38 · F39 · F40",
+        "fields": {
+            "week": "str — ISO tuần, ví dụ 2026-W38",
+            "demand_index": "float",
+            "searches_per_week": "int — dưới 100 thì loại khỏi bảng (BR-213)",
+            "growth_pct": "float",
+            "momentum": "float 0-1",
+            "supply_n_listings": "int",
+            "trend": "str — rising · flat · falling",
+            "name_vi": "str — tên tag hiển thị",
+            "n_keywords": "int — bao nhiêu từ khoá Trends gộp vào tag này",
+            "demand_scale_note": "str — nói rõ demand_index là thang gì",
+            "low_base": "bool — nền quá thấp nên growth_pct không đáng tin, đã để null",
+        },
+        # searches_per_week KHÔNG bắt buộc: Google Trends trả chỉ số 0-100, không
+        # phải số lượt tìm tuyệt đối. Quy đổi ra "lượt/tuần" là bịa số. BR-213 đặt
+        # ngưỡng 100 lượt/tuần nên chưa áp dụng được — đã ghi vào mục Hạn chế.
+        "fields_bat_buoc": ["demand_index"],
     },
 }
 
@@ -155,16 +319,34 @@ def finish_model_run(run_id: str, status: str = "COMPLETED", metrics: Optional[D
 def save_forecast_points(run_id: str, model_version: str, points: List[Dict[str, Any]]) -> int:
     """
     Ghi kết quả dự báo vào collection forecast_point.
-    Mỗi point tối thiểu có: entity_type, entity_id, forecast_date, yhat, yhat_lower, yhat_upper.
+    Mỗi point tối thiểu có: entity_type, entity_id, forecast_date, yhat, lo95, hi95.
+
+    TÊN CỘT DẢI TIN CẬY: `lo95` / `hi95`, theo docs/API_CONTRACT.md (BR-206).
+    Bản cũ của hàm này dùng `yhat_lower` / `yhat_upper` — hai tên cho cùng một thứ,
+    API đọc `lo95` sẽ không thấy gì. Tên cũ vẫn nhận được và tự đổi sang tên mới
+    kèm cảnh báo, để code đã viết không gãy.
     """
     if not points:
         return 0
 
     computed_at = datetime.now(timezone.utc).isoformat()
     operations = []
+    da_canh_bao = False
 
     for pt in points:
         doc = dict(pt)
+        for cu, moi in (("yhat_lower", "lo95"), ("yhat_upper", "hi95")):
+            if cu in doc:
+                doc.setdefault(moi, doc.pop(cu))
+                if not da_canh_bao:
+                    print(f"⚠ [Writer] `{cu}` là tên cũ, đã đổi thành `{moi}` theo "
+                          f"API_CONTRACT.md (BR-206). Sửa chỗ gọi để khỏi phụ thuộc lớp đệm này.")
+                    da_canh_bao = True
+
+        # BR-207: cận dưới KẸP Ở 0 — không dự báo doanh thu âm.
+        if doc.get("lo95") is not None and doc["lo95"] < 0:
+            doc["lo95"] = 0
+
         doc["run_id"] = run_id
         doc["model_version"] = model_version
         doc["computed_at"] = computed_at
@@ -225,6 +407,11 @@ def save_model_output(collection_name: str, run_id: str, model_version: str,
     computed_at = datetime.now(timezone.utc).isoformat()
     operations = []
 
+    so_do = MART_SCHEMA[collection_name]
+    bat_buoc: List[str] = so_do.get("fields_bat_buoc", [])
+    cho_phep = set(so_do.get("fields", {})) | set(schema_key) | {"scope", "scope_id", "_id"}
+    la: set = set()
+
     for i, rec in enumerate(records):
         doc = dict(rec)
         doc["run_id"] = run_id
@@ -246,8 +433,29 @@ def save_model_output(collection_name: str, run_id: str, model_version: str,
                 f"Khoá rỗng làm mọi bản ghi rỗng gộp thành một dòng."
             )
 
+        # --- KIỂM CỘT THÂN (SPEC-01) ---
+        # Thiếu cột bắt buộc -> DỪNG. API đọc ra sẽ thiếu trường, FE hiện ô trống
+        # mà không ai biết vì sao — sửa lúc đó phải chạy lại cả job.
+        thieu_than = [k for k in bat_buoc if k not in doc]
+        if thieu_than:
+            raise MartWriteError(
+                f"`{collection_name}` bản ghi #{i} thiếu cột bắt buộc {thieu_than}. "
+                f"Hợp đồng bảng này cần {bat_buoc}; bản ghi đang có {sorted(set(doc) - set(META_FIELDS))}. "
+                f"Xem MART_SCHEMA['{collection_name}']['fields'] để biết mỗi cột chứa gì."
+            )
+
+        # Cột lạ -> CẢNH BÁO, không dừng. Thừa dữ liệu không làm hỏng ai đọc,
+        # nhưng thường là dấu hiệu gõ sai tên cột (vd. "lo_95" thay vì "lo95"),
+        # nên phải nói ra. Gom lại in một lần ở cuối thay vì spam từng bản ghi.
+        la.update(set(doc) - set(META_FIELDS) - set(cho_phep))
+
         filter_key = {k: doc[k] for k in schema_key}
         operations.append(UpdateOne(filter_key, {"$set": doc}, upsert=True))
+
+    if la:
+        print(f"⚠ [Writer] `{collection_name}` có {len(la)} cột không khai báo trong "
+              f"MART_SCHEMA: {sorted(la)}. Vẫn ghi, nhưng kiểm lại xem có gõ sai tên "
+              f"cột không — API đọc theo tên trong hợp đồng sẽ không thấy cột lạ.")
 
     try:
         db = _get_seed_db()
