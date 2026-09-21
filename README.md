@@ -118,12 +118,13 @@ pip install -r requirements.txt
 
 ## 5. Hướng dẫn Cấu hình File `.env` (.env Setup)
 
-Tạo file `.env` tại vị trí **`AI-Analysic/app/.env`** (hoặc thư mục gốc `AI-Analysic/.env`).
+Tạo file `.env` tại **`AI-Analysic/app/.env`**. Code nạp `app/.env` trước, rồi tới
+`AI-Analysic/.env` (xem `app/config.py`).
 
 ### Lấy mẫu từ `.env.example`
 
 ```bash
-cp .env.example .env      # rồi mở ra điền MONGODB_URI
+cp .env.example app/.env      # rồi mở ra điền MONGODB_URI
 ```
 
 `.env.example` là **nguồn duy nhất** liệt kê đầy đủ biến môi trường, kèm giá trị
