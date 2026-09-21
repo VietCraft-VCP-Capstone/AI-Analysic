@@ -25,6 +25,24 @@ Hệ thống được thiết kế theo kiến trúc **Clean Architecture**.
 3. **Phân rã & Tính toán**: `stl_service.py` (sử dụng **STL Loess**) phân rã chuỗi thành `Trend`, `Seasonal`, `Residual` và chống nhiễu `robust=True`.
 4. **Lưu kết quả**: Mô hình gọi `writer.py` để tự động đính kèm 3 trường metadata (`run_id`, `model_version`, `computed_at`) và ghi vào 6 collection kết quả (`forecast_point`, `seasonal_profile`, `anomaly_event`, `niche_score`, `listing_health`, `model_run`).
 
+### 2.4. Luồng Mart — job tính đêm, API đọc ngày
+
+```
+ĐÊM:  app/core/build_marts.py  ->  đọc listing_daily / listings / reviews / trend_interest
+                                ->  tính  ->  ghi 9 bảng mart
+NGÀY: 16 endpoint F26–F41      ->  CHỈ đọc mart  ->  trả về (mục tiêu p95 < 500ms)
+```
+
+Endpoint **không bao giờ tính toán lúc gọi** — cần tính là thiết kế sai, đẩy về job.
+Hợp đồng 9 mart (tên bảng, khoá, cột thân, cột bắt buộc) nằm trong
+`app/core/writer.py` → `MART_SCHEMA`, **không phải trong file .md**: quy ước để
+trong code thì máy ép đúng, không phụ thuộc ai có đọc tài liệu hay không.
+
+```bash
+.venv/bin/python -m app.core.build_marts --all --dry-run   # xem trước
+.venv/bin/python -m app.core.build_marts --all             # dựng thật, ~3 phút
+```
+
 ### 2.3. Luồng Phục vụ API (API Serving Flow)
 - FastAPI đọc trực tiếp các bản ghi đã tính toán sẵn từ MongoDB `vietcraft-seed` thông qua các endpoint `/api/v1/` để phục vụ Frontend sàn TMĐT VietCraft.
 
@@ -35,9 +53,14 @@ Hệ thống được thiết kế theo kiến trúc **Clean Architecture**.
 ```text
 AI-Analysic/
 ├── app/
-│   ├── api/                  # FastAPI routers (forecasting, anomaly, health_score)
+│   ├── api/v1/               # 16 endpoint F26–F41, mỗi tính năng một file
+│   │   ├── _template.py      # vỏ {data, meta, error} + xác thực — 16 endpoint dùng chung
+│   │   ├── _mart.py          # lớp đọc MongoDB dùng chung
+│   │   ├── analytics_routes.py # bảng 16 đường dẫn + đăng ký
+│   │   └── f26_*.py … f41_*.py # mỗi tính năng một file, không ai đụng của ai
 │   ├── collectors/           # Bộ crawler Google Trends & Printify API
 │   ├── core/                 # Tầng logic lõi AI & Abstraction I/O
+│   │   ├── build_marts.py    # [JOB ĐÊM] tính sẵn 9 bảng mart cho 16 endpoint đọc
 │   │   ├── benchmark_m5.py   # Thử nghiệm mức độ gộp chuỗi M5 (Item/Group/Category)
 │   │   ├── calendar_vn.py    # Xử lý lịch Tết âm lịch & đổi trục days_to_tet
 │   │   ├── compute_baselines.py # Tính sai số mốc Naive cho 40 từ khóa Trends
@@ -53,7 +76,14 @@ AI-Analysic/
 │   ├── config.py             # Single Source of Truth Cấu hình (Load .env & app/data/*.json)
 │   ├── main.py               # Thư mục khởi chạy ứng dụng FastAPI
 │   └── .env                  # File biến môi trường bảo mật (Không commit)
+├── scripts/
+│   ├── peek.py               # xem nhanh một bảng trên MongoDB
+│   └── validate_mart.py      # kiểm 9 mart có đúng MART_SCHEMA không
+├── tests/
+│   └── test_api_contract.py  # 12 test giữ 16 endpoint không trôi khỏi hợp đồng
 ├── docs/                     # Tài liệu & Báo cáo QC nghiệm thu
+│   ├── API_CONTRACT.md       # hợp đồng 16 endpoint — nguồn duy nhất
+│   ├── ADR-002.md            # quyết định LSTM cho F37 (ĐANG MỞ)
 │   ├── architecture/         # Tài liệu kiến trúc sơ đồ database
 │   └── qc/                   # Báo cáo kiểm định chất lượng (M5, Trends, Integration)
 ├── requirements.txt          # Danh sách thư viện Python có ghim phiên bản
@@ -90,28 +120,15 @@ pip install -r requirements.txt
 
 Tạo file `.env` tại vị trí **`AI-Analysic/app/.env`** (hoặc thư mục gốc `AI-Analysic/.env`).
 
-### Mẫu nội dung file `app/.env`:
+### Lấy mẫu từ `.env.example`
 
-```ini
-# ---------------------------------------------------------------------------
-# MongoDB Configuration (MongoDB Atlas Cluster)
-# ---------------------------------------------------------------------------
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?appName=VietCraft
-MONGODB_DB=data-collection
-MONGO_DB_SEED=vietcraft-seed
-
-# ---------------------------------------------------------------------------
-# Web App & Service Settings
-# ---------------------------------------------------------------------------
-PORT=8000
-DATABASE_URL=postgresql://vietcraft_user:vietcraft_password@localhost:5432/vietcraft_db
-
-# ---------------------------------------------------------------------------
-# External API Tokens
-# ---------------------------------------------------------------------------
-PRINTIFY_TOKEN=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...
-ETSY_API_KEY=
+```bash
+cp .env.example .env      # rồi mở ra điền MONGODB_URI
 ```
+
+`.env.example` là **nguồn duy nhất** liệt kê đầy đủ biến môi trường, kèm giá trị
+mặc định và biến nào bắt buộc. Thêm biến mới thì cập nhật file đó, đừng chép lại
+danh sách ra chỗ khác.
 
 > [!WARNING]
 > File `.env` chứa mật khẩu database và API tokens bảo mật, **tuyệt đối KHÔNG commit file `.env` lên GitHub**. File này đã được thêm sẵn vào `.gitignore`.
@@ -131,10 +148,36 @@ ETSY_API_KEY=
 
 ## 7. Lệnh Kiểm thử & Nghiệm thu (Verification Commands)
 
-Chạy bộ lệnh kiểm thử 100% không lỗi trước khi tạo Pull Request:
+Đứng ở thư mục `AI-Analysic/` (không phải `AI-Analysic/app/`).
+
+### 7.1. Khởi chạy server
 
 ```bash
-# 1. Chạy bộ kiểm thử toàn bộ module lõi của Đạt
+source .venv/bin/activate
+uvicorn app.main:app --reload            # -> http://localhost:8000/docs
+```
+
+**Cả 16 endpoint F26–F41 đều trả dữ liệu thật** (14/16 dưới 500ms) — với điều kiện
+mart đã được dựng (`build_marts --all`). Bảng nghiệm thu từng endpoint kèm số đo:
+[USAGE.md mục 8.3](USAGE.md#83-verify-16-endpoint-phân-tích-f26f41).
+
+Không cần MongoDB để khởi động. **Mọi endpoint sẽ trả `401` cho tới khi SPEC-04
+(JWT) xong** — chạy thử thì bật cửa hậu dev:
+
+```bash
+DEV_SHOP_ID=shp_00017 uvicorn app.main:app --reload
+```
+
+### 7.2. Kiểm nhanh, không cần MongoDB
+
+```bash
+.venv/bin/python tests/test_api_contract.py             # 11 test khung API
+.venv/bin/python scripts/validate_mart.py --all --offline
+```
+
+### 7.3. Kiểm đầy đủ, cần MongoDB
+
+```bash
 .venv/bin/python app/core/loader.py \
   && .venv/bin/python app/core/writer.py \
   && .venv/bin/python app/core/calendar_vn.py \
@@ -143,15 +186,12 @@ Chạy bộ lệnh kiểm thử 100% không lỗi trước khi tạo Pull Reques
   && .venv/bin/python app/core/compute_baselines.py \
   && .venv/bin/python app/core/verify_trends_freq.py
 
-# 2. Kiểm tra khởi tạo 6 bảng & index trên MongoDB vietcraft-seed
-.venv/bin/python app/core/init_seed_db.py
+.venv/bin/python app/core/init_seed_db.py                    # 6 bảng + index
+.venv/bin/python app/seed/verify_integration_5_members.py    # liên kết chéo 5 người
+.venv/bin/python scripts/validate_mart.py --all --sample 100 # dữ liệu mart (CHỈ ĐỌC)
 
-# 3. Kiểm tra tính toàn vẹn liên kết chéo 5 người
-.venv/bin/python app/seed/verify_integration_5_members.py
-
-# 4. Khởi chạy Uvicorn Dev Server
-.venv/bin/uvicorn app.main:app --reload --port 8000
+# Dựng lại toàn bộ 9 mart (~3 phút) — GHI lên Atlas dùng chung, xem cảnh báo ở USAGE.md 9.3
+.venv/bin/python -m app.core.build_marts --all
 ```
 
 > 📌 **Chi tiết toàn bộ quy trình kiểm thử và kết quả kỳ vọng (Expected Outputs)**: Xem tại file [USAGE.md](USAGE.md).
-
