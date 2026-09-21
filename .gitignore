@@ -69,3 +69,4 @@ data/seed_out/*
 !data/seed_out/samples/
 
 !qc/.gitkeep
+vc-data/

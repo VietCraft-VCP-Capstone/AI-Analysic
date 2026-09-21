@@ -110,6 +110,9 @@ def build_listing_daily() -> pd.DataFrame:
         COT_LISTING_ID, COT_TIER, COT_SHOP_ID, COT_PRODUCT_TYPE_ID, COT_CATEGORY_ID, COT_TAGS
     ]].copy()
 
+    # Live product identity contract: seed listing IDs remain distinct from live product IDs.
+    # Do not fabricate cross-database joins; live rollups use product_id as canonical key.
+
     hot_med_listings = listings[listings[COT_TIER].isin(["hot", "medium"])][COT_LISTING_ID].tolist()
     tail_listings = list(listings[listings[COT_TIER] == "tail"][COT_LISTING_ID])
 

@@ -45,6 +45,7 @@ class Settings:
         or "data-collection"
     )
     MONGO_DB_SEED: str = os.getenv("MONGO_DB_SEED", "vietcraft-seed")
+    MONGO_DB_LIVE: str = os.getenv("MONGO_DB_LIVE", "vietcraft")
 
     # External APIs
     PRINTIFY_TOKEN: str = os.getenv("PRINTIFY_TOKEN", "")

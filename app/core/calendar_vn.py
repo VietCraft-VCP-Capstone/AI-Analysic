@@ -14,7 +14,9 @@ import numpy as np
 from datetime import datetime, date
 from typing import Union, Dict
 
-# Bảng ngày mùng 1 Tết Nguyên Đán (Dương lịch) từ 2021 tới 2026
+# Bảng ngày mùng 1 Tết Nguyên Đán (Dương lịch).
+# Mở rộng tới 2030: dự báo 12 tuần tính từ cuối 2026 sẽ chạm sang 2027, và bảng
+# cũ dừng ở 2026 làm get_tet_date() ném lỗi ngay giữa kỳ dự báo.
 TET_DATES: Dict[int, str] = {
     2021: "2021-02-12",
     2022: "2022-02-01",
@@ -22,6 +24,10 @@ TET_DATES: Dict[int, str] = {
     2024: "2024-02-10",
     2025: "2025-01-29",
     2026: "2026-02-17",
+    2027: "2027-02-06",
+    2028: "2028-01-26",
+    2029: "2029-02-13",
+    2030: "2030-02-03",
 }
 
 # Các ngày lễ cố định dương lịch tại Việt Nam (tháng, ngày)
