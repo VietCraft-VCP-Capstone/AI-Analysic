@@ -12,3 +12,6 @@ pymongo>=4.0.0
 dnspython>=2.4.0
 requests>=2.31.0
 python-dotenv>=1.0.0
+
+# --- chỉ dùng để chạy test, không cần lúc chạy thật ---
+httpx2>=0.1.0          # TestClient của FastAPI cần; tests/test_api_contract.py
