@@ -25,21 +25,54 @@ async def lifespan(app: FastAPI):
 
     Dùng lifespan chứ không phải @app.on_event: starlette 1.6 đã bỏ on_event.
     """
-    # flush=True: khi stdout không phải terminal (chạy qua systemd, docker, hay
-    # ghi ra file log) thì print() bị đệm, và cảnh báo tắt xác thực dưới đây có
-    # thể mất trắng nếu tiến trình bị kill. Cảnh báo an toàn thì không được mất.
+    # flush=True: khi stdout không phải terminal (systemd, docker, ghi ra file log)
+    # thì print() bị đệm, và cảnh báo tắt xác thực bên dưới có thể mất trắng nếu
+    # tiến trình bị kill. Cảnh báo an toàn thì không được mất.
+    def ra(*d):
+        print(*d, flush=True)
+
     that = sorted(f for f, v in TRANG_THAI_F.items() if v == "that")
     khung = sorted(f for f, v in TRANG_THAI_F.items() if v == "khung")
-    print(f"[F26-F41] {len(that)} tinh nang chay that: {', '.join(that) or '(chua co)'}", flush=True)
-    print(f"[F26-F41] {len(khung)} con la khung, tra 503 mart_not_ready: {', '.join(khung)}", flush=True)
+
+    ra("=" * 72)
+    ra(f"  VietCraft AI Analytics  ·  {len(that)}/{len(TRANG_THAI_F)} tinh nang co code that")
+    if khung:
+        ra(f"  Con la khung (tra 503): {', '.join(khung)}")
+
+    # Bản cũ dừng ở đây và in "16 tinh nang chay that". Câu đó ĐÚNG về code nhưng
+    # gây hiểu nhầm: có code không có nghĩa là gọi ra số. Chưa dựng mart thì cả 16
+    # đều trả 503, mà log vẫn khoe "chạy thật". Nên kiểm luôn mart có dữ liệu chưa.
+    ra("-" * 72)
+    try:
+        from pymongo import MongoClient
+
+        from app.core.writer import MART_SCHEMA
+        cl = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=3000)
+        rong = [t for t in MART_SCHEMA if cl[settings.MONGO_DB_SEED][t].estimated_document_count() == 0]
+        cl.close()
+        if rong:
+            ra(f"  [!] {len(rong)}/{len(MART_SCHEMA)} bang mart CON RONG: {', '.join(sorted(rong))}")
+            ra("      Endpoint doc cac bang do se tra 503 mart_not_ready.")
+            ra("      Khac phuc:  python -m app.core.build_marts --all")
+        else:
+            ra(f"  [OK] Ca {len(MART_SCHEMA)} bang mart deu co du lieu. Goi API la ra so.")
+    except Exception as e:
+        ra(f"  [?] Chua kiem duoc mart: {type(e).__name__}. Kiem MONGODB_URI trong app/.env.")
+        ra("      API van khoi dong, nhung se tra 503 neu khong noi duoc MongoDB.")
 
     che_do = che_do_xac_thuc()
+    ra("-" * 72)
     if che_do:
-        print("!" * 72, flush=True)
-        print(f"!!  XAC THUC DANG {che_do}", flush=True)
-        print("!!  Chi dung khi dang viet tinh nang. TAT truoc khi deploy hay demo:", flush=True)
-        print("!!  bo DEV_SHOP_ID / DEV_TRUST_SHOP_HEADER khoi .env va moi truong.", flush=True)
-        print("!" * 72, flush=True)
+        ra(f"  [!!] XAC THUC DANG {che_do}")
+        ra("       Chi dung khi dang viet tinh nang. TAT truoc khi deploy hay demo.")
+    else:
+        ra("  [OK] Xac thuc DANG BAT. Moi endpoint tra 401 neu khong co token.")
+        ra("       Chua co SPEC-04 (JWT) thi chay thu bang: DEV_SHOP_ID=shp_00017")
+    # Không in cổng ở đây: uvicorn tự in dòng "Uvicorn running on ..." với cổng
+    # THẬT, còn settings.PORT chỉ là mặc định và sẽ sai nếu chạy --port khác.
+    ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
+    ra("=" * 72)
+
     yield
 
 

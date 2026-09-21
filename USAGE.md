@@ -1,55 +1,119 @@
 # Hướng dẫn Cài đặt & Chạy — VietCraft AI Analytics
 
-> Từ máy trắng đến 16 endpoint trả dữ liệu thật. **~15 phút.**
+> Từ máy trắng đến 16 endpoint trả dữ liệu thật.
+> **Một lệnh: `python run.py`** — Windows, macOS, Linux như nhau.
 > Mọi lệnh đứng ở thư mục `AI-Analysic/`, **không phải `AI-Analysic/app/`**.
 
 ---
 
-## 1. Cài đặt
+## 1. Chạy bằng một lệnh — Windows, macOS, Linux như nhau
 
 ```bash
-git clone <repo> && cd AI-Analysic
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-
-cp .env.example app/.env        # rồi mở ra điền MONGODB_URI
+git clone <repo>
+cd AI-Analysic
+python run.py
 ```
 
-`.env.example` là **nguồn duy nhất** liệt kê đủ biến môi trường. Bắt buộc chỉ một
-biến: `MONGODB_URI` — xin từ người giữ Atlas.
+Windows dùng `python`, Linux/macOS thường là `python3` — chỉ khác đúng chỗ đó.
+Không cần `source .venv/bin/activate`, không cần nhớ thứ tự bước nào trước bước nào.
 
-> ⚠️ `app/.env` chứa mật khẩu database. **Không commit** (đã nằm trong `.gitignore`).
+`run.py` làm 6 việc, **mỗi việc tự kiểm "đã xong chưa" rồi mới làm**:
+
+| Bước | Làm gì | Chạy lại lần 2 |
+|---|---|---|
+| 1 | Kiểm Python >= 3.10 | tức thì |
+| 2 | Tạo `.venv`, cài `requirements.txt` | bỏ qua |
+| 3 | Tạo `app/.env` từ `.env.example` | bỏ qua |
+| 4 | Dựng 9 bảng mart nếu còn rỗng | bỏ qua |
+| 5 | Chạy 12 test hợp đồng + kiểm 9 mart | ~15 giây |
+| 6 | Bật server, mở được `/docs` | |
+
+**Chạy đi chạy lại bao nhiêu lần cũng được.** Lần đầu ~5 phút (cài thư viện +
+dựng dữ liệu), lần sau ~20 giây vì mọi thứ đã xong đều bị bỏ qua.
+
+### Sẽ dừng ở bước 3 lần đầu — đúng như vậy
+
+Lần đầu chạy, `run.py` tạo `app/.env` rồi **dừng lại** báo:
+
+```
+[LOI]  app/.env chua co MONGODB_URI that
+       Mo file nay ra va dien chuoi ket noi Atlas:
+         .../AI-Analysic/app/.env
+```
+
+Mở file đó, điền `MONGODB_URI` (xin từ người giữ Atlas), rồi chạy `python run.py`
+lại. Nó nhớ những gì đã cài, đi tiếp từ bước 4.
+
+> Script kiểm **giá trị thật**, không chỉ kiểm dòng có tồn tại — bản mẫu cũng có
+> dòng `MONGODB_URI` nhưng giá trị là `<user>:<password>`, điền vậy vẫn hỏng.
+
+### Các kiểu chạy khác
+
+```bash
+python run.py --check         # chỉ kiểm, không cài gì, không bật server
+python run.py --setup-only    # cài xong thì dừng
+python run.py --rebuild       # dựng LẠI toàn bộ mart (GHI lên Atlas dùng chung)
+python run.py --port 8080     # đổi cổng
+python run.py --no-dev-auth   # KHÔNG tắt xác thực (mọi endpoint trả 401)
+```
+
+### Đọc banner lúc khởi động
+
+```
+======================================================================
+  VietCraft AI Analytics  ·  16/16 tinh nang co code that
+----------------------------------------------------------------------
+  [OK] Ca 9 bang mart deu co du lieu. Goi API la ra so.
+----------------------------------------------------------------------
+  [!!] XAC THUC DANG TAT HOAN TOAN — moi request thanh shop `shp_00017`
+       Chi dung khi dang viet tinh nang. TAT truoc khi deploy hay demo.
+======================================================================
+```
+
+Ba dòng, đọc từ trên xuống:
+
+| Dòng | Nói gì |
+|---|---|
+| `16/16 tinh nang co code that` | Có code thật, **không còn khung rỗng**. Nhưng **chưa nói gì về dữ liệu** |
+| `[OK] Ca 9 bang mart deu co du lieu` | Gọi API là ra số. Nếu thấy `[!] ... CON RONG` thì chạy `python run.py` để dựng |
+| `[!!] XAC THUC DANG TAT` | Cửa hậu đang bật — tiện lúc code, **phải tắt trước khi demo** |
+
+> Bản trước chỉ in `16 tinh nang chay that` rồi hết. Câu đó đúng về code nhưng gây
+> hiểu nhầm: **có code không có nghĩa là gọi ra số**. Chưa dựng mart thì cả 16 đều
+> trả `503` mà log vẫn khoe "chạy thật". Nay banner kiểm mart và nói rõ.
 
 ---
 
-## 2. Chạy
+## 2. Cài thủ công — khi cần hiểu từng bước
 
-### 2.1. Dựng dữ liệu cho API đọc — chạy một lần
-
-16 endpoint **chỉ đọc** bảng mart đã tính sẵn. Chưa chạy job thì mọi endpoint trả
-`503 mart_not_ready`.
+`run.py` chỉ gói mấy lệnh này lại:
 
 ```bash
-python -m app.core.build_marts --all --dry-run   # xem trước, không ghi gì
-python -m app.core.build_marts --all             # dựng thật, ~3 phút
-```
+# 1. Môi trường ảo
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 
-> ⚠️ Lệnh thứ hai **GHI lên cụm Atlas M0 512 MB dùng chung cả nhóm**. Cả 9 mart
-> cộng lại ~15 MB nên an toàn. **Người khác chạy rồi thì bạn khỏi chạy lại** —
-> mart dùng chung.
+# 2. Cấu hình — rồi mở app/.env điền MONGODB_URI
+cp .env.example app/.env         # Windows: copy .env.example app\.env
 
-### 2.2. Bật server
+# 3. Dựng dữ liệu cho API đọc (~3 phút, GHI lên Atlas dùng chung ~15MB)
+python -m app.core.build_marts --all --dry-run    # xem trước
+python -m app.core.build_marts --all              # dựng thật
 
-```bash
+# 4. Bật server
 DEV_SHOP_ID=shp_00017 uvicorn app.main:app --reload
+#   Windows PowerShell:  $env:DEV_SHOP_ID="shp_00017"; uvicorn app.main:app --reload
+#   Windows CMD:         set DEV_SHOP_ID=shp_00017 && uvicorn app.main:app --reload
 ```
 
 Mở **http://localhost:8000/docs** → **Try it out** → **Execute**.
 
-### 2.3. Vì sao cần `DEV_SHOP_ID`
+> **Đứng ở `AI-Analysic/`, không phải `AI-Analysic/app/`.** `app.main:app` đọc là
+> *"vào thư mục `app`, lấy `main.py`"* — đã ở trong `app/` rồi thì Python không tìm
+> thấy `app` bên trong `app`, và báo `ModuleNotFoundError: No module named 'app'`.
+
+### Vì sao cần `DEV_SHOP_ID`
 
 API chỉ cho người bán xem dữ liệu shop của chính mình (`BR-174`, `BR-177`), nên
 `shop_id` **luôn lấy từ token**, không nhận từ query. Phần giải mã token là
@@ -57,15 +121,6 @@ API chỉ cho người bán xem dữ liệu shop của chính mình (`BR-174`, `
 
 `DEV_SHOP_ID` là cửa hậu chỉ dành cho lúc phát triển: bỏ kiểm tra quyền, coi mọi
 request là của shop đó. Nhờ nó mà **không ai phải chờ ai**.
-
-Server in cảnh báo to mỗi lần khởi động:
-
-```
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!  XAC THUC DANG TAT HOAN TOAN — moi request thanh shop `shp_00017`
-!!  Chi dung khi dang viet tinh nang. TAT truoc khi deploy hay demo
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-```
 
 > **TẮT trước khi demo.** Bật lên là ai cũng tự xưng shop nào cũng được.
 > SPEC-04 xong thì điền vào `decode_shop_id()` trong `app/api/v1/_template.py`
@@ -263,20 +318,19 @@ trọng số**, không cho 0 điểm — thiếu dữ liệu khác với kém.
 ## 9. Lệnh gọn trong một chỗ
 
 ```bash
-# Cài
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example app/.env        # điền MONGODB_URI
+python run.py              # cai gi thieu + dung du lieu + bat server
+python run.py --check      # chi kiem, khong doi gi
+python run.py --rebuild    # dung lai toan bo mart
+```
 
-# Dựng dữ liệu (một lần, ~3 phút)
-python -m app.core.build_marts --all
+Ba dòng trên đủ dùng 95% thời gian. Khi cần lệnh lẻ:
 
-# Chạy
-DEV_SHOP_ID=shp_00017 uvicorn app.main:app --reload    # -> localhost:8000/docs
+```bash
+source .venv/bin/activate                          # Windows: .venv\Scripts\activate
 
-# Kiểm (không cần MongoDB)
-python tests/test_api_contract.py && python scripts/validate_mart.py --all --offline
-
-# Xem một bảng trên MongoDB
-python scripts/peek.py listing_daily --limit 3
+python -m app.core.build_marts --all               # dựng 9 mart
+python -m app.core.build_marts niche_score         # dựng lại một bảng
+python tests/test_api_contract.py                  # 12/12
+python scripts/validate_mart.py --all --offline    # 9/9
+python scripts/peek.py listing_daily --limit 3     # xem một bảng trên MongoDB
 ```
