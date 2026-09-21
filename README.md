@@ -151,7 +151,22 @@ danh sách ra chỗ khác.
 
 Đứng ở thư mục `AI-Analysic/` (không phải `AI-Analysic/app/`).
 
-### 7.1. Khởi chạy server
+### 7.0. Một lệnh — Windows, macOS, Linux như nhau
+
+```bash
+python run.py
+```
+
+Tự tạo `.venv`, cài thư viện, tạo `app/.env`, dựng 9 bảng mart, chạy test, bật
+server. **Chạy đi chạy lại được** — mỗi bước tự kiểm đã xong chưa. Lần đầu ~5 phút,
+lần sau ~20 giây. Chi tiết: [USAGE.md mục 1](USAGE.md).
+
+```bash
+python run.py --check      # chỉ kiểm, không đổi gì
+python run.py --rebuild    # dựng lại toàn bộ mart
+```
+
+### 7.1. Khởi chạy server thủ công
 
 ```bash
 source .venv/bin/activate
