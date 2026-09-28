@@ -17,6 +17,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import THIEU_DOI_THU, chan_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, mart_not_ready, meta_from_record, ok
 
@@ -42,6 +43,10 @@ def _chuan_hoa(gia_tri, tat_ca):
 
 @router.get("/api/analytics/shop-comparison", tags=["F33 · Nhi"])
 def shop_comparison(shop_id: str = CurrentShop):
+    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "shops")
+    if chan is not None:
+        return chan
+
     coll = db()[MART]
     if coll.estimated_document_count() == 0:
         mart_not_ready(MART)

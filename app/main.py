@@ -68,6 +68,10 @@ async def lifespan(app: FastAPI):
     else:
         ra("  [OK] Xac thuc DANG BAT. Moi endpoint tra 401 neu khong co token.")
         ra("       Chua co SPEC-04 (JWT) thi chay thu bang: DEV_SHOP_ID=shp_00017")
+    if os.getenv("AI_GATEWAY_SECRET", "").strip():
+        ra("  [OK] Gateway BE san: BAT (AI_GATEWAY_SECRET). BE goi kem X-Shop-Id da xac thuc.")
+    else:
+        ra("  [!]  Gateway BE san: TAT. Dat AI_GATEWAY_SECRET giong ben BE de san goi duoc.")
     # Không in cổng ở đây: uvicorn tự in dòng "Uvicorn running on ..." với cổng
     # THẬT, còn settings.PORT chỉ là mặc định và sẽ sai nếu chạy --port khác.
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")

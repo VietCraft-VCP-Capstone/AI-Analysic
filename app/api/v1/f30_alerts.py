@@ -18,6 +18,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import THIEU_LICH_SU, chan_shop_live
 from app.api.v1._mart import cua_so, db, ngay_moi_nhat
 from app.api.v1._template import CurrentShop, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -29,6 +30,10 @@ KY_HAN = {"7d": 7, "30d": 30, "90d": 90, "all": None}
 
 @router.get("/api/notifications/alerts", tags=["F30 · Hiếu"])
 def alerts(shop_id: str = CurrentShop, period: str = "90d"):
+    chan = chan_shop_live(shop_id, THIEU_LICH_SU, "orders")
+    if chan is not None:
+        return chan
+
     if period not in KY_HAN:
         invalid_param("period", " | ".join(KY_HAN))
 

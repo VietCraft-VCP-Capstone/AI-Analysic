@@ -22,6 +22,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import THIEU_DOI_THU, chan_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -32,11 +33,16 @@ TOI_THIEU_DOI_THU = 10      # BR-194
 SO_DAN_DAU = 20             # "nhóm dẫn đầu" = top 20 theo est_sales_90d
 TOI_THIEU_DUNG = 2          # tag phải xuất hiện ít nhất 2 lần trong nhóm dẫn đầu
 NGUONG_VUOT_TROI = 1.3      # nhóm dẫn đầu phải dùng tag này nhiều hơn mặt bằng >= 30%
+TRAN_UOC_LUONG = 25         # trần % traffic dám ước lượng — trên mức này là hứa hão
 NGUONG_DEM_TIN_CAY = 5      # dưới 5/20 lần thì không phân biệt được với may rủi
 
 
 @router.get("/api/analytics/tag-gap", tags=["F34 · Đạt"])
 def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
+    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "products")
+    if chan is not None:
+        return chan
+
     coll = db()[MART]
     if coll.estimated_document_count() == 0:
         mart_not_ready(MART)
@@ -83,7 +89,15 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
         vuot = round(share_dau / share_ca, 2) if share_ca else None
         if vuot is None or vuot < NGUONG_VUOT_TROI:
             continue
-        thap = max(3, round((vuot - 1) * 20))
+        # Dải ước lượng [x, 2x] với x = (vuot - 1) * 20, kẹp trần ở TRAN_UOC_LUONG.
+        #
+        # Bản cũ kẹp trần ĐẦU TRÊN thôi: `high = min(25, low * 2)`. Với vuot > 2,25 thì
+        # low vượt 25 và dải thành NGƯỢC — đo thật trên shp_00017 ra "thấp 53%, cao 25%".
+        # Kẹp cả hai đầu thì dải sụp thành một điểm (25 đến 25), cũng vi phạm BR-196 vì
+        # điều khoản đó đòi một KHOẢNG, không phải một con số đơn.
+        # Nên: kẹp đầu trên trước, rồi đặt đầu dưới bằng nửa đầu trên.
+        cao = min(TRAN_UOC_LUONG, max(6, round((vuot - 1) * 20) * 2))
+        thap = max(3, cao // 2)
         thieu.append({
             "tag_id": tag,
             "name": ten_tag.get(tag, tag),
@@ -92,7 +106,7 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             "category_share_pct": round(share_ca * 100),
             "lift": vuot,
             "estimated_traffic_gain": {
-                "low_pct": thap, "high_pct": min(25, thap * 2),
+                "low_pct": thap, "high_pct": cao,
                 "basis": "correlational",
             },
         })

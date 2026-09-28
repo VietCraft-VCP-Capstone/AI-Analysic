@@ -37,7 +37,9 @@ Hợp đồng đầy đủ: docs/API_CONTRACT.md. File này KHÔNG truy vấn Mo
 chỉ khuôn phản hồi và xác thực.
 """
 
+import hmac
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -261,6 +263,26 @@ def _dev_tin_header() -> bool:
     return os.getenv("DEV_TRUST_SHOP_HEADER", "").strip() == "1"
 
 
+# ---------------------------------------------------------------------------
+# ĐƯỜNG GATEWAY — BE sàn gọi thay người bán (đường chạy thật)
+#
+# FE không bao giờ gọi thẳng service này. Người bán đăng nhập ở BE sàn, BE kiểm
+# JWT + vai trò seller, tự tra shop của người đó, rồi gọi sang đây kèm:
+#     X-Gateway-Secret: <AI_GATEWAY_SECRET>     bí mật dùng chung BE <-> AI
+#     X-Shop-Id:        <shop mà BE đã xác thực>
+# Nhờ vậy service không cần biết khoá ký JWT của sàn — một bí mật, một chỗ đổi.
+#
+# Secret sai thì 401 luôn, KHÔNG rơi xuống các nhánh dev bên dưới: người gửi header
+# gateway mà sai secret là đang thử mạo danh BE, không phải đang chạy thử.
+# ---------------------------------------------------------------------------
+
+_SHOP_ID_HOP_LE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _gateway_secret() -> str:
+    return os.getenv("AI_GATEWAY_SECRET", "").strip()
+
+
 def che_do_xac_thuc() -> str:
     """Mô tả một dòng cho banner khởi động. Trả chuỗi rỗng khi xác thực đang BẬT."""
     if _dev_shop_id():
@@ -287,8 +309,20 @@ def decode_shop_id(token: str) -> str:
 def current_shop_id(
     authorization: Optional[str] = Header(default=None),
     x_debug_shop_id: Optional[str] = Header(default=None),
+    x_gateway_secret: Optional[str] = Header(default=None),
+    x_shop_id: Optional[str] = Header(default=None),
 ) -> str:
     """Dependency trả về shop_id của người đang gọi."""
+    if x_gateway_secret is not None:
+        bi_mat = _gateway_secret()
+        # compare_digest: so theo thời gian hằng số, không lộ độ dài khớp qua độ trễ.
+        if not bi_mat or not hmac.compare_digest(x_gateway_secret.encode(), bi_mat.encode()):
+            raise HTTPException(status_code=401, detail={"error": "unauthorized"})
+        shop = x_shop_id or ""
+        if not _SHOP_ID_HOP_LE.match(shop):
+            invalid_param("X-Shop-Id", "mã shop do gateway gửi, [A-Za-z0-9_-]{1,64}")
+        return shop
+
     dev = _dev_shop_id()
 
     # Header đi TRƯỚC DEV_SHOP_ID: DEV_SHOP_ID là giá trị MẶC ĐỊNH cho đỡ phải gõ,

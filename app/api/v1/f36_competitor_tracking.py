@@ -25,6 +25,7 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter, Body
 from pymongo import ASCENDING
 
+from app.api.v1._live import THIEU_DOI_THU, chan_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, build_meta, invalid_param, mart_not_ready, not_found, ok
 
@@ -58,6 +59,10 @@ def _meta(shop_id, n):
 
 @router.get("/api/analytics/competitor-tracking", tags=["F36 · Đạt"])
 def danh_sach(shop_id: str = CurrentShop):
+    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "shops")
+    if chan is not None:
+        return chan
+
     if db()[MART].estimated_document_count() == 0:
         mart_not_ready(MART)
 

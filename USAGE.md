@@ -133,6 +133,57 @@ request là của shop đó. Nhờ nó mà **không ai phải chờ ai**.
 curl -s -H "X-Debug-Shop-Id: shp_00025" http://localhost:8000/api/analytics/tag-gap
 ```
 
+### Đường CHẠY THẬT: sàn gọi qua cổng BE, không ai cần `DEV_SHOP_ID`
+
+`DEV_SHOP_ID` chỉ để chạy thử một mình. Khi ghép với sàn, **FE không gọi thẳng service
+này** — nó gọi BE, BE mới gọi sang đây:
+
+```
+FE React  ──JWT của sàn──▶  BE Node  ──X-Gateway-Secret + X-Shop-Id──▶  service AI
+           /api/seller/analytics/*                                      /api/analytics/*
+```
+
+BE làm ba việc mà service này không làm được: kiểm JWT của sàn, kiểm vai trò `seller`,
+và tra `shop` của người đăng nhập. Xong mới gửi sang đây kèm hai header:
+
+| Header | Là gì |
+|---|---|
+| `X-Gateway-Secret` | bí mật dùng chung, phải trùng `AI_GATEWAY_SECRET` hai bên |
+| `X-Shop-Id` | shop mà **BE đã xác thực**. Service này tin, vì đã tin secret |
+
+Nhờ vậy service AI **không cần biết khoá ký JWT của sàn** — một bí mật, một chỗ đổi,
+và `SPEC-04` không còn chặn việc ghép với sàn.
+
+**Cấu hình:** sinh một chuỗi rồi đặt vào **cả hai** file:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+# -> dán vào app/.env       (AI_GATEWAY_SECRET=...)  ở repo này
+# -> dán vào BE/.env        (AI_GATEWAY_SECRET=...)  ở repo sàn, GIỐNG HỆT
+```
+
+Banner khởi động nói rõ đang bật hay tắt:
+
+```
+[OK] Gateway BE san: BAT (AI_GATEWAY_SECRET). BE goi kem X-Shop-Id da xac thuc.
+[!]  Gateway BE san: TAT. Dat AI_GATEWAY_SECRET giong ben BE de san goi duoc.
+```
+
+Thử tay:
+
+```bash
+curl -s -H "X-Gateway-Secret: <bi-mat>" -H "X-Shop-Id: shp_00017" \
+  http://localhost:8000/api/analytics/shop/overview
+```
+
+Secret sai thì **`401` ngay**, không rơi xuống nhánh `DEV_SHOP_ID` — gửi header gateway
+mà sai secret là đang mạo danh BE, không phải đang chạy thử.
+
+> Phía sàn: `AI_DEMO_SHOP_ID=shp_00017` trong `BE/.env` bật **chế độ shop mẫu** — mọi
+> người bán xem số liệu của shop mẫu trong dữ liệu mồi, và giao diện hiện nhãn
+> *"Đang xem gian hàng mẫu"*. Bỏ trống biến đó thì BE gửi `shop_id` thật của người bán.
+> Dữ liệu mồi **không bao giờ** được trình bày như số liệu của shop thật.
+
 ---
 
 ## 3. Bốn mã trả về cần phân biệt
@@ -141,7 +192,7 @@ curl -s -H "X-Debug-Shop-Id: shp_00025" http://localhost:8000/api/analytics/tag-
 |---|---|---|
 | `200` + `meta.status: ok` | Có số thật | — |
 | `200` + `meta.status: insufficient_data` | Đã tính, shop này chưa đủ dữ liệu. `data: null`, **không phải 0** | — |
-| `401 unauthorized` | Chưa bật `DEV_SHOP_ID` | thêm biến đó vào lệnh chạy |
+| `401 unauthorized` | Chưa bật `DEV_SHOP_ID`, hoặc `X-Gateway-Secret` sai | thêm biến đó, hoặc đặt `AI_GATEWAY_SECRET` giống bên BE |
 | `503 mart_not_ready` | Bảng mart rỗng | chạy `build_marts --all` (mục 2.1) |
 
 `501 jwt_not_configured` — có gửi token nhưng SPEC-04 chưa xong. Dùng `DEV_SHOP_ID`.

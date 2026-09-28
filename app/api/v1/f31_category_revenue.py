@@ -18,6 +18,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import THIEU_LUOT_XEM, chan_shop_live
 from app.api.v1._mart import cua_so, db, doc_khoang, ngay_moi_nhat, tien
 from app.api.v1._template import CurrentShop, build_meta, insufficient, mart_not_ready, ok
 
@@ -29,6 +30,10 @@ THU_VI = {1: "Thứ Hai", 2: "Thứ Ba", 3: "Thứ Tư", 4: "Thứ Năm",
 
 @router.get("/api/analytics/shop/categories/revenue", tags=["F31 · Hiếu"])
 def category_revenue(shop_id: str = CurrentShop, timeRange: str = "30d"):
+    chan = chan_shop_live(shop_id, THIEU_LUOT_XEM, "orders")
+    if chan is not None:
+        return chan
+
     so_ngay = doc_khoang(timeRange)
     moi_nhat = ngay_moi_nhat({"shop_id": shop_id})
     if moi_nhat is None:

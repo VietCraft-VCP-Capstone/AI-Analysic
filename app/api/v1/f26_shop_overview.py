@@ -23,6 +23,8 @@ from app.api.v1._mart import (
     cua_so, cua_so_truoc, db, doc_khoang, gop, ngay_moi_nhat,
     phan_tram_thay_doi, tien, ty_le_chuyen_doi,
 )
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_overview import overview_live
 from app.api.v1._template import CurrentShop, build_meta, insufficient, mart_not_ready, ok
 
 router = APIRouter()
@@ -34,6 +36,10 @@ SO_TOP_PRODUCT = 5
 @router.get("/api/analytics/shop/overview", tags=["F26 · Hiếu"])
 def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
     so_ngay = doc_khoang(timeRange)
+
+    # Shop thật trên sàn đọc đơn hàng thật, không đọc dữ liệu mồi.
+    if la_shop_live(shop_id):
+        return overview_live(shop_id, so_ngay, timeRange)
 
     # Mốc thời gian lấy từ dữ liệu, không lấy hôm nay — xem ghi chú ở ngay_moi_nhat().
     moi_nhat = ngay_moi_nhat({"shop_id": shop_id})

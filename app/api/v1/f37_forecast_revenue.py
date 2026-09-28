@@ -22,6 +22,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import THIEU_LICH_SU, chan_shop_live
 from app.api.v1._mart import db, tien
 from app.api.v1._template import CurrentShop, forbidden, insufficient, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -44,6 +45,10 @@ def _bang_so_sanh(shop_id: str):
 def forecast_revenue(shop_id: str = CurrentShop,
                      targetId: Optional[str] = None,
                      window: str = "30"):
+    chan = chan_shop_live(shop_id, THIEU_LICH_SU, "orders")
+    if chan is not None:
+        return chan
+
     if str(window) not in CUA_SO:
         invalid_param("window", " | ".join(CUA_SO))
     h = CUA_SO[str(window)]

@@ -16,6 +16,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import THIEU_LUOT_XEM, chan_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, forbidden, insufficient, mart_not_ready, meta_from_record, not_found, ok
 
@@ -26,6 +27,10 @@ MART = "listing_health"
 
 @router.get("/api/analytics/listings/{id}/health", tags=["F29 · Hạt"])
 def health(id: str, shop_id: str = CurrentShop):
+    chan = chan_shop_live(shop_id, THIEU_LUOT_XEM, "product_events")
+    if chan is not None:
+        return chan
+
     l = db()["listings"].find_one({"listing_id": id}, {"_id": 0, "shop_id": 1})
     if l is None:
         not_found("listing")

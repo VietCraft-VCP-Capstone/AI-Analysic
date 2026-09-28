@@ -15,6 +15,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import THIEU_LUOT_XEM, chan_shop_live
 from app.api.v1._mart import cua_so, db, doc_khoang, ngay_moi_nhat, tien, ty_le_chuyen_doi
 from app.api.v1._template import CurrentShop, forbidden, insufficient, mart_not_ready, build_meta, not_found, ok
 
@@ -45,6 +46,10 @@ def _xu_huong(gia_tri):
 
 @router.get("/api/analytics/listings/{id}/timeseries", tags=["F27 · Hiếu"])
 def listing_timeseries(id: str, shop_id: str = CurrentShop, timeRange: str = "30d"):
+    chan = chan_shop_live(shop_id, THIEU_LUOT_XEM, "product_events")
+    if chan is not None:
+        return chan
+
     so_ngay = doc_khoang(timeRange)
 
     l = db()["listings"].find_one({"listing_id": id},
