@@ -18,6 +18,8 @@ from app.api.v1._template import che_do_xac_thuc
 from app.api.v1.analytics_routes import gan_vao as gan_analytics
 from app.api.v1.anomaly import router as anomaly_router
 from app.api.v1.health_score import router as health_score_router
+from app.api.v1.cccd_ocr import router as cccd_ocr_router
+from app.api.v1.portrait_validation import router as portrait_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -157,6 +159,8 @@ TRANG_THAI_F = gan_analytics(app)
 # Include routes
 app.include_router(anomaly_router, prefix=f"{settings.API_V1_STR}/anomaly", tags=["Anomaly Detection"])
 app.include_router(health_score_router, prefix=f"{settings.API_V1_STR}/health_score", tags=["Health Evaluation"])
+app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", tags=["CCCD OCR & Verification"])
+app.include_router(portrait_router, prefix=f"{settings.API_V1_STR}/portrait", tags=["Portrait Validation"])
 
 # ---------------------------------------------------------------------------
 # API-99 — ĐÃ GỠ `forecasting_router`.
