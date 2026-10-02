@@ -1,96 +1,25 @@
-"""
-zscore_service.py — Phát hiện bất thường trên PHẦN DƯ STL bằng thống kê bền vững.
-
-Vì sao không chấm điểm trên chuỗi thô
--------------------------------------
-Chuỗi có mùa vụ mạnh (doanh thu ngày, lượt xem, chỉ số tìm kiếm) đạt đỉnh vào
-Tết, 8/3, 20/10. Tính z-score toàn cục trên chuỗi thô thì TOÀN BỘ mùa cao điểm
-bị gắn nhãn bất thường — đều đặn mỗi năm một lần. Đỉnh mùa vụ lặp lại KHÔNG
-phải bất thường; bất thường là cái còn sót lại sau khi bóc xu hướng và mùa vụ:
-
-    STL(chuỗi) -> trend + seasonal + residual  ->  chấm điểm trên residual
-
-Vì sao không dùng mean và std
------------------------------
-Trung bình và độ lệch chuẩn BỊ CHÍNH CÁC ĐIỂM NGOẠI LAI LÀM NHIỄM: điểm gãy 0%,
-một điểm xấu là hỏng ước lượng. Trung vị và MAD có điểm gãy 50%.
-
-    z_mod = (x - median) / scale          Iglewicz & Hoaglin (1993)
-
-Ba quyết định thiết kế đều dựa trên ĐO ĐẠC, không lấy hằng số sách giáo khoa
------------------------------------------------------------------------------
-1. THANG ĐO LẤY TỪ SAI PHÂN LIÊN TIẾP, không lấy MAD thường.
-   STL hấp thụ bớt nhiễu vào trend/seasonal nên MAD của phần dư ước lượng
-   THẤP hơn nhiễu thật. Đo trên 6 lần chạy mô phỏng với nhiễu thật std = 3,0:
-
-       MAD thường     -> 1,56   (thấp hơn 1,9 lần)
-       MAD sai phân   -> 1,78   (thấp hơn 1,7 lần)
-
-   Sai phân liên tiếp ít bị ảnh hưởng bởi việc làm trơn hơn, nên dùng nó.
-
-2. NGƯỠNG MẶC ĐỊNH LÀ 7.0, KHÔNG PHẢI 3.5.
-   Vì thang đo vẫn bị co, ngưỡng 3,5 của sách giáo khoa (vốn hiệu chuẩn cho
-   phân phối chuẩn) gắn cờ quá nhiều. Đo trên 20 chuỗi sạch, 260 điểm:
-
-       ngưỡng 3,5  -> báo động giả 7,38%  (tệ nhất 11,54%)
-       ngưỡng 5,0  -> báo động giả 2,77%  (tệ nhất  5,38%)
-       ngưỡng 6,0  -> báo động giả 1,15%  (tệ nhất  3,46%)
-       ngưỡng 7,0  -> báo động giả 0,60%  (tệ nhất  1,92%)
-
-   Ngưỡng 7,0 vẫn bắt 20/20 đột biến cỡ +50% biên độ mùa vụ.
-
-3. CẢNH BÁO KHI SỐ CHU KỲ QUÁ ÍT — giới hạn quan trọng nhất.
-   Với period = 52 và 5 năm dữ liệu tuần, mỗi pha mùa vụ chỉ có 5 quan sát.
-   Một điểm chiếm 20% dữ liệu của pha đó, nên LOESS KHÔNG phân biệt được
-   "pha này năm nay cao thật" với "ngoại lai" — nó hút luôn đột biến vào
-   thành phần mùa vụ. Đo được: chèn một đột biến gấp 3 lần nền vào chuỗi
-   5 chu kỳ thì thành phần mùa vụ cùng pha qua các năm ra
-
-       -15,5   -13,8   +92,2   -12,2   -16,7
-
-   và phần dư chỉ còn 1,4 — đột biến TÀNG HÌNH. Hiện tượng này không đổi khi
-   chỉnh seasonal_win (thử 7, 11, 53 đều như nhau): đây là vấn đề không định
-   danh được, không phải tham số sai.
-
-   Vì vậy khi số chu kỳ < MIN_CYCLES_FOR_SEASONAL, module HẠ CỜ TIN CẬY và
-   nói rõ đột biến có thể bị che. Đầu vào đúng của tính năng này là chuỗi
-   NGÀY của listing/shop với period = 7 (18 tháng cho ~78 chu kỳ), không phải
-   chuỗi tuần chỉ số tìm kiếm với period = 52.
-
-Giới hạn còn lại: Tết là lễ di động
------------------------------------
-Tết 2023 rơi 22/01 còn 2024 rơi 10/02, lệch tới 3 tuần. Mô hình chu kỳ dương
-lịch cố định dự đoán đỉnh ở tuần mà năm đó chưa tới Tết, sinh phần dư ÂM rất
-lớn quanh Tết. Khi truyền kèm `dates`, các điểm trong cửa sổ Tết được đánh dấu
-`calendar_sensitive` để nơi tiêu thụ biết phần dư ở đó kém tin cậy.
-"""
-
 import numpy as np
 from typing import Any, Dict, List, Sequence, Tuple, Union
 
 try:
     from app.services.stl_service import STLService
     from app.core.calendar_vn import days_to_tet
-except ImportError:  # chạy trực tiếp file này thay vì import từ gốc repo
+except ImportError:  
     import os
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from app.services.stl_service import STLService
     from app.core.calendar_vn import days_to_tet
 
-
-# 0.6745 là phân vị 75% của phân phối chuẩn tắc; chia cho nó đưa MAD về cùng
-# thang với độ lệch chuẩn. Sai phân của hai điểm độc lập có phương sai gấp đôi
-# nên còn chia thêm căn 2.
 MAD_TO_SIGMA = 0.6745
 DIFF_VARIANCE_FACTOR = np.sqrt(2.0)
 MEAN_AD_TO_SIGMA = 1.253314
 
-DEFAULT_THRESHOLD = 7.0          # hiệu chuẩn bằng đo đạc, xem docstring mục 2
-DEFAULT_PERIOD = 7               # chuỗi ngày, chu kỳ tuần — đầu vào đúng của F30
-MAX_ANOMALY_RATE = 0.05          # vượt ngưỡng này nghĩa là giả định bị vi phạm
-MIN_CYCLES_FOR_SEASONAL = 12     # dưới mức này, mùa vụ có thể nuốt mất đột biến
-TET_WINDOW = (-70, 35)           # ngày quanh mùng 1 Tết mà chu kỳ cố định lệch pha
+DEFAULT_THRESHOLD = 7.0          
+DEFAULT_PERIOD = 7               
+MAX_ANOMALY_RATE = 0.05          
+MIN_CYCLES_FOR_SEASONAL = 12     
+TET_WINDOW = (-70, 35)           
 
 
 class ZScoreService:

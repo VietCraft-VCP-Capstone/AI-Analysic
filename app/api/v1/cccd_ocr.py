@@ -1,14 +1,3 @@
-"""
-cccd_ocr.py — API endpoint quét ảnh CCCD bằng EasyOCR + xác thực giả/thật.
-
-Endpoint:
-  POST /api/v1/ocr/cccd
-    - Nhận file ảnh (multipart/form-data)
-    - Trả về OCR data + kết quả xác thực
-
-Được gọi từ Backend (Express) qua HTTP proxy.
-"""
-
 import logging
 from typing import Optional
 
@@ -36,16 +25,7 @@ async def ocr_cccd(
     file: UploadFile = File(..., description="Ảnh CCCD (JPG/PNG/WebP, tối đa 10MB)"),
     side: str = Form("front", description="Mặt của CCCD: 'front' hoặc 'back'"),
 ):
-    """Quét ảnh CCCD bằng EasyOCR, trích xuất thông tin và xác thực giả/thật.
-
-    **Mặt trước** (`side=front`): trả về số CCCD, họ tên, ngày sinh, giới tính,
-    quốc tịch, quê quán, nơi thường trú, ngày hết hạn.
-
-    **Mặt sau** (`side=back`): trả về đặc điểm nhận dạng, ngày cấp, nơi cấp.
-
-    **Xác thực**: kiểm tra chất lượng ảnh, bố cục CCCD, format số CCCD,
-    phát hiện ảnh chụp lại từ màn hình.
-    """
+ 
     # Validate side parameter
     if side not in ("front", "back"):
         raise HTTPException(

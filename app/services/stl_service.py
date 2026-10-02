@@ -1,11 +1,3 @@
-"""
-stl_service.py — Phân rã chuỗi thời gian sử dụng thuật toán STL (Loess Decomposition).
-Ưu điểm vượt trội so với seasonal_decompose:
-- Xử lý mượt mà tính phi tuyến tính và biến đổi mùa vụ theo thời gian.
-- Chống nhiễu và ngoại lai mạnh mẽ (robust=True).
-- Cung cấp fallback an toàn cho chuỗi ngắn hoặc dữ liệu suy biến.
-"""
-
 import pandas as pd
 import numpy as np
 from statsmodels.tsa.seasonal import STL
@@ -22,10 +14,7 @@ class STLService:
         if n == 0:
             return {"trend": [], "seasonal": [], "residual": []}
 
-        # Đảm bảo dữ liệu không chứa NaN/Inf
         clean_data = [float(x) if (x is not None and not np.isnan(x)) else 0.0 for x in data]
-
-        # Trường hợp dữ liệu quá ngắn (nhỏ hơn 2 chu kỳ)
         if n < max(4, period * 2):
             window_size = max(2, min(n, period // 2))
             trend = list(pd.Series(clean_data).rolling(window=window_size, min_periods=1, center=True).mean().values)
@@ -39,7 +28,6 @@ class STLService:
 
         try:
             series = pd.Series(clean_data)
-            # STL seasonal window cần là số lẻ >= 3
             seasonal_win = period + 1 if (period % 2 == 0) else max(7, period)
             
             stl_model = STL(series, period=period, seasonal=seasonal_win, robust=robust)
@@ -51,7 +39,6 @@ class STLService:
                 "residual": [round(float(v), 4) for v in res.resid.values]
             }
         except Exception as e:
-            # Fallback nếu Loess hội tụ thất bại
             mean_val = float(np.mean(clean_data))
             return {
                 "trend": [round(mean_val, 4)] * n,
@@ -63,7 +50,6 @@ class STLService:
 if __name__ == "__main__":
     print("=== TỰ KIỂM TRA MODULE STL_SERVICE.PY (LOESS) ===")
     np.random.seed(42)
-    # Giả lập chuỗi 100 điểm có trend tăng dần + chu kỳ tuần 7 ngày + nhiễu
     t = np.linspace(0, 10, 100)
     trend_true = 2.0 * t + 10.0
     season_true = 5.0 * np.sin(2 * np.pi * np.arange(100) / 7)
@@ -75,7 +61,6 @@ if __name__ == "__main__":
     assert len(res["seasonal"]) == 100
     assert len(res["residual"]) == 100
 
-    # Kiểm tra tổng 3 thành phần bằng giá trị gốc
     reconstructed = np.array(res["trend"]) + np.array(res["seasonal"]) + np.array(res["residual"])
     max_diff = np.max(np.abs(reconstructed - np.array(data)))
     print(f"✓ Độ lệch tái cấu trúc (Trend + Seasonal + Resid vs Data): {max_diff:.6f}")
