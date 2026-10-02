@@ -1,16 +1,7 @@
-"""
-config.py — Cấu hình trung tâm duy nhất (Single Source of Truth) cho toàn bộ VietCraft AI.
-Quản lý:
-  1. Biến môi trường (.env), kết nối cơ sở dữ liệu MongoDB/PostgreSQL, Port, API keys.
-  2. Tham số nghiệp vụ cào dữ liệu Google Trends & Printify.
-  3. Tự động nạp danh sách từ khóa hạt giống từ app/seed/seed_keywords.json.
-"""
-
 import os
 import json
 from pathlib import Path
 
-# Nạp file .env từ thư mục app/ hoặc root
 try:
     from dotenv import load_dotenv
     app_env_path = Path(__file__).resolve().parent / ".env"
@@ -23,9 +14,6 @@ except ImportError:
     pass
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 1. HẠ TẦNG HỆ THỐNG & API SETTINGS
-# ═══════════════════════════════════════════════════════════════════════════
 class Settings:
     PROJECT_NAME: str = "VietCraft AI Analytics Worker"
     VERSION: str = "1.0.0"
@@ -59,10 +47,7 @@ settings = Settings()
 MONGODB_URI = settings.MONGO_URI
 MONGODB_DB = settings.MONGO_DB_DATA
 
-
-# ═══════════════════════════════════════════════════════════════════════════
 # 2. THAM SỐ NGHIỆP VỤ CÀO DỮ LIỆU GOOGLE TRENDS & PRINTIFY
-# ═══════════════════════════════════════════════════════════════════════════
 GEO = "VN"          # Vietnam. Dùng "" cho toàn cầu
 LANGUAGE = "vi"
 
@@ -101,10 +86,7 @@ TIMEFRAME_WEEKLY = "today 5-y"   # ~260 tuần / 5 năm (cho STL Seasonality)
 # Từ khóa mốc cố định: Có lượng tìm kiếm ổn định quanh năm (ít biến động mùa vụ)
 ANCHOR = "quà sinh nhật"
 
-
-# ═══════════════════════════════════════════════════════════════════════════
 # 3. NẠP TỪ KHÓA HẠT GIỐNG TỪ FILE JSON RIÊNG BIỆT (DATA-DRIVEN)
-# ═══════════════════════════════════════════════════════════════════════════
 def load_seed_keywords():
     json_path = Path(__file__).resolve().parent / "data" / "seed_keywords.json"
     if json_path.exists():
