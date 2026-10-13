@@ -287,8 +287,15 @@ def decode_shop_id(token: str) -> str:
 def current_shop_id(
     authorization: Optional[str] = Header(default=None),
     x_debug_shop_id: Optional[str] = Header(default=None),
+    x_gateway_secret: Optional[str] = Header(default=None),
+    x_shop_id: Optional[str] = Header(default=None),
 ) -> str:
     """Dependency trả về shop_id của người đang gọi."""
+    # 0. Xác thực giữa Backend và AI Service qua Gateway Secret
+    gateway_secret = os.getenv("AI_GATEWAY_SECRET", "").strip()
+    if gateway_secret and x_gateway_secret == gateway_secret and x_shop_id:
+        return x_shop_id
+
     dev = _dev_shop_id()
 
     # Header đi TRƯỚC DEV_SHOP_ID: DEV_SHOP_ID là giá trị MẶC ĐỊNH cho đỡ phải gõ,
