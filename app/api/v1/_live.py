@@ -160,6 +160,22 @@ def doan_loai_phoi(title: str, tags: Optional[List[str]] = None) -> Dict[str, An
 
 
 # ---------------------------------------------------------------------------
+# BỘ LỌC DỮ LIỆU GIẢ (Seed)
+#
+# Mọi dữ liệu phân tích để lại trong DB, chỉ lọc khi đọc. Bộ lọc này đặt ở một
+# chỗ duy nhất và dùng chung cho mọi endpoint đọc dữ liệu sàn thật.
+#
+# "Dữ liệu giả" = bản ghi do `link-seed-shop-to-seller.js` bơm vào hoặc do script
+# test tạo ra. Nhận biết bằng `seed_ref` (sản phẩm) hoặc `is_simulated` (đơn).
+# ---------------------------------------------------------------------------
+
+LOC_SP_THAT = {"seed_ref": {"$exists": False}}
+"""Bộ lọc sản phẩm thật: giữ lại chỉ sản phẩm KHÔNG có seed_ref."""
+
+LOC_DON_THAT = {"seed_ref": {"$exists": False}, "is_simulated": {"$ne": True}}
+"""Bộ lọc đơn thật: giữ lại chỉ đơn vừa KHÔNG có seed_ref VỪA không phải is_simulated."""
+
+# ---------------------------------------------------------------------------
 # ĐỌC SẢN PHẨM THẬT CỦA MỘT SHOP
 # ---------------------------------------------------------------------------
 
@@ -178,6 +194,8 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
 
     Giá đại diện dùng TRUNG VỊ các biến thể đang bán, không dùng trung bình: một biến
     thể cỡ lớn đặt giá cao sẽ kéo trung bình lệch khỏi mức người mua thường thấy.
+
+    CHỈ đọc sản phẩm thật (qua bộ lọc LOC_SP_THAT), bỏ sản phẩm seed.
     """
     from bson import ObjectId  # noqa: PLC0415
 
@@ -188,7 +206,7 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
         return []
 
     products = list(live["products"].find(
-        {"shop_id": oid},
+        {**{"shop_id": oid}, **LOC_SP_THAT},
         {"title": 1, "tags": 1, "categories": 1, "images": 1, "description": 1,
          "average_rating": 1, "rating_count": 1, "created_at": 1, "listing_status": 1,
          "status": 1, "is_hidden": 1},
@@ -241,13 +259,15 @@ def gia_cung_danh_muc_live(danh_muc: List[str], tru_shop: Optional[str] = None,
 
     Dùng khi sản phẩm không ánh xạ được sang loại phôi POD nào, ví dụ đồ gốm thủ công:
     lúc đó mặt bằng đúng là các sản phẩm thật cùng ngành trên sàn, không phải catalog POD.
+
+    CHỈ đọc sản phẩm thật (qua bộ lọc LOC_SP_THAT), bỏ sản phẩm seed.
     """
     from bson import ObjectId  # noqa: PLC0415
 
     if not danh_muc:
         return []
     live = db_live()
-    loc: Dict[str, Any] = {"categories": {"$in": danh_muc}}
+    loc: Dict[str, Any] = {**{"categories": {"$in": danh_muc}}, **LOC_SP_THAT}
     if tru_shop:
         try:
             loc["shop_id"] = {"$ne": ObjectId(tru_shop)}
@@ -265,59 +285,6 @@ def gia_cung_danh_muc_live(danh_muc: List[str], tru_shop: Optional[str] = None,
         if g and g > 0:
             gia.append(int(g))
     return sorted(gia)
-
-
-# ---------------------------------------------------------------------------
-# LÝ DO "CHƯA ĐỦ DỮ LIỆU" CHO SHOP THẬT
-#
-# Một câu chung như "chưa đủ dữ liệu" không giúp gì. Người bán cần biết THIẾU CÁI GÌ và
-# ai đang làm nó, nếu không họ sẽ nghĩ tính năng bị hỏng.
-# ---------------------------------------------------------------------------
-
-THIEU_LUOT_XEM = (
-    "Cần lượt xem sản phẩm để tính, mà sàn chưa bật theo dõi hành vi người mua "
-    "(bảng product_events chưa có). Có đơn hàng nhưng không có lượt xem thì không suy ra "
-    "được tỉ lệ chuyển đổi."
-)
-
-THIEU_LICH_SU = (
-    "Cần lịch sử dài hơn. Sàn mới có đơn từ 21/08/2026, chưa đủ chu kỳ để mô hình học "
-    "được nhịp bán bình thường của shop."
-)
-
-THIEU_DOI_THU = (
-    "Cần nhiều shop cùng ngành để so. Sàn hiện có 9 shop và chỉ 3 shop đã phát sinh đơn, "
-    "chưa dựng được bảng xếp hạng cạnh tranh có nghĩa."
-)
-
-
-def chua_ho_tro_live(ly_do: str) -> str:
-    """Ghép lý do kỹ thuật với câu trấn an, để người bán biết đây không phải lỗi."""
-    return f"{ly_do} Số liệu sẽ tự hiện khi phần dữ liệu đó có trên sàn."
-
-
-def chan_shop_live(shop_id: str, ly_do: str, collection: str = "orders"):
-    """Trả phản hồi `insufficient_data` khi endpoint chưa có đường dữ liệu sàn thật.
-
-    Trả `None` nếu là shop dữ liệu mồi, để endpoint chạy tiếp như cũ.
-
-    Vì sao cần: mart đánh khoá bằng mã shop dữ liệu mồi, nên shop thật gửi vào sẽ không
-    khớp dòng nào và endpoint sẽ trả một câu như "shop chưa có listing nào" — đúng về
-    mặt kỹ thuật nhưng người bán đọc sẽ tưởng hàng của mình biến mất. Chặn ở đây để nói
-    đúng nguyên nhân: tính năng này chưa nối được với dữ liệu thật của sàn.
-    """
-    if not la_shop_live(shop_id):
-        return None
-
-    from app.api.v1._template import build_meta, insufficient  # noqa: PLC0415
-
-    return insufficient(
-        chua_ho_tro_live(ly_do),
-        build_meta(model_version="live-guard-1.0", scope="shop", scope_id=shop_id,
-                   database=settings.MONGO_DB_LIVE, collection=collection,
-                   mode="live", attributed_to_live_shop=True, sample_size=0,
-                   confidence="low"),
-    )
 
 
 if __name__ == "__main__":

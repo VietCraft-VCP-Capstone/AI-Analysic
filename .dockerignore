@@ -1,0 +1,31 @@
+# .dockerignore — những thứ KHÔNG được vào image Docker.
+#
+# Phát hiện khi đóng gói Track B2 (§11): Dockerfile dùng `COPY . .` mà repo
+# chưa có .dockerignore, nên lúc build nó COPY LUÔN app/.env — tức là
+# MONGODB_URI thật (Atlas dùng chung cả nhóm) và AI_GATEWAY_SECRET bị ĐÓNG
+# CỨNG vào layer ảnh. Ảnh tưởng vô hại này mà đẩy lên registry/chia sẻ là lộ
+# secret thật ngay. Image tự pip install requirements.txt riêng nên cũng
+# không cần copy .venv của máy dev (vừa nặng vừa có thể sai kiến trúc/OS).
+
+# Secret thật — KHÔNG đưa vào image. Biến môi trường thật truyền lúc chạy
+# container qua `env_file`/`-e`, không phải lúc build.
+.env
+**/.env
+.env.local
+**/.env.local
+
+# Môi trường ảo & cache biên dịch của máy dev
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Lịch sử git, CI cục bộ — không cần trong ảnh chạy
+.git/
+.github/
+
+# Rác tạm / log cục bộ
+preflight_out.txt

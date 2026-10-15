@@ -12,6 +12,8 @@ pymongo>=4.0.0
 dnspython>=2.4.0
 requests>=2.31.0
 python-dotenv>=1.0.0
+apscheduler>=3.10.0    # F29 §5: quét mỗi phút + job đêm (app/core/f29_scheduler.py)
 
 # --- chỉ dùng để chạy test, không cần lúc chạy thật ---
 httpx2>=0.1.0          # TestClient của FastAPI cần; tests/test_api_contract.py
+pytest>=7.4.0          # tests/test_f29_engine.py

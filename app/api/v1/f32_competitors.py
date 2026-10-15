@@ -12,7 +12,7 @@ Chạy cho hai loại shop:
   shop dữ liệu mồi  cả hai phía đều từ mart                     -> mode seed_demo
   shop thật         SẢN PHẨM VÀ GIÁ CỦA BẠN là thật trên sàn,
                     nhóm đối thủ lấy từ catalog tham chiếu vì
-                    sàn chỉ có 9 shop, chưa xếp hạng được       -> mode derived
+                    sàn chưa đủ shop để xếp hạng         -> mode derived
 """
 
 import sys
@@ -138,8 +138,8 @@ def _competitors_live(shop_id: str, categoryId: Optional[str]):
         },
         "note": (
             "SẢN PHẨM VÀ GIÁ CỦA BẠN là dữ liệu thật trên sàn. NHÓM ĐỐI THỦ lấy từ catalog "
-            "tham chiếu của ngành in theo yêu cầu, không phải shop thật trên VietCraft: sàn "
-            "hiện có 9 shop và 3 shop đã phát sinh đơn, chưa đủ để xếp hạng cạnh tranh. "
+            "tham chiếu của ngành in theo yêu cầu, không phải shop thật trên VietCraft, vì sàn "
+            "chưa có đủ shop cùng ngành có đơn để xếp hạng cạnh tranh. "
             "Cột doanh số ước lượng của bạn để 0 vì chưa nối được đơn hàng thật sang bảng này. "
             "Hạng trong danh mục ở bảng của bạn là PHÂN VỊ GIÁ, không phải hạng doanh số."
         ),

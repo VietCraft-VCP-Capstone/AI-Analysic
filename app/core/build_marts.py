@@ -36,10 +36,13 @@ from app.core.writer import MART_SCHEMA, finish_model_run, save_model_output, st
 
 VERSION = "marts-1.0"
 
-# Hệ số co ngót đánh giá. n đánh giá của một listing được kéo về trung bình danh
-# mục với trọng số K. Không co thì một listing 1 đánh giá 5 sao xếp trên listing
-# 200 đánh giá 4,8 sao — vô lý và là lỗi kinh điển của bảng xếp hạng.
-K_CO_NGOT = 10
+# Hệ số co ngót Bayes để chấm đánh giá. n đánh giá của một listing được kéo về
+# trung bình danh mục với trọng số m. Không co thì một listing 1 đánh giá 5 sao xếp
+# trên listing 200 đánh giá 4,8 sao — vô lý và là lỗi kinh điển của bảng xếp hạng.
+# Công thức: (Σ★ + m·C)/(n + m), trong đó C = trung bình danh mục.
+M_BAYES = 50  # Chọn từ F29 bước 1 — ổn định nhất trong 10/20/50 khi chia đôi
+# review Olist theo thời gian (Pearson 0,818 vs 0,401/0,568). Xem
+# docs/BAYES_M_SELECTION.md.
 
 # Chỉ số Google Trends dưới mức này thì % tăng không đáng tin (thang 0-100).
 NEN_TOI_THIEU = 5.0
@@ -124,7 +127,7 @@ def build_mart_competitor(db) -> List[Dict[str, Any]]:
 
         if dg and dg["n"]:
             moc = sao_danh_muc.get(cat, dg["sao"])
-            rating = round((dg["sao"] * dg["n"] + moc * K_CO_NGOT) / (dg["n"] + K_CO_NGOT), 2)
+            rating = round((dg["sao"] * dg["n"] + moc * M_BAYES) / (dg["n"] + M_BAYES), 2)
             n_rv = dg["n"]
         else:
             # Chưa có đánh giá -> null, KHÔNG mặc định 4.0 sao (hợp đồng F29).
@@ -469,16 +472,48 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
     if not chat_luong:
         return []
 
-    danh_gia = {r["_id"]: r for r in db["reviews"].aggregate([
+    # Đánh giá với co ngót Bayes: (Σ★ + m·C)/(n + m)
+    # Trước tiên tính C = trung bình toàn sàn (category-level)
+    danh_gia_raw = {r["_id"]: r for r in db["reviews"].aggregate([
         {"$group": {"_id": "$listing_id", "n": {"$sum": 1},
-                    "sao": {"$avg": {"$toDouble": "$star"}}}}])}
+                    "sao": {"$avg": {"$toDouble": "$star"}},
+                    "tong_sao": {"$sum": {"$toDouble": "$star"}},
+                    "category_id": {"$first": "$category_id"}}}])}
+
+    # Tính C = trung bình danh mục cho co ngót Bayes
+    c_theo_danhmuc = defaultdict(list)
+    for lid, dg in danh_gia_raw.items():
+        if dg.get("sao"):
+            c_theo_danhmuc[dg.get("category_id")].append(dg["sao"])
+    c_danh_muc = {cat: sum(v) / len(v) for cat, v in c_theo_danhmuc.items() if v}
+    c_toan_san = sum(c_theo_danhmuc.values(), [])
+    c_toan_san = sum(c_toan_san) / len(c_toan_san) if c_toan_san else 3.0
+
+    # Áp co ngót Bayes
+    danh_gia = {}
+    for lid, dg in danh_gia_raw.items():
+        if dg.get("n") and dg.get("tong_sao") is not None:
+            cat = dg.get("category_id")
+            c = c_danh_muc.get(cat, c_toan_san)
+            sao_co = (dg["tong_sao"] + M_BAYES * c) / (dg["n"] + M_BAYES)
+            danh_gia[lid] = {"n": dg["n"], "sao": dg["sao"], "sao_co": sao_co}
+        else:
+            danh_gia[lid] = dg
+
+    # Tồn kho: tính số biến thể còn hàng và tổng số biến thể
+    ton_chi_tiet = {r["_id"]: r for r in db["listing_variants"].aggregate([
+        {"$group": {"_id": "$listing_id",
+                    "tong": {"$sum": {"$toDouble": "$stock_qty"}},
+                    "con_hang": {"$sum": {"$cond": [{"$gt": [{"$toDouble": "$stock_qty"}, 0]}, 1, 0]}},
+                    "tong_bien_the": {"$sum": 1}}}])}
     ton = {r["_id"]: r["tong"] for r in db["listing_variants"].aggregate([
         {"$group": {"_id": "$listing_id", "tong": {"$sum": {"$toDouble": "$stock_qty"}}}}])}
 
     hom_nay_d = datetime.strptime(den, "%Y-%m-%d").date()
     ban_ghi = []
     for l in db["listings"].find({}, {"_id": 0, "listing_id": 1, "images": 1, "description": 1,
-                                      "created_at": 1, "title": 1, "category_id": 1}):
+                                      "created_at": 1, "updated_at": 1, "content_changed_at": 1,
+                                      "title": 1, "category_id": 1, "content_hash": 1}):
         lid = l["listing_id"]
         cl = chat_luong.get(lid)
         if not cl:
@@ -490,21 +525,46 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
 
         dg = danh_gia.get(lid)
         # Chưa có đánh giá -> null, KHÔNG mặc định 4.0 sao (hợp đồng F29).
-        d_sao = round((dg["sao"] - 1) / 4 * 100, 1) if dg else None
-        sao_co = round(dg["sao"], 2) if dg else None
+        # Sử dụng sao_co (co ngót Bayes) để tính điểm
+        if dg and dg.get("n"):
+            sao_co_val = dg.get("sao_co", dg.get("sao", 0))
+            d_sao = round((sao_co_val - 1) / 4 * 100, 1) if sao_co_val else None
+            sao_co = round(sao_co_val, 2)
+        else:
+            d_sao = None
+            sao_co = None
 
+        # Nội dung: số ảnh, độ dài mô tả, số tag, có biến thể size/màu
         n_anh = len([x for x in str(l.get("images") or "").split(";") if x.strip()])
         dai_mo_ta = len(str(l.get("description") or ""))
+
+        # Kiểm tra biến thể có size/màu không
+        bien_the_detail = db["listing_variants"].find_one({"listing_id": lid}, {"size": 1, "color": 1})
+        co_kich_thuc = bien_the_detail and bool(bien_the_detail.get("size"))
+        co_mau = bien_the_detail and bool(bien_the_detail.get("color"))
+        co_bien_the_complete = (co_kich_thuc or co_mau) or 1  # Nếu không có, được điểm đầy đủ vì không áp
+
         d_nd = round(min(100.0, n_anh / 5 * 60 + min(dai_mo_ta, 400) / 400 * 40), 1)
 
-        tk = ton.get(lid, 0)
-        d_ton = round(min(100.0, tk / 50 * 100), 1)
+        # Tồn kho: tính theo % biến thể còn hàng
+        ton_info = ton_chi_tiet.get(lid, {})
+        con_hang = ton_info.get("con_hang", 0)
+        tong_bien_the = ton_info.get("tong_bien_the", 1)
+        ty_le_con_hang = (con_hang / tong_bien_the * 100) if tong_bien_the else 0
+        d_ton = round(min(100.0, ty_le_con_hang), 1)
 
+        # Độ mới: tính từ lần sửa nội dung gần nhất (content_changed_at), không dùng created_at
+        # Nếu không có content_changed_at, dùng updated_at; nếu vẫn không có thì dùng created_at
+        thoi_gian_sua = l.get("content_changed_at") or l.get("updated_at") or l.get("created_at")
         try:
-            tuoi = (hom_nay_d - datetime.strptime(str(l["created_at"])[:10], "%Y-%m-%d").date()).days
+            if thoi_gian_sua:
+                tuoi = (hom_nay_d - datetime.strptime(str(thoi_gian_sua)[:10], "%Y-%m-%d").date()).days
+            else:
+                tuoi = None
         except Exception:
             tuoi = None
-        d_moi = None if tuoi is None else round(max(0.0, 100 - max(0, tuoi) / 365 * 100), 1)
+        # Giữ 100 điểm trong 90 ngày, rồi giảm tuyến tính về 0 ở ngày 365
+        d_moi = None if tuoi is None else round(max(0.0, 100 - max(0, tuoi - 90) / (365 - 90) * 100), 1) if tuoi > 90 else 100.0
 
         truc = {"conversion": d_cr, "rating": d_sao, "content": d_nd,
                 "stock": d_ton, "freshness": d_moi}
@@ -526,26 +586,68 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
             "category_avg_cr": cl.get("category_avg_pct"),
             "cr_index": ci,
             "rating_shrunk": sao_co,
-            "n_reviews": dg["n"] if dg else 0,
+            "n_reviews": dg.get("n", 0) if dg else 0,
             "breakdown": {k: {"score": truc[k], "weight": TRONG_SO[k],
                               "counted": truc[k] is not None} for k in TRONG_SO},
             "axes_missing": sorted(k for k in truc if truc[k] is None),
-            "todo": _viec_can_lam(truc, n_anh, tk),
+            "todo": _viec_can_lam(db, lid, truc, l.get("category_id"), n_anh, ty_le_con_hang, tong_bien_the),
         })
     return ban_ghi
 
 
-def _viec_can_lam(truc, n_anh, ton_kho):
+def _viec_can_lam(db, lid, truc, danh_muc_id, n_anh, con_hang_ty_le, tong_bien_the):
+    """Gợi ý việc cần sửa dựa trên mốc so sánh thực tế (trung vị danh mục).
+
+    Mốc = max(trung vị danh mục, mức sàn). Mức sàn được đặt trong config hoặc mặc định.
+    """
+    from statistics import median
+
     viec = []
+
+    # Mục tiêu nội dung: số ảnh
     if truc["content"] is not None and truc["content"] < 70:
-        viec.append({"priority": 1, "action": f"Thêm ảnh: hiện có {n_anh}, nên từ 5 ảnh",
-                     "expected_gain": "+8 điểm"})
+        # Tính trung vị số ảnh trong danh mục
+        listings_danh_muc = list(db["listings"].find(
+            {"category_id": danh_muc_id},
+            {"images": 1}
+        ))
+        n_anh_list = [len([x for x in str(l.get("images") or "").split(";") if x.strip()])
+                      for l in listings_danh_muc]
+        muc_san_anh = 5
+        trung_vi_anh = median(n_anh_list) if n_anh_list else muc_san_anh
+        moc_anh = max(int(trung_vi_anh), muc_san_anh)
+
+        if n_anh < moc_anh:
+            diem_hien_tai = truc["content"]
+            # Tính điểm nếu kéo tới mốc
+            diem_sau_sua = round(min(100.0, n_anh / 5 * 60 + 400 / 400 * 40), 1) if moc_anh >= 5 else diem_hien_tai
+            tang_diem = round(diem_sau_sua - diem_hien_tai, 1) if diem_sau_sua > diem_hien_tai else 0
+
+            viec.append({
+                "priority": 1,
+                "action": f"Thêm ảnh: hiện có {n_anh}, nên đạt {moc_anh} ảnh (mốc danh mục)",
+                "expected_gain": f"+{tang_diem} điểm",
+                "field": "images"
+            })
+
+    # Mục tiêu tồn kho: % biến thể còn hàng
     if truc["stock"] is not None and truc["stock"] < 50:
-        viec.append({"priority": 2, "action": f"Bổ sung tồn kho: còn {int(ton_kho)} sản phẩm",
-                     "expected_gain": "+6 điểm"})
-    if truc["conversion"] is not None and truc["conversion"] < 40:
-        viec.append({"priority": 1, "action": "Tỉ lệ chuyển đổi dưới mặt bằng danh mục — xem F28 để biết hỏng ở khâu nào",
-                     "expected_gain": "+10 điểm"})
+        moc_ton = 80  # % biến thể còn hàng
+        if con_hang_ty_le < moc_ton:
+            diem_hien_tai = truc["stock"]
+            diem_sau_sua = round(min(100.0, moc_ton), 1)
+            tang_diem = round(diem_sau_sua - diem_hien_tai, 1)
+
+            viec.append({
+                "priority": 2,
+                "action": f"Bổ sung tồn kho: {int(con_hang_ty_le)}% biến thể còn hàng, nên {moc_ton}%",
+                "expected_gain": f"+{tang_diem} điểm",
+                "field": "stock_qty"
+            })
+
+    # Chuyển đổi chỉ hiển thị để tham khảo (seller không sửa trực tiếp được),
+    # nên KHÔNG sinh việc cần sửa với gain giả — chỉ trỏ sang F28 để xem khâu nào hỏng.
+
     return sorted(viec, key=lambda v: v["priority"])
 
 

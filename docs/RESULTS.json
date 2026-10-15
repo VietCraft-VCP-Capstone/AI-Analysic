@@ -2318,9 +2318,9 @@
       "note": "Chạy trên dữ liệu mồi (1.202.687 view → 34.710 đơn). Live product_events = 0."
     },
     "F29": {
-      "status": "partial",
-      "name": "Health score shop",
-      "note": "API sửa 20/09: trọng số cộng đúng 100, ratings rỗng trả insufficient_data. Chưa nối UI, chưa đo health_pearson."
+      "status": "e2e_ok",
+      "name": "Điểm sức khoẻ listing (health-1.0)",
+      "note": "Scheduler chấm 5 trục từ DB live (lọc dữ liệu thật) -> ghi vietcraft.listing_health_scores -> BE đọc -> FE trang Insights. Một công thức duy nhất app/core/f29 dùng chung cho live và kiểm định Olist (health_pearson=0,0305, xem docs/F29C_RESULTS.md)."
     },
     "F30": {
       "status": "ok",
@@ -2401,16 +2401,32 @@
       "detail": "tet_aware_stl 0,660 vs seasonal_naive 1,342; 8 origins, horizon 12 tuần"
     },
     "health_pearson": {
-      "value": null,
+      "value": 0.0305,
       "threshold": 0.65,
       "passed": false,
-      "reason": "Chưa đo. health_score.py vừa sửa xong 20/09 nên giờ mới đo được."
+      "source": "olist_real",
+      "p_value": 0.49681418562843244,
+      "n": 500,
+      "spearman": -0.0823,
+      "spearman_p_value": 0.0659092922563482,
+      "scope": "top 500 sản phẩm Olist bán chạy nhất trước T=2018-01-01, điểm tính bằng chính engine health-1.0 (app/core/f29/scoring.py) trên 2/5 trục (đánh giá + nội dung ảnh/mô tả; Olist không có tag, event, tồn kho, độ mới), so với doanh số sau T (cắt 2018-08-31), chuẩn hoá theo cửa sổ 7,95 tháng",
+      "explanation": "Chưa đạt 0,65 vì: (1) trên Olist chỉ đo được 2/5 trục (đánh giá, nội dung) — thiếu trục chuyển đổi (nặng nhất, 0,30), tồn kho, độ mới; (2) đo so với doanh số sau T chứ không phải tỷ lệ mua như SRS, vì Olist không có lượt xem; (3) Olist là sàn đa ngành hàng Brazil, khác thị trường thủ công VietCraft. Công thức không được chỉnh để làm đẹp số. Sẽ đo lại trên dữ liệu live (đủ 5 trục, so với tỷ lệ mua) ở giai đoạn S2.",
+      "caveat": "Cổng ra chỉ cần CÓ SỐ THẬT (D-theo §2 bản đăng ký); đạt ngưỡng 0,65 không bắt buộc. Olist đa ngành hàng Brazil, không phải VietCraft — xem LIMITATIONS.md. Pearson đo trên Olist chỉ phản ánh 2 trục, không đại diện đầy đủ 5 trục của health-1.0 khi có event thật trên live.",
+      "plot": "docs/HEALTH_SCATTER_OLIST.png",
+      "detail": "Toàn bộ 16,951 sản phẩm có >=1 đơn trước T (không giới hạn top 500), 16,909 có điểm: Pearson=0.0222 (p=0.003943), Spearman=0.0304 (p=7.731e-05)",
+      "computed_at": "2026-10-15T10:40:16.102158Z"
     },
     "gap_spearman": {
       "value": null,
       "threshold": 0.7,
       "passed": false,
       "reason": "Chưa đo. Bị chặn bởi khảo sát 2 chuyên gia POD — chưa tuyển."
+    },
+    "health_pearson_seed": {
+      "value": null,
+      "threshold": 0.65,
+      "passed": false,
+      "reason": "chưa đo được, cần Mongo access — vc-ai/vc-data chỉ có mẫu 100 dòng cho orders/order_items/reviews/listing_daily (không đủ để tính tỷ lệ mua trên 500 listing seed theo §6.4). listings.parquet và listing_variants.parquet có đủ 5.000 listing nhưng không có lượt xem/đơn hàng đầy đủ offline."
     }
   }
 }

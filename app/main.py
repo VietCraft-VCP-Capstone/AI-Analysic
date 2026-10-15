@@ -17,7 +17,6 @@ from app.config import settings
 from app.api.v1._template import che_do_xac_thuc
 from app.api.v1.analytics_routes import gan_vao as gan_analytics
 from app.api.v1.anomaly import router as anomaly_router
-from app.api.v1.health_score import router as health_score_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -75,9 +74,25 @@ async def lifespan(app: FastAPI):
     # Không in cổng ở đây: uvicorn tự in dòng "Uvicorn running on ..." với cổng
     # THẬT, còn settings.PORT chỉ là mặc định và sẽ sai nếu chạy --port khác.
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
+
+    # F29 §5: quét thay đổi mỗi 60s (BR-181) + quét toàn sàn 0h UTC mỗi ngày.
+    # Bọc try/except: Mongo chưa nối được thì service vẫn khởi động, chỉ là job
+    # sẽ tự lỗi và log tới khi nối được (xem f29_scheduler._recalculate_and_save).
+    try:
+        from app.core.f29_scheduler import start_scheduler
+        start_scheduler()
+        ra("  [OK] F29 scheduler: da bat (quet doi moi 60s + quet toan san 0h UTC).")
+    except Exception as e:
+        ra(f"  [!] F29 scheduler KHONG bat duoc: {type(e).__name__}: {e}")
     ra("=" * 72)
 
     yield
+
+    try:
+        from app.core.f29_scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -150,6 +165,67 @@ def read_health():
     return {"status": "ok", "service": "ai-analytics"}
 
 
+# Readiness endpoint — khác /health (chỉ trả tĩnh "ok" nếu tiến trình còn sống):
+# /ready kiểm tra THẬT là Mongo kết nối được VÀ có ít nhất 1 mart cốt lõi có dữ
+# liệu, để docker-compose / người vận hành biết lúc nào service dùng được chứ
+# không chỉ "đã khởi động". Không đụng route /health ở trên.
+@app.get("/ready")
+def read_ready():
+    from datetime import datetime, timezone
+
+    from app.api.v1._live import db_live
+    from app.api.v1._mart import db
+
+    # 1) Mongo kết nối được? (ping thử qua db_live(), giống _live.py dùng)
+    try:
+        db_live().command("ping")
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "mongo_unreachable", "detail": str(e)[:200]},
+        )
+
+    # 2) Ít nhất 1 mart cốt lõi (mart_listing_quality / listing_health) có dữ liệu?
+    try:
+        mart_db = db()
+        co_mart = (
+            mart_db["mart_listing_quality"].count_documents({}, limit=1) > 0
+            or mart_db["listing_health"].count_documents({}, limit=1) > 0
+        )
+    except Exception:
+        co_mart = False
+
+    if not co_mart:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "mart_empty"})
+
+    body = {"status": "ok"}
+
+    # 3) Cảnh báo job trễ quá 26h (plan B2) — đọc bản mới nhất trong
+    # listing_health_scores, do job app/core/f29_scheduler.py ghi. Vẫn bọc
+    # try/except: nếu collection chưa tồn tại / rỗng (job chưa chạy lần nào,
+    # hoặc đang chạy trên Mongo riêng không có dữ liệu) thì BỎ QUA, không để
+    # /ready sập vì việc này — đây chỉ là cảnh báo, không phải điều kiện sẵn sàng.
+    try:
+        mart_db = db()
+        latest = mart_db["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
+        if latest and latest.get("computed_at"):
+            raw = latest["computed_at"]
+            computed_at = None
+            if isinstance(raw, str):
+                computed_at = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            elif isinstance(raw, datetime):
+                computed_at = raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+            if computed_at is not None:
+                gio_tre = (datetime.now(timezone.utc) - computed_at).total_seconds() / 3600.0
+                if gio_tre > 26:
+                    body["status"] = "stale"
+                    body["last_run_hours_ago"] = round(gio_tre, 1)
+    except Exception:
+        pass
+
+    return JSONResponse(status_code=200, content=body)
+
+
 # ---------------------------------------------------------------------------
 # 16 endpoint phân tích F26–F41.
 #
@@ -160,7 +236,6 @@ TRANG_THAI_F = gan_analytics(app)
 
 # Include routes
 app.include_router(anomaly_router, prefix=f"{settings.API_V1_STR}/anomaly", tags=["Anomaly Detection"])
-app.include_router(health_score_router, prefix=f"{settings.API_V1_STR}/health_score", tags=["Health Evaluation"])
 
 # ---------------------------------------------------------------------------
 # API-99 — ĐÃ GỠ `forecasting_router`.

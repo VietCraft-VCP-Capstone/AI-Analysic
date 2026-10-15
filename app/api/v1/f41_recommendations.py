@@ -23,6 +23,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_recommendations import recommendations_live
 from app.api.v1._mart import db, tien
 from app.api.v1._template import CurrentShop, mart_not_ready, meta_from_record, ok
 
@@ -33,6 +35,10 @@ TOI_DA = 5           # BR-215
 
 @router.get("/api/analytics/forecast/recommendations", tags=["F41 · Đạt"])
 def recommendations(shop_id: str = CurrentShop):
+    # Shop thật: dựng gợi ý từ tín hiệu thật (F29/F38/F40), KHÔNG dùng mart dữ liệu mồi.
+    if la_shop_live(shop_id):
+        return recommendations_live(shop_id)
+
     ngach = list(db()["niche_score"].find({}, {"_id": 0}).sort("gap_score", -1).limit(30))
     if not ngach:
         mart_not_ready("niche_score")

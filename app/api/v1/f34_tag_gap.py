@@ -22,7 +22,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
-from app.api.v1._live import THIEU_DOI_THU, chan_shop_live
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_DOI_THU, chan_shop_live, dem_shop_cung_danh_muc
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -35,11 +36,16 @@ TOI_THIEU_DUNG = 2          # tag phải xuất hiện ít nhất 2 lần trong 
 NGUONG_VUOT_TROI = 1.3      # nhóm dẫn đầu phải dùng tag này nhiều hơn mặt bằng >= 30%
 TRAN_UOC_LUONG = 25         # trần % traffic dám ước lượng — trên mức này là hứa hão
 NGUONG_DEM_TIN_CAY = 5      # dưới 5/20 lần thì không phân biệt được với may rủi
+NGUONG_SHOP_CUNG_DM = 5     # §9.2: ≥5 shop cùng danh mục
 
 
 @router.get("/api/analytics/tag-gap", tags=["F34 · Đạt"])
 def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
-    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "products")
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "shop cùng danh mục", "unit": "shop",
+                  "current": dem_shop_cung_danh_muc(shop_id), "target": NGUONG_SHOP_CUNG_DM}
+    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "products", unlock=unlock)
     if chan is not None:
         return chan
 

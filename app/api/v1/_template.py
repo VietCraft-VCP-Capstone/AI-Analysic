@@ -102,9 +102,17 @@ def build_meta(
     sample_size: Optional[int] = None,
     identity_linked: bool = False,
     confidence: str = "medium",
+    unlock: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Dựng khối `meta` đúng hợp đồng. Ba trường cổng ra kiểm là
-    computed_at · model_version · scope — không trường nào được để trống."""
+    computed_at · model_version · scope — không trường nào được để trống.
+
+    `unlock` (§9.2): khi một tính năng bị `insufficient_data`/`partial` vì thiếu dữ liệu
+    sàn thật, đây là con số "đang có bao nhiêu / cần bao nhiêu" để FE vẽ thanh tiến độ
+    thay vì chỉ một câu thông báo chay. Hình dạng cố định:
+        {"requirement": "đơn thật", "current": 12, "target": 20, "unit": "đơn"}
+    Để `None` khi không áp dụng (ví dụ mart dữ liệu mồi chạy bình thường).
+    """
     if mode not in SOURCE_MODES:
         raise ValueError(f"source.mode phải thuộc {SOURCE_MODES}, nhận được {mode!r}")
 
@@ -116,7 +124,7 @@ def build_meta(
             "shop thật là trình bày sai nguồn — đây là lỗi nghiệm thu, không phải cảnh báo."
         )
 
-    return {
+    meta: Dict[str, Any] = {
         "status": STATUS_OK,          # ok() / insufficient() ghi đè lại
         "computed_at": computed_at or _now_iso(),
         "model_version": model_version,
@@ -134,6 +142,9 @@ def build_meta(
             "confidence": confidence,
         },
     }
+    if unlock is not None:
+        meta["unlock"] = unlock
+    return meta
 
 
 def meta_from_record(
@@ -382,6 +393,11 @@ if __name__ == "__main__":
         raise AssertionError("phải chặn source.mode lạ")
     except ValueError:
         print("✓ chặn source.mode ngoài live/seed_demo/derived")
+
+    m = build_meta(unlock={"requirement": "đơn thật", "current": 3, "target": 20, "unit": "đơn"})
+    assert m["unlock"] == {"requirement": "đơn thật", "current": 3, "target": 20, "unit": "đơn"}
+    assert "unlock" not in build_meta(), "không truyền unlock thì không được tự bịa ra field này"
+    print("✓ build_meta(unlock=...) gắn đúng field, mặc định không có")
 
     for fn, code in ((lambda: mart_not_ready("mart_demand"), 503),
                      (lambda: invalid_param("timeRange", "7d|30d|90d"), 400),
