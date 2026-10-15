@@ -1,49 +1,3 @@
-"""
-tag_suggest_service.py — Gợi ý tag và danh mục từ tiêu đề sản phẩm.
-
-Bài toán: seller gõ "ao thun anime tang ban than" thì hệ thống gợi ý ngay tag
-và danh mục chuẩn, thay vì bắt họ tự chọn trong danh sách 77 tag.
-
-VÌ SAO KHÔNG TRAIN MÔ HÌNH NGÔN NGỮ (PhoBERT) Ở BƯỚC NÀY
----------------------------------------------------------
-Tài liệu ai-bi-v2.md đề xuất fine-tune PhoBERT trên 5.000 listings.csv. Đã kiểm
-tra: KHÔNG LÀM ĐƯỢC, vì nhãn trong dữ liệu mồi không liên quan tới văn bản.
-
-  tiêu đề "Đồ Gỗ - Dòng Sản Phẩm 15 Họa Tiết GenZ Vibe"  ->  nhãn backpack
-  tiêu đề "Lụa Tơ Tằm - Dòng Sản Phẩm 4 Họa Tiết Tài Lộc" ->  nhãn blanket_sherpa
-
-Tiêu đề sinh từ CHỦ ĐỀ THỦ CÔNG còn nhãn là LOẠI PHÔI — hai thứ sinh độc lập.
-Chỉ 1,1% tiêu đề chứa tên loại sản phẩm. Cột `tags` thì gán ngẫu nhiên (áo bomber
-gắn tag `bao-li-xi`). Train mô hình trên dữ liệu đó sẽ ra một model học nhiễu,
-và tệ hơn là KHÔNG ĐO ĐƯỢC nó đúng hay sai.
-
-Nên bước 1 là bộ khớp từ vựng chạy trên dữ liệu CÓ THẬT: 77 tag do Nhi soạn tay,
-mỗi tag kèm 6-7 biến thể cách viết (463 biến thể, đã bỏ dấu sẵn). Đó là tri thức
-ngôn ngữ thật, và có thể đo được bằng cách GIỮ LẠI một phần biến thể làm tập
-kiểm tra.
-
-Khi nào thì nâng lên PhoBERT: khi có tập (tiêu đề thật, tag thật) do seller đặt
-— tức sau khi sàn chạy thật một thời gian. Lúc đó bộ khớp từ vựng này thành mốc
-so sánh để chứng minh mô hình học sâu có hơn hay không.
-
-CÁCH CHẤM ĐIỂM
---------------
-Với mỗi tag, mỗi biến thể S được chấm so với truy vấn Q:
-
-    điểm(S, Q) = (S nằm trọn trong Q ? 1.0 : 0) + độ_phủ_idf(S, Q)
-
-    độ_phủ_idf = tổng idf các token của S xuất hiện trong Q
-                 ─────────────────────────────────────────
-                        tổng idf toàn bộ token của S
-
-Dùng IDF vì các token như "ao", "qua", "do" xuất hiện ở rất nhiều tag nên gần
-như không mang thông tin; "anime", "valentine", "canvas" thì ngược lại. Không
-cân IDF thì mọi truy vấn có chữ "ao" đều khớp hàng chục tag như nhau.
-
-Điểm của tag = điểm cao nhất trong các biến thể của nó. Khớp đúng nguyên một
-biến thể cho 2.0 (1.0 cụm + 1.0 phủ).
-"""
-
 import csv
 import io
 import math
@@ -117,8 +71,7 @@ class TagSuggestService:
             if forms:
                 self.surfaces[tag_id] = forms
 
-        # IDF tính trên số TAG chứa token, không phải số biến thể — một tag có
-        # nhiều biến thể cùng chứa "ao" thì vẫn chỉ tính là một.
+      
         df: Dict[str, int] = {}
         for tag_id, forms in self.surfaces.items():
             for tok in {w for f in forms for w in f}:
@@ -172,9 +125,7 @@ class TagSuggestService:
             s, form, mass = self.score_tag(tag_id, q_norm, q_tokens)
             if s >= min_score:
                 m = self.meta[tag_id]
-                # Phá hoà: taxonomy có những tag dùng chung biến thể (cả `ao-thun`
-                # lẫn `ao-t-shirt` đều nhận "ao thun"). Khi điểm bằng nhau, ưu tiên
-                # tag mà truy vấn trùng đúng TÊN của nó.
+                
                 if normalize(tag_id.replace("-", " ")) == q_norm:
                     s += 0.01
                 scored.append({
@@ -253,9 +204,6 @@ def evaluate_holdout(data_dir: str = DATA_DIR, n_holdout: int = 2) -> Dict[str, 
         ids = [g["tag_id"] for g in got]
         if ids[:1] == [tag_id]:
             top1 += 1
-        # Taxonomy có nhiều tag đồng nghĩa (qua-giang-sinh / qua-noel,
-        # moc-khoa / keychain). Đoán trúng tag anh em cùng danh mục thì trên
-        # thực tế vẫn dùng được, nên đo thêm ở cấp danh mục cho công bằng.
         if ids and cat_of.get(ids[0]) == cat_of.get(tag_id):
             cat_top1 += 1
         if tag_id in ids[:3]:
@@ -267,7 +215,6 @@ def evaluate_holdout(data_dir: str = DATA_DIR, n_holdout: int = 2) -> Dict[str, 
             misses.append((tag_id, query))
 
     n = max(len(held), 1)
-    # Mốc so sánh: đoán bừa trong số tag có mặt.
     random_top1 = 1.0 / max(len(svc.surfaces), 1)
     return {
         "n_queries": len(held),
@@ -287,7 +234,6 @@ def evaluate_holdout(data_dir: str = DATA_DIR, n_holdout: int = 2) -> Dict[str, 
 if __name__ == "__main__":
     print("=== TỰ KIỂM TRA MODULE TAG_SUGGEST_SERVICE.PY ===")
 
-    # 1. Chuẩn hoá và bỏ dấu.
     assert normalize("Áo Thun Nam — Size XL!") == "ao thun nam size xl"
     assert strip_accents("Quà Tết đỏ") == "Qua Tet do"
     assert normalize("   ") == ""
@@ -297,19 +243,14 @@ if __name__ == "__main__":
     print(f"✓ Nạp {len(svc.surfaces)} tag, {sum(len(v) for v in svc.surfaces.values())} biến thể, "
           f"{len(svc.idf)} token trong từ điển IDF")
 
-    # 2. IDF phải hạ trọng số các token xuất hiện ở nhiều tag.
     assert svc._idf("ao") < svc._idf("anime"), "Token phổ biến phải có IDF thấp hơn"
     print(f"✓ IDF phân biệt được: 'ao'={svc._idf('ao'):.2f} < 'anime'={svc._idf('anime'):.2f}")
 
-    # 3. Khớp đúng nguyên biến thể phải cho điểm tối đa và đứng đầu.
     got = svc.suggest("ao thun")
     assert got and got[0]["tag_id"] == "ao-thun", got[:2]
     assert got[0]["exact"] and got[0]["score"] >= 1.9
     print(f"✓ Khớp nguyên cụm: 'ao thun' -> {got[0]['tag_id']} (điểm {got[0]['score']})")
 
-    # 4. Gõ KHÔNG DẤU vẫn phải ra đúng — seller rất hay gõ kiểu này.
-    # Taxonomy có chỗ mơ hồ thật (qua-valentine và qua-tang-nguoi-yeu đều đúng
-    # cho cùng một câu), nên kỳ vọng là TẬP đáp án chấp nhận được.
     for q, want in [("ao thun anime", {"ao-anime", "otaku"}),
                     ("qua tang nguoi yeu valentine", {"qua-valentine", "qua-tang-nguoi-yeu", "qua-le-tinh-nhan"}),
                     ("tranh canvas treo tuong", {"tranh-canvas", "tranh-treo-tuong"})]:
@@ -317,18 +258,16 @@ if __name__ == "__main__":
         assert want & set(ids), f"'{q}' không ra {want}, chỉ có {ids}"
     print("✓ Truy vấn không dấu: 3/3 ví dụ ra đúng tag trong top-5")
 
-    # 5. Truy vấn rỗng hoặc rác thì trả rỗng, không bịa.
+   
     assert svc.suggest("") == []
     assert svc.suggest("!!!  ???") == []
     print("✓ Truy vấn rỗng/rác: trả danh sách rỗng, không gợi ý bừa")
 
-    # 6. Gợi ý danh mục.
     cats = svc.suggest_category("ao thun nam local brand")
     assert cats and cats[0]["category_id"].startswith("apparel"), cats
     print(f"✓ Gợi ý danh mục: 'ao thun nam local brand' -> {cats[0]['category_id']} "
           f"({cats[0]['category_name']})")
 
-    # 7. ĐÁNH GIÁ THẬT — giữ lại biến thể làm tập kiểm tra.
     ev = evaluate_holdout(n_holdout=2)
     print(f"\n  --- Đánh giá giữ lại {ev['holdout_per_tag']} biến thể/tag ---")
     print(f"  {ev['n_queries']} truy vấn chưa từng thấy, trên {ev['n_tags']} tag")
@@ -338,17 +277,13 @@ if __name__ == "__main__":
     print("  (top-1 thấp là do taxonomy có nhiều tag đồng nghĩa: qua-giang-sinh/qua-noel,")
     print("   moc-khoa/keychain, do-handmade/qua-handmade. Với giao diện gợi ý 3-5 lựa")
     print("   chọn thì top-3 mới là con số đáng quan tâm.)")
-    # Ngưỡng dưới đây là CHỐT CHỐNG TỤT, không phải mục tiêu chất lượng: chúng
-    # đặt thấp hơn mức đo được để bắt lỗi khi ai đó sửa làm hỏng, chứ không
-    # khẳng định mức này là đủ tốt.
+
     assert ev["top3"] > 0.60, f"top-3 tụt dưới mức đã đo: {ev['top3']}"
     assert ev["top1"] > 0.25, f"top-1 tụt dưới mức đã đo: {ev['top1']}"
     assert ev["top1"] > ev["random_top1"] * 10, "Phải hơn hẳn đoán bừa"
     if ev["misses"]:
         print(f"  trượt ví dụ: {ev['misses'][:3]}")
 
-    # 8. Tập kiểm tra tự soạn — tiêu đề kiểu seller thật hay gõ.
-    #    Soạn tay từ taxonomy, KHÔNG lấy từ listings.csv vì nhãn ở đó là ngẫu nhiên.
     REAL = [
         ("Áo thun unisex form rộng in hình anime", "ao-anime"),
         ("ao hoodie nam mua dong", "ao-hoodie"),
@@ -372,3 +307,4 @@ if __name__ == "__main__":
     assert hit3 >= len(REAL) * 0.6, f"top-3 quá thấp trên tập tự soạn: {hit3}/{len(REAL)}"
 
     print("\n✅ TẤT CẢ SELF-CHECKS CỦA TAG_SUGGEST_SERVICE.PY ĐÃ PASS!")
+ 
