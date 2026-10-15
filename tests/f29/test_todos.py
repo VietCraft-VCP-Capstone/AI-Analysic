@@ -65,7 +65,7 @@ class TestApprovedTags:
         result = calc.calculate(PRODUCT_ID)
         todo = next(t for t in result["todos"] if t.get("field") == "tags")
         assert todo["current_value"] == 0
-        assert "đang chờ admin duyệt" in todo["message"]
+        assert todo["message"] == "Chọn thêm 3 tag · 1 tag đang chờ duyệt"
 
     def test_no_warnings_for_healthy_product(self):
         calc = make_calculator()
@@ -117,7 +117,7 @@ class TestTodosWithCategoryMedian:
         assert todo["field"] == "images"
         assert todo["current_value"] == 2
         assert todo["target"] == 6  # trung vị danh mục (6) > mức sàn (5)
-        assert "danh mục" in todo["message"]
+        assert todo["message"] == "Thêm 4 ảnh (đang có 2)"
 
     def test_expected_gain_is_real_recomputed_score_delta(self):
         """Chấm tay: content hiện tại = (2/5*100 + 100 + 100)/3 = 80.0. Chỉ có

@@ -72,8 +72,8 @@ def build_warnings(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> L
 
 
 def tag_message(n_approved: int, n_pending: int, target: int) -> str:
-    cho_duyet = f" ({n_pending} tag đang chờ admin duyệt, chưa hiện với người mua)" if n_pending else ""
-    return f"Gắn thêm tag: hiện có {n_approved} tag đã duyệt{cho_duyet}, nên đạt {target} tag để người mua tìm thấy dễ hơn"
+    cho_duyet = f" · {n_pending} tag đang chờ duyệt" if n_pending else ""
+    return f"Chọn thêm {target - n_approved} tag{cho_duyet}"
 
 
 def content_peer_stats(live_db, cat_key: Optional[Any], pending_tag_ids: FrozenSet = frozenset()) -> Tuple[List[int], List[int], List[int], bool]:
@@ -115,8 +115,7 @@ def build_todos(
     if current_total is None:
         return []
 
-    img_peers, desc_peers, tag_peers, used_category = content_peer_stats(live_db, category_key(product), pending_tag_ids)
-    nguon_moc = "trung vị danh mục" if used_category else "trung vị toàn sàn"
+    img_peers, desc_peers, tag_peers, _ = content_peer_stats(live_db, category_key(product), pending_tag_ids)
 
     moc_anh = max(int(round(median_or(img_peers, MIN_IMAGES))), MIN_IMAGES)
     moc_mo_ta = max(int(round(median_or(desc_peers, MIN_DESCRIPTION_LENGTH))), MIN_DESCRIPTION_LENGTH)
@@ -139,7 +138,7 @@ def build_todos(
         if gain > 0:
             candidates.append({
                 "type": "todo", "field": "images",
-                "message": f"Thêm ảnh: hiện có {n_images}, nên đạt {moc_anh} ảnh ({nguon_moc})",
+                "message": f"Thêm {moc_anh - n_images} ảnh (đang có {n_images})",
                 "current_value": n_images, "target": moc_anh,
                 "impact": gain, "_effort": EFFORT["images"],
             })
@@ -149,7 +148,7 @@ def build_todos(
         if gain > 0:
             candidates.append({
                 "type": "todo", "field": "description",
-                "message": f"Viết thêm mô tả: hiện {desc_len} ký tự, nên đạt {moc_mo_ta} ký tự ({nguon_moc})",
+                "message": f"Viết mô tả dài hơn ({desc_len}/{moc_mo_ta} ký tự)",
                 "current_value": desc_len, "target": moc_mo_ta,
                 "impact": gain, "_effort": EFFORT["description"],
             })
@@ -171,10 +170,7 @@ def build_todos(
         if gain > 0:
             candidates.append({
                 "type": "todo", "field": "stock_quantity",
-                "message": (
-                    f"Bổ sung tồn kho: hiện {inventory_ratio_pct:.0f}% biến thể còn hàng, "
-                    f"nên đạt {MIN_STOCK_RATIO_PCT:.0f}%"
-                ),
+                "message": f"Nhập thêm hàng: {inventory_ratio_pct:.0f}% phân loại còn hàng",
                 "current_value": round(inventory_ratio_pct, 1), "target": MIN_STOCK_RATIO_PCT,
                 "impact": gain, "_effort": EFFORT["stock"],
             })
