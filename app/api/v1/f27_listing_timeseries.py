@@ -1,11 +1,3 @@
-"""
-F27 · GET /api/analytics/listings/{id}/timeseries — lượt xem và đơn theo ngày.
-
-  BR-177  listing phải thuộc shop trong token, không thì 403
-  BR-178  gắn cờ tăng/giảm khi ĐỘ DỐC HỒI QUY vượt ±5%
-          Listing dưới 7 ngày -> insufficient_data, KHÔNG vẽ trend badge
-"""
-
 import sys
 from pathlib import Path
 

@@ -1,13 +1,3 @@
-"""
-F39 · GET /api/analytics/forecast/niches?categoryId= — ngách nhiều cầu ít cung.
-
-Đọc mart `niche_score` (do app/core/build_marts.py ghi từ Google Trends THẬT).
-
-  BR-210  tính lại mỗi 24h lúc nửa đêm GMT+7
-  BR-211  BẮT BUỘC lọc bỏ ngách chứa từ khoá cấm (bản quyền / NSFW),
-          đọc collection `banned_keywords` trên sàn live
-"""
-
 import sys
 from pathlib import Path
 from typing import Optional

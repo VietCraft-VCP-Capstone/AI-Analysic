@@ -1,34 +1,3 @@
-"""
-metrics.py — Chỉ số đo sai số dự báo.
-
-Vì sao KHÔNG dùng MAPE
-----------------------
-`baselines.json` hiện tại dùng MAPE. MAPE hỏng theo ba cách:
-
-  1. Chia cho 0. MAPE = mean(|e| / y). Chuỗi nhu cầu có rất nhiều y = 0.
-  2. Bất đối xứng. Phạt dự báo thừa nặng hơn dự báo thiếu, nên mô hình tối ưu
-     theo MAPE sẽ tự học cách dự báo thấp đi một cách có hệ thống.
-  3. Không so sánh được giữa các chuỗi. Trong chính baselines.json của dự án:
-       "áo thun"     MAPE 12,7%  nhưng MAE 15,45
-       "áo phông nữ" MAPE 27,8%  nhưng MAE  1,17
-     Chuỗi thứ hai dễ dự báo hơn nhiều; MAPE lớn chỉ vì mẫu số nhỏ.
-
-Dùng MASE thay thế
-------------------
-                 mean(|y_t - ŷ_t|)                     trên tập kiểm tra
-    MASE  =  ──────────────────────────────
-             (1/(n-m)) · Σ |y_t - y_(t-m)|             trên tập huấn luyện
-
-Mẫu số là MAE của dự báo NGÂY THƠ MÙA VỤ tính trên tập HUẤN LUYỆN, với m là chu
-kỳ mùa. Đọc kết quả: MASE < 1 nghĩa là tốt hơn naive; MASE = 0,62 nghĩa là sai
-số chỉ bằng 62% của naive, tức tốt hơn 38%.
-
-MASE chạy được với số 0, đối xứng, và so sánh được giữa mọi chuỗi.
-RMSSE là biến thể bình phương, chính là chỉ số của cuộc thi M5.
-
-Tham chiếu: Hyndman & Koehler (2006), "Another look at measures of forecast accuracy".
-"""
-
 import numpy as np
 from typing import Dict, Sequence, Union
 

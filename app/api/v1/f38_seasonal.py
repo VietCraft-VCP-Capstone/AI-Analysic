@@ -1,13 +1,3 @@
-"""
-F38 · GET /api/analytics/forecast/seasonal?categoryId= — mùa vụ và lịch tung hàng.
-
-Đọc mart `seasonal_profile` — phân rã STL Loess trên Google Trends Việt Nam THẬT.
-
-  BR-208  cần >= 12 tháng dữ liệu; job chỉ phân rã chuỗi từ 104 tuần trở lên
-  BR-209  cửa sổ ra hàng trừ lùi thời gian in + giao, mặc định −21 ngày
-  MSG150  ngành hàng không có mùa vụ rõ -> nói thẳng, không vẽ đỉnh giả
-"""
-
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path

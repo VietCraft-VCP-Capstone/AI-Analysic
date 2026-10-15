@@ -1,12 +1,3 @@
-"""
-F29 · GET /api/analytics/listings/{id}/health — điểm sức khoẻ 0-100 kèm việc cần sửa.
-
-  BR-181  chấm lại mỗi 24h (job build_marts chạy đêm)
-  BR-182  >= 80 `tốt` · 50-79 `cần cải thiện` · < 50 `kém`
-          Trọng số phải cộng đúng 1.0 — cổng ra kiểm
-  Listing chưa có đánh giá -> `rating_shrunk: null`, KHÔNG mặc định 4.0 sao
-"""
-
 import sys
 from pathlib import Path
 

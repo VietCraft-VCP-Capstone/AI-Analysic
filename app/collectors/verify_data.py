@@ -1,16 +1,3 @@
-#!/usr/bin/env python3
-"""
-Inspect what is actually in Atlas. Costs zero Google Trends quota.
-
-    python verify_data.py --integrity        # is raw -> scaled sound?
-    python verify_data.py --quality          # gaps, zeros, coverage
-    python verify_data.py --eligibility      # which keywords can feed a model
-    python verify_data.py --discovery-stats  # is there enough to build discovery?
-    python verify_data.py --all
-
-Written to be run before extending anything. A pipeline you have not
-inspected is a pipeline you cannot defend.
-"""
 
 import argparse
 import os
@@ -196,12 +183,6 @@ FORECAST_ELIGIBILITY = {
     "min_peak_scaled":   30.0,  # ...UNLESS they spike hard: that is seasonal
     "min_mean_scaled":    1.0,  # below this the series is rounding noise
 }
-
-# A series that is zero 80% of the year but hits 300 at Tet is not dead --
-# it is the strongest seasonal signal in the set, and exactly what STL is
-# for. The first cut of this filter threw those out along with the genuinely
-# flat ones. So: a keyword passes if EITHER it is mostly non-zero (steady)
-# OR its peak is high (seasonal). Only low-ratio AND low-peak is dead.
 
 
 def check_eligibility(db, write=False):

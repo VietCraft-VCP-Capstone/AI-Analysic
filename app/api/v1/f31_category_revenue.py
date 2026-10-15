@@ -1,14 +1,3 @@
-"""
-F31 · GET /api/analytics/shop/categories/revenue — doanh thu theo loại hàng và khung giờ.
-
-  BR-185  thứ/giờ ĐÃ quy về giờ Việt Nam ở tầng job, FE không phải đổi nữa
-
-  ⚠ Endpoint này BẮT BUỘC trả `meta.source.mode = "seed_demo"`.
-    Nhịp giờ/thứ trong dữ liệu mồi kế thừa từ phân phối Olist (Brazil) — FE phải
-    hiện nhãn: "Nhịp giờ/thứ kế thừa từ dữ liệu tham chiếu quốc tế, chưa phản ánh
-    người mua Việt Nam." Khi sàn có đủ đơn thật, job đổi mode thành `live`.
-"""
-
 import sys
 from pathlib import Path
 

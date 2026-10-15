@@ -1,10 +1,3 @@
-"""
-F28 · GET /api/analytics/listings/{id}/conversion — mất khách ở bước nào trong phễu.
-
-  BR-177  listing phải thuộc shop trong token
-  BR-179  CHỈ hiện `tips` khi CR thấp hơn trung bình danh mục >= 20%
-"""
-
 import sys
 from pathlib import Path
 

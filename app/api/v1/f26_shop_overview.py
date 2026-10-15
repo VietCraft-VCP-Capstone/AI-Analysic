@@ -1,14 +1,3 @@
-"""
-F26 · GET /api/analytics/shop/overview — tổng quan shop theo khoảng thời gian.
-
-Đọc thẳng `vietcraft-seed.listing_daily` (796.025 dòng, đã có index trên shop_id
-và date). KHÔNG đọc `mart_listing_daily`: bảng đó bị chặn trong `writer.BLOCKED`
-vì nó là bản sao 1:1 của nguồn và đã làm tràn cụm Atlas M0 ngày 21/09.
-
-Business rule:
-  BR-175  kỳ so sánh dài ĐÚNG BẰNG kỳ đang xem, nằm liền ngay trước
-  BR-176  CR toàn shop = đơn / lượt xem × 100; 0 lượt xem -> null, không chia cho 0
-"""
 
 import sys
 from pathlib import Path
@@ -43,11 +32,6 @@ def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
     tu, den = cua_so(moi_nhat, so_ngay)
     tu_truoc, den_truoc = cua_so_truoc(tu, so_ngay)
 
-    # MỘT lượt đi-về Atlas cho cả 5 phép tính, thay vì 5 lượt.
-    # Bản đầu gọi rời từng cái: 7 vòng x ~150ms độ trễ mạng = 2.2 giây, gấp 4 lần
-    # mục tiêu p95 < 500ms của hợp đồng. Bản thân phép gộp chỉ mất vài chục ms —
-    # thời gian nằm ở số lần đi-về, nên cách sửa là giảm số lần, không phải tối ưu
-    # truy vấn. $facet chạy nhiều nhánh trên cùng một tập đã lọc.
     cot = {"views": "$views", "carts": "$add_to_carts", "orders": "$orders",
            "units": "$units_sold", "revenue_vnd": "$revenue_vnd"}
     tong = {k: {"$sum": v} for k, v in cot.items()}

@@ -1,12 +1,3 @@
-"""
-loader.py — Data Access Layer dùng chung cho toàn bộ các mô hình AI VietCraft.
-Toàn bộ nhóm đọc dữ liệu qua module này, không viết query trực tiếp trong model.
-
-Quy tắc:
-- Tự động fallback giữa MongoDB và CSV repo SE16-AI/data/.
-- Chuỗi thời gian trả về dạng pd.Series có DatetimeIndex chuẩn và tần suất rõ ràng.
-"""
-
 import os
 import sys
 import pandas as pd

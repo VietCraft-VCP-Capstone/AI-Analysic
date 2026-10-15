@@ -1,13 +1,3 @@
-"""
-F32 · GET /api/analytics/competitors?categoryId= — mình đứng đâu so với đối thủ.
-
-Đọc mart `mart_competitor` (5.000 dòng, do app/core/build_marts.py ghi).
-
-  BR-186  chỉ liệt kê danh mục mà người bán có ít nhất 1 listing
-  BR-188  top 20 xếp theo est_sales_90d giảm dần
-  BR-189  loại shop của chính người bán khỏi bảng xếp hạng, vẫn hiện ở my_listings
-"""
-
 import sys
 from pathlib import Path
 from typing import Optional

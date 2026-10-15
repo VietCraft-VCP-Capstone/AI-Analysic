@@ -1,7 +1,3 @@
-"""
-collectors/config.py — Proxy tương thích ngược cho module collectors.
-Toàn bộ cấu hình gốc hiện được quản lý tập trung duy nhất tại app/config.py.
-"""
 
 import sys
 import os

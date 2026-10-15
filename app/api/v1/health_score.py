@@ -1,25 +1,3 @@
-"""
-health_score.py — F29: chấm điểm sức khoẻ shop.
-
-Bản trước có ba lỗi, đều đã sửa:
-
-1. Trọng số không cộng thành 100. Thành phần xu hướng tính bằng
-   `trend_weight * 2.0` với `trend_weight` chạy 5–15, tức đóng góp 10–30 điểm
-   và KHÔNG BAO GIỜ về 0. Hệ quả: shop 0 sao, huỷ 100% đơn, xu hướng giảm vẫn
-   được 10/100. Ca "tăng" thì tổng lên 110 rồi bị kẹp về 100, làm phần thưởng
-   xu hướng mất tác dụng ở nhóm shop tốt.
-
-2. Thiếu đánh giá thì mặc định 4.0 sao — tức "không có dữ liệu = tốt". Shop
-   không có đánh giá nào, huỷ 100% đơn vẫn được 42/100. Đây là vi phạm thẳng
-   nguyên tắc số một của dự án: THIẾU ≠ 0, và cũng ≠ TỐT. Thiếu thì phải nói
-   là thiếu.
-
-3. Không kiểm đầu vào. `cancellation_rate = 5.0` hay `ratings = [99]` đều lọt.
-
-Thiết kế hiện tại: ba thành phần đều chuẩn hoá về thang 0–100, trọng số cộng
-đúng 1.0, nên điểm tổng tự nằm trong [0, 100] mà không cần kẹp.
-"""
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional

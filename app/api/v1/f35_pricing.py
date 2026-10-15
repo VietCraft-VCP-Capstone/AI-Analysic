@@ -1,10 +1,3 @@
-"""
-F35 · GET /api/analytics/pricing?productType=&price= — giá mình đứng đâu.
-
-  BR-198  phân bố tính từ TOP 20 listing theo doanh số, không phải toàn bộ listing.
-          Lý do: listing ế thường để giá bừa, gộp vào làm lệch phân bố.
-"""
-
 import sys
 from pathlib import Path
 from typing import List, Optional

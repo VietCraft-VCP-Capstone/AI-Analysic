@@ -1,13 +1,3 @@
-"""
-_mart.py — Lớp đọc dữ liệu dùng chung cho 16 endpoint F26–F41.
-
-Chỉ ĐỌC. Không endpoint nào được ghi (trừ F36 quản lý danh sách theo dõi).
-Job chạy đêm ghi bằng `app/core/writer.py`, không phải ở đây.
-
-Vì sao tách ra khỏi `_template.py`: file kia thuần khuôn phản hồi, không đụng
-MongoDB, nên test được mà không cần mạng. File này mới là chỗ nối database.
-"""
-
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path

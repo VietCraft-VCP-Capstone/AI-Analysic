@@ -1,16 +1,3 @@
-"""
-benchmark_m5.py — Thử nghiệm và đánh giá mức độ gộp chuỗi (Aggregation Level Benchmark).
-Mục đích:
-Chứng minh trên dữ liệu thực tế bán lẻ (chuỗi thưa thớt số 0 / intermittent demand) xem:
-Dự báo ở cấp độ nào (Item vs Group vs Category) mang lại ý nghĩa thống kê và độ chính xác thực sự.
-
-Đánh giá 4 phương pháp:
-  1. Naive Yesterday (Hôm qua)
-  2. Naive Last Week (Cùng ngày tuần trước)
-  3. Croston / Intermittent Demand Method
-  4. ARIMA / Exponential Smoothing
-Xuất báo cáo vào docs/qc/m5_aggregation.md.
-"""
 
 import os
 import sys

@@ -1,13 +1,3 @@
-"""
-F30 · GET /api/notifications/alerts — ngày doanh thu tụt/vọt bất thường.
-
-Đường dẫn theo SRS (`/api/notifications/...`), không phải `/api/analytics/...`.
-
-  ⚠ Ngưỡng |z| > 7.0, KHÔNG phải 2.0 như BR-183. Nhóm đo thực nghiệm: ngưỡng 2.0
-    cho 7,38% báo động giả, ngưỡng 7.0 còn 0,6%. Đã ghi lệch vào docs/SPEC_CHANGES.md.
-  BR-184  chỉ gửi email khi người bán bật "Cảnh báo hiệu suất" — ngoài phạm vi API này
-"""
-
 import sys
 from pathlib import Path
 from typing import Optional

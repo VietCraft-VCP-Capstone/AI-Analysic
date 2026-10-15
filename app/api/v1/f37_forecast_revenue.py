@@ -1,17 +1,3 @@
-"""
-F37 · GET /api/analytics/forecast/revenue?targetId=&window= — dự báo doanh thu.
-
-Quyết định E20: dự báo ở CẤP SHOP, không cấp listing. Benchmark M5 của chính nhóm
-đo được ARIMA cấp listing MASE 1,12 — THUA cách ngây thơ; cấp nhóm 0,89 — thắng.
-Chuỗi cấp listing trung vị 41 ngày, chỉ 3 ngày có bán (7,3%), quá thưa để mô hình hoá.
-
-  BR-206  khoảng tin cậy 95% LUÔN phải trả về; lo95/hi95 không được null khi status ok
-  BR-207  lo95 kẹp ở 0 — không dự báo doanh thu âm
-  BR-205  ARIMA khi lịch sử < 90 ngày, LSTM khi >= 90
-          -> LSTM CHƯA có, SPEC-03 chưa chốt. Bảng so sánh trả `lstm_mase: null`
-             thay vì bịa số. Xem `model_selection` trong phản hồi.
-"""
-
 import sys
 from pathlib import Path
 from typing import Optional
