@@ -267,6 +267,8 @@ def che_do_xac_thuc() -> str:
         return f"TAT HOAN TOAN — moi request thanh shop `{_dev_shop_id()}` (DEV_SHOP_ID)"
     if _dev_tin_header():
         return "TIN HEADER X-Debug-Shop-Id, khong kiem token (DEV_TRUST_SHOP_HEADER=1)"
+    if os.getenv("AI_GATEWAY_SECRET"):
+        return "XAC THUC QUA BE GATEWAY (X-Gateway-Secret)"
     return ""
 
 
@@ -287,16 +289,26 @@ def decode_shop_id(token: str) -> str:
 def current_shop_id(
     authorization: Optional[str] = Header(default=None),
     x_debug_shop_id: Optional[str] = Header(default=None),
+    x_shop_id: Optional[str] = Header(default=None),
+    x_gateway_secret: Optional[str] = Header(default=None),
 ) -> str:
     """Dependency trả về shop_id của người đang gọi."""
+    # 1. Xác thực qua Backend Gateway (X-Gateway-Secret)
+    expected_secret = os.getenv("AI_GATEWAY_SECRET", "").strip()
+    if expected_secret and x_gateway_secret and x_gateway_secret.strip() == expected_secret:
+        shop = (x_shop_id or x_debug_shop_id or "").strip()
+        if shop:
+            return shop
+        dev = _dev_shop_id()
+        return dev or "shp_00017"
+
     dev = _dev_shop_id()
 
     # Header đi TRƯỚC DEV_SHOP_ID: DEV_SHOP_ID là giá trị MẶC ĐỊNH cho đỡ phải gõ,
-    # không phải cái khoá cứng. Đè ngược lại thì ai đặt DEV_SHOP_ID trong .env sẽ
-    # thấy mọi request đều ra cùng một shop dù đã gửi header khác — và số trả về
-    # trông vẫn hợp lý nên rất khó phát hiện. Đã dính đúng bẫy này khi thử F34.
-    if x_debug_shop_id and (dev or _dev_tin_header()):
-        return x_debug_shop_id
+    # không phải cái khoá cứng.
+    effective_header = x_debug_shop_id or x_shop_id
+    if effective_header and (dev or _dev_tin_header()):
+        return effective_header.strip()
 
     if dev:
         return dev
