@@ -1,0 +1,137 @@
+flowchart LR
+
+    %% =========================================================
+    %% DATA SOURCES
+    %% =========================================================
+
+    subgraph SOURCES["01 · DATA SOURCES"]
+        direction TB
+
+        GT["Google Trends API"]
+        PF["Printify API"]
+        SEED["Seed Data Generators<br/>Nhi · Hưng · Hạt · Hiếu"]
+    end
+
+
+    %% =========================================================
+    %% DATA LAYER
+    %% =========================================================
+
+    subgraph DATA["02 · DATA LAYER"]
+        direction TB
+
+        RAW[("data-collection<br/><small>trend_interest<br/>trend_keyword<br/>printify_variant</small>")]
+
+        SEEDDB[("vietcraft-seed<br/><small>master data · orders<br/>listing_daily · model outputs</small>")]
+
+        LOADER["loader.py<br/><small>Data Access Layer</small>"]
+
+        WRITER["writer.py<br/><small>Model Result Writer</small>"]
+    end
+
+
+    %% =========================================================
+    %% AI CORE
+    %% =========================================================
+
+    subgraph CORE["03 · AI CORE ENGINE"]
+        direction TB
+
+        subgraph FORECAST["Production Processing"]
+            direction TB
+
+            CAL["calendar_vn.py<br/><small>VN Lunar Calendar<br/>& Tet Alignment</small>"]
+
+            STL["stl_service.py<br/><small>STL / LOESS<br/>Decomposition</small>"]
+
+            ZSCORE["zscore_service.py<br/><small>Anomaly Detection</small>"]
+
+            CAL --> STL
+        end
+
+
+        subgraph EVAL["Evaluation & Benchmarking"]
+            direction TB
+
+            BASE["compute_baselines.py<br/><small>Naive 1 & Naive 2</small>"]
+
+            M5["benchmark_m5.py<br/><small>M5 Aggregation<br/>Benchmark</small>"]
+        end
+    end
+
+
+    %% =========================================================
+    %% SERVING
+    %% =========================================================
+
+    subgraph SERVING["04 · SERVING LAYER · FastAPI"]
+        direction TB
+
+        FC["/api/v1/forecasting"]
+        ANOMALY["/api/v1/anomaly"]
+        HEALTH["/api/v1/health_score"]
+    end
+
+
+    %% =========================================================
+    %% INGESTION
+    %% =========================================================
+
+    GT --> RAW
+    PF --> RAW
+    SEED --> SEEDDB
+
+    RAW --> LOADER
+    SEEDDB --> LOADER
+
+
+    %% =========================================================
+    %% AI PROCESSING
+    %% =========================================================
+
+    LOADER --> CAL
+    LOADER --> STL
+    LOADER --> ZSCORE
+
+    LOADER --> BASE
+    LOADER --> M5
+
+
+    %% =========================================================
+    %% RESULTS
+    %% =========================================================
+
+    STL --> WRITER
+    ZSCORE --> WRITER
+
+    BASE --> WRITER
+    M5 --> WRITER
+
+    WRITER --> SEEDDB
+
+
+    %% =========================================================
+    %% API
+    %% =========================================================
+
+    SEEDDB --> FC
+    SEEDDB --> ANOMALY
+    SEEDDB --> HEALTH
+
+
+    %% =========================================================
+    %% STYLING
+    %% =========================================================
+
+    classDef source fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#0F172A
+    classDef database fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#1E3A8A
+    classDef process fill:#F5F3FF,stroke:#8B5CF6,stroke-width:1.5px,color:#4C1D95
+    classDef evaluation fill:#FFF7ED,stroke:#F97316,stroke-width:1.5px,color:#7C2D12
+    classDef api fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#064E3B
+
+    class GT,PF,SEED source
+    class RAW,SEEDDB database
+    class LOADER,WRITER process
+    class CAL,STL,ZSCORE process
+    class BASE,M5 evaluation
+    class FC,ANOMALY,HEALTH api

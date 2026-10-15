@@ -19,7 +19,7 @@ concurrency:
 
 env:
   MONGODB_DB: data-collection
-  DATA_DIR: app/data-prepaire
+  DATA_DIR: app/collectors
 
 jobs:
   daily:

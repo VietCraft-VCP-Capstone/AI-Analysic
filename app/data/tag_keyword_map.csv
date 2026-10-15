@@ -1,0 +1,119 @@
+﻿map_id,tag_id,keyword,topic,weight
+1,ao-anime,áo anime,anime,1.0
+2,ao-bong-da,áo bóng đá việt nam,sport,1.0
+3,ao-cap-doi,quà tặng người yêu,valentine,0.5
+4,ao-cap-doi,áo đôi,couple,1.0
+5,ao-doi,quà tặng người yêu,valentine,0.5
+6,ao-doi,áo đôi,couple,1.0
+7,ao-dong-phuc,áo đồng phục,school,1.0
+8,ao-gia-dinh,áo gia đình,family,1.0
+9,ao-hoc-sinh,áo lớp,school,1.0
+10,ao-hoodie,áo hoodie,streetwear,1.0
+11,ao-hoodie,áo oversize,streetwear,0.8
+12,ao-local-brand,áo local brand,streetwear,1.0
+13,ao-local-brand,áo oversize,streetwear,0.8
+14,ao-local-brand,áo thun,evergreen,0.8
+15,ao-lop,áo lớp,school,1.0
+16,ao-nhom,áo nhóm,group,1.0
+17,ao-oversize,áo hoodie,streetwear,0.8
+18,ao-oversize,áo local brand,streetwear,0.8
+19,ao-oversize,áo oversize,streetwear,1.0
+20,ao-oversize,áo thun,evergreen,0.8
+21,ao-phong-nam,áo phông nam,evergreen,1.0
+22,ao-phong-nam,áo thun,evergreen,0.8
+23,ao-phong-nu,áo phông nữ,evergreen,1.0
+24,ao-phong-nu,áo thun,evergreen,0.8
+25,ao-t-shirt,áo thun,evergreen,1.0
+26,ao-team,áo nhóm,group,1.0
+27,ao-tet,áo thun,evergreen,0.5
+28,ao-tet,áo tết,tet,1.0
+29,ao-the-thao,áo thun thể thao,sport,1.0
+30,ao-thun,in áo thun,evergreen,0.8
+31,ao-thun,áo gia đình,family,0.5
+32,ao-thun,áo lớp,school,0.5
+33,ao-thun,áo nhóm,group,0.5
+34,ao-thun,áo phông nam,evergreen,0.8
+35,ao-thun,áo phông nữ,evergreen,0.8
+36,ao-thun,áo thun,evergreen,1.0
+37,ao-thun,áo đôi,couple,0.5
+38,ao-vintage,áo thun,evergreen,0.8
+39,ao-vintage,áo vintage,vintage,1.0
+40,ban-than,quà tặng bạn thân,friendship,1.0
+41,bao-li-xi,lì xì tết,tet,1.0
+42,decor-khong-gian,tranh canvas,decor,1.0
+43,decor-nha-moi,quà tân gia,housewarming,1.0
+44,decor-noel,trang trí noel,christmas,1.0
+45,decor-tet,trang trí tết,tet,1.0
+46,do-handmade,quà handmade,gift,1.0
+47,do-tap-gym,áo thun thể thao,sport,1.0
+48,family-set,áo gia đình,family,1.0
+49,fashion-nam,áo phông nam,evergreen,1.0
+50,fashion-nu,áo phông nữ,evergreen,1.0
+51,gift-box,quà tặng,gift,1.0
+52,hoodie-unisex,áo hoodie,streetwear,1.0
+53,in-ao-thun,in áo thun,evergreen,1.0
+54,in-ao-thun,áo thun,evergreen,0.8
+55,in-theo-yeu-cau,in áo thun,evergreen,1.0
+56,keychain,móc khóa,evergreen,1.0
+57,li-xi-tet,lì xì tết,tet,1.0
+58,moc-khoa,móc khóa,evergreen,1.0
+59,otaku,áo anime,anime,1.0
+60,qua-20-10,quà 20/10,womens_day,1.0
+61,qua-20-11,quà 20/11,teachers_day,1.0
+62,qua-8-3,quà 8/3,womens_day,1.0
+63,qua-cho-gau,quà tặng người yêu,valentine,1.0
+64,qua-cuoi,quà cưới,wedding,1.0
+65,qua-giang-sinh,quà giáng sinh,christmas,1.0
+66,qua-handmade,quà handmade,gift,1.0
+67,qua-hieu-thao,quà tặng mẹ,womens_day,1.0
+68,qua-ki-niem-ngay-cuoi,quà cưới,wedding,1.0
+69,qua-le-tinh-nhan,quà valentine,valentine,1.0
+70,qua-luu-niem,quà lưu niệm,travel,1.0
+71,qua-noel,quà giáng sinh,christmas,1.0
+72,qua-sinh-nhat,quà sinh nhật,gift,1.0
+73,qua-tan-gia,quà tân gia,housewarming,1.0
+74,qua-tang,quà 20/10,womens_day,0.8
+75,qua-tang,quà 20/11,teachers_day,0.8
+76,qua-tang,quà 8/3,womens_day,0.8
+77,qua-tang,quà cưới,wedding,0.8
+78,qua-tang,quà giáng sinh,christmas,0.8
+79,qua-tang,quà lưu niệm,travel,0.5
+80,qua-tang,quà sinh nhật,gift,0.8
+81,qua-tang,quà tân gia,housewarming,0.8
+82,qua-tang,quà tặng,gift,1.0
+83,qua-tang,quà tặng bạn thân,friendship,0.8
+84,qua-tang,quà tặng mẹ,womens_day,0.8
+85,qua-tang,quà tặng người yêu,valentine,0.8
+86,qua-tang,quà valentine,valentine,0.8
+87,qua-tang-ban-than,quà tặng bạn thân,friendship,1.0
+88,qua-tang-me,quà tặng mẹ,womens_day,1.0
+89,qua-tang-nguoi-yeu,quà tặng người yêu,valentine,1.0
+90,qua-tang-nguoi-yeu,quà valentine,valentine,0.8
+91,qua-tang-phu-nu,quà 20/10,womens_day,1.0
+92,qua-tang-phu-nu,quà 8/3,womens_day,1.0
+93,qua-tang-phu-nu,quà tặng,gift,0.5
+94,qua-tang-phu-nu,quà tặng mẹ,womens_day,1.0
+95,qua-tang-sinh-nhat,quà sinh nhật,gift,1.0
+96,qua-tang-thay-co,quà 20/11,teachers_day,1.0
+97,qua-tang-thay-co,quà tặng,gift,0.5
+98,qua-tang-thay-co,quà tặng thầy cô,teachers_day,1.0
+99,qua-tet,quà tặng,gift,0.5
+100,qua-tet,quà tết,tet,1.0
+101,qua-tet,trang trí tết,tet,0.5
+102,qua-valentine,quà valentine,valentine,1.0
+103,retro-style,áo vintage,vintage,1.0
+104,set-qua-tet,quà tết,tet,1.0
+105,souvenir,quà lưu niệm,travel,1.0
+106,thoi-trang-tet,áo tết,tet,1.0
+107,tote-canvas,túi tote,evergreen,1.0
+108,trang-tri-noel,trang trí noel,christmas,1.0
+109,trang-tri-tet,trang trí tết,tet,1.0
+110,tranh-canvas,tranh canvas,decor,1.0
+111,tranh-decor,tranh treo tường,evergreen,1.0
+112,tranh-treo-tuong,tranh treo tường,evergreen,1.0
+113,tri-an-thay-co,quà 20/11,teachers_day,1.0
+114,tri-an-thay-co,quà tặng thầy cô,teachers_day,1.0
+115,tui-tote,túi tote,evergreen,1.0
+116,unisex-style,áo oversize,streetwear,1.0
+117,viet-nam-vo-dich,áo bóng đá việt nam,sport,1.0
+118,vietnam-local-brand,áo local brand,streetwear,1.0
