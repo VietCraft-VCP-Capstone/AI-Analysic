@@ -7,8 +7,6 @@ import sys
 import time
 import uuid
 
-# Run from anywhere: every module here does `import config`, which only
-# resolves when the script's own directory is the working directory.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
@@ -23,10 +21,6 @@ except ImportError:                                    # pymongo not installed
     store_mongo = None
 
 
-# --------------------------------------------------------------------------
-# keywords -- from the database when there is one, otherwise from config
-# --------------------------------------------------------------------------
-
 def keywords_from_config():
     rows = [{"id": i, "keyword": k, "product_type": p, "topic": t,
              "is_anchor": False}
@@ -39,19 +33,13 @@ def keywords_from_config():
 def load_keywords(mdb=None):
     """Atlas first, config.py as the fallback."""
     if mdb is not None:
-        # Reconcile every run. The stored list is the one the collectors use,
-        # so if it drifts from config.py the drift is invisible until you
-        # notice retired keywords still arriving in the data.
+        # Sync every run so keywords removed from config stop being collected.
         store_mongo.upsert_keywords(mdb, cfg.SEED_KEYWORDS, cfg.ANCHOR)
         anchor, others = store_mongo.load_keywords(mdb)
         if anchor:
             return anchor, others
     return keywords_from_config()
 
-
-# --------------------------------------------------------------------------
-# fetching
-# --------------------------------------------------------------------------
 
 HTTP_CALLS = {"n": 0}
 
@@ -154,7 +142,7 @@ def collect(granularity, timeframe, out_dir=None, mdb=None):
     anchor, others = load_keywords(mdb)
     tr = make_client()
     batches_meta = []
-    series = {}                       # keyword -> record
+    series = {}
     _ANCHOR_COPIES.clear()
 
     done = load_checkpoint(granularity)
@@ -298,7 +286,7 @@ def rescale(series, batches_meta):
 
     for record in series.values():
         if record.get("is_anchor"):
-            continue                       # handled below
+            continue
         factor = factors.get(record["batch_id"])
         if factor is None:
             continue
@@ -325,10 +313,6 @@ def rescale(series, batches_meta):
     print(f"\nrescaled {len(factors)} batches "
           f"(reference anchor mean {reference:.1f}, factor spread {spread:.1f}x)")
 
-
-# --------------------------------------------------------------------------
-# output
-# --------------------------------------------------------------------------
 
 def print_summary(payload):
     """The eyeball view. A 5-year weekly pull is ~13k points -- this is not."""
@@ -367,7 +351,6 @@ def write_json(payload, out_dir, granularity):
     with open(full, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
 
-    # A small companion file you can actually open and read.
     peek = {
         "collected_at": payload["collected_at"],
         "granularity": granularity,
@@ -397,8 +380,6 @@ def inspect(path):
     with open(path, encoding="utf-8") as fh:
         print_summary(json.load(fh))
 
-
-# --------------------------------------------------------------------------
 
 def collect_related(out_dir=None, mdb=None):
     _, others = load_keywords(mdb)
@@ -451,7 +432,6 @@ def collect_related(out_dir=None, mdb=None):
 
     if mdb is not None:
         store_mongo.write_related(mdb, payload)
-
 
 
 def main():
@@ -516,8 +496,7 @@ def main():
     if args.backfill == "daily":
         collect("daily", cfg.TIMEFRAME_DAILY, args.out, mdb)
     if args.daily:
-        # Re-pulling the whole 90-day window each run is deliberate: it
-        # self-heals any gap left by a failed night.
+        # Re-pull the full 90-day window so a failed night self-heals.
         collect("daily", cfg.TIMEFRAME_DAILY, args.out, mdb)
     if args.related:
         collect_related(args.out, mdb)

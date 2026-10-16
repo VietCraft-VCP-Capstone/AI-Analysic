@@ -7,6 +7,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_LUOT_XEM, chan_shop_live, dem_luot_xem_listing_30ngay
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, forbidden, insufficient, mart_not_ready, meta_from_record, not_found, ok
 
@@ -14,10 +16,19 @@ router = APIRouter()
 
 MART = "mart_listing_quality"
 TOI_THIEU_VIEW = 30      # dưới ngưỡng này thì tỉ lệ % là nhiễu
+NGUONG_LUOT_XEM = 100    # §9.2: ≥100 lượt xem/listing/30 ngày
 
 
 @router.get("/api/analytics/listings/{id}/conversion", tags=["F28 · Hạt"])
 def conversion(id: str, shop_id: str = CurrentShop):
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "lượt xem/listing, 30 ngày", "unit": "lượt xem",
+                  "current": dem_luot_xem_listing_30ngay(id), "target": NGUONG_LUOT_XEM}
+    chan = chan_shop_live(shop_id, THIEU_LUOT_XEM, "product_events", unlock=unlock)
+    if chan is not None:
+        return chan
+
     l = db()["listings"].find_one({"listing_id": id}, {"_id": 0, "shop_id": 1, "title": 1})
     if l is None:
         not_found("listing")

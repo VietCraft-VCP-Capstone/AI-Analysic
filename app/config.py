@@ -21,7 +21,6 @@ class Settings:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     PORT: int = int(os.getenv("PORT", 8000))
 
-    # MongoDB settings (đọc linh hoạt cả MONGODB_URI lẫn MONGO_URI)
     MONGO_URI: str = (
         os.getenv("MONGODB_URI")
         or os.getenv("MONGO_URI")
@@ -43,18 +42,14 @@ class Settings:
 
 settings = Settings()
 
-# Biến tương thích nhanh cho module collectors
 MONGODB_URI = settings.MONGO_URI
 MONGODB_DB = settings.MONGO_DB_DATA
 
-# 2. THAM SỐ NGHIỆP VỤ CÀO DỮ LIỆU GOOGLE TRENDS & PRINTIFY
-GEO = "VN"          # Vietnam. Dùng "" cho toàn cầu
+GEO = "VN"
 LANGUAGE = "vi"
 
-# Google cho phép tối đa 5 từ khóa/request (1 anchor + 4 từ khóa thực tế)
 BATCH_SIZE = 4
 
-# Throttling chống chặn HTTP 429 từ Google Trends
 REQUEST_DELAY = 5.0
 SLEEP_MIN = 15.0
 SLEEP_MAX = 25.0
@@ -64,7 +59,6 @@ RETRY_BASE = 60.0
 
 DISCOVERY_MAX_SEEDS_PER_RUN = 10
 
-# Bộ lọc từ khóa thương mại / phi thương mại
 PRODUCT_WORDS = [
     "áo", "cốc", "ly", "túi", "tote", "tranh", "poster", "sticker", "móc khóa",
     "quà", "nón", "mũ", "gối", "sổ", "lịch", "hoodie", "shirt", "tee", "mug",
@@ -77,18 +71,15 @@ NON_COMMERCIAL_WORDS = [
     "full", "vietsub", "trailer", "spoiler", "raw", "manga", "truyện",
 ]
 
-# Timezone offset: VN là UTC+7 -> -420
 TZ_OFFSET = -420
 
-TIMEFRAME_DAILY = "today 3-m"    # ~90 ngày gần nhất (cho ARIMA / Anomaly)
-TIMEFRAME_WEEKLY = "today 5-y"   # ~260 tuần / 5 năm (cho STL Seasonality)
+TIMEFRAME_DAILY = "today 3-m"
+TIMEFRAME_WEEKLY = "today 5-y"
 
-# Từ khóa mốc cố định: Có lượng tìm kiếm ổn định quanh năm (ít biến động mùa vụ)
 ANCHOR = "quà sinh nhật"
 
-# 3. NẠP TỪ KHÓA HẠT GIỐNG TỪ FILE JSON RIÊNG BIỆT (DATA-DRIVEN)
 def load_seed_keywords():
-    json_path = Path(__file__).resolve().parent / "data" / "seed_keywords.json"
+    json_path = Path(__file__).resolve().parent / "data" / "seed_keywords.do-not-remove.json"
     if json_path.exists():
         with open(json_path, mode="r", encoding="utf-8") as f:
             data = json.load(f)

@@ -47,7 +47,7 @@ FILE = [
     ("SE16-AI/data/seed_out/v1/dist_olist.json",       "reference", "dist_olist",    False),
     ("SE16-AI/data/seed_out/v1/dist_funnel.json",      "reference", "dist_funnel",   False),
     ("AI-Analysic/app/data/baselines.json",            "reference", "baselines",     False),
-    ("AI-Analysic/app/data/seed_keywords.json",        "reference", "seed_keywords", False),
+    ("AI-Analysic/app/data/seed_keywords.do-not-remove.json", "reference", "seed_keywords", False),
     ("AI-Analysic/data/seed_out/samples/listing_daily.csv", "samples", "listing_daily", False),
     ("AI-Analysic/data/seed_out/samples/orders.csv",        "samples", "orders",        False),
     ("AI-Analysic/data/seed_out/samples/order_items.csv",   "samples", "order_items",   False),

@@ -122,6 +122,48 @@ def test_mac_dinh_xac_thuc_van_bat():
             os.environ["DEV_TRUST_SHOP_HEADER"] = cu
 
 
+def test_gateway_be_san():
+    """Đường chạy thật: BE sàn xác thực người bán rồi gọi kèm X-Gateway-Secret + X-Shop-Id.
+
+    Secret sai hoặc service chưa đặt secret -> 401, KHÔNG rơi xuống nhánh dev.
+    Không cần MongoDB: mọi nhánh dưới đây dừng ở tầng xác thực.
+    """
+    from fastapi import HTTPException
+
+    from app.api.v1._template import current_shop_id
+
+    def goi(secret, shop="shp_00017"):
+        return current_shop_id(authorization=None, x_debug_shop_id=None,
+                               x_gateway_secret=secret, x_shop_id=shop)
+
+    def ma_loi(fn):
+        try:
+            fn()
+        except HTTPException as e:
+            return e.status_code
+        return None
+
+    cu = os.environ.get("AI_GATEWAY_SECRET")
+    try:
+        os.environ["AI_GATEWAY_SECRET"] = ""
+        assert ma_loi(lambda: goi("bat-ky")) == 401, "chưa đặt secret mà gateway vẫn qua"
+
+        os.environ["AI_GATEWAY_SECRET"] = "bi-mat-dung"
+        assert goi("bi-mat-dung") == "shp_00017", "secret đúng phải trả X-Shop-Id"
+        assert ma_loi(lambda: goi("bi-mat-sai")) == 401, "secret sai phải 401"
+        assert ma_loi(lambda: goi("bi-mat-dung", shop="../shp")) == 400, "X-Shop-Id lạ phải 400"
+
+        r = client.get("/api/analytics/shop/overview",
+                       headers={**SHOP, "X-Gateway-Secret": "bi-mat-sai", "X-Shop-Id": "shp_00017"})
+        assert r.status_code == 401, "secret sai không được rơi xuống nhánh X-Debug-Shop-Id"
+        assert r.json() == {"error": "unauthorized"}
+    finally:
+        if cu is None:
+            os.environ.pop("AI_GATEWAY_SECRET", None)
+        else:
+            os.environ["AI_GATEWAY_SECRET"] = cu
+
+
 def test_body_loi_khong_boc_trong_detail():
     """Hợp đồng ghi body phẳng {'error': ...}, không phải {'detail': {...}}."""
     r = client.get("/api/analytics/shop/overview", headers=SHOP)
