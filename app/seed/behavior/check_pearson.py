@@ -39,8 +39,8 @@ def main():
     print(f"   - Tổng doanh thu: {daily_revenue.sum():,.0f} VND")
     print(f"   - Trung bình ngày: {daily_revenue.mean():,.0f} VND/ngày")
 
-    # 2. Gộp đúng 40 keyword Trends chuẩn (app/data/seed_keywords.json)
-    seed_kw_path = os.path.join(AI_ANALYSIC_DIR, "app", "data", "seed_keywords.json")
+    # 2. Gộp đúng 40 keyword Trends chuẩn (app/data/seed_keywords.do-not-remove.json)
+    seed_kw_path = os.path.join(AI_ANALYSIC_DIR, "app", "data", "seed_keywords.do-not-remove.json")
     with open(seed_kw_path, "r", encoding="utf-8") as f:
         seed_kws = [item["keyword"] for item in json.load(f)]
 
@@ -59,7 +59,6 @@ def main():
     trends_daily.index = trends_daily.index.date
     s_trends = trends_daily.reindex(daily_revenue.index).interpolate()
 
-    # 3. Phân tích tương quan theo độ trễ (Lag)
     correlations = []
     for lag in range(-30, 31):
         shifted_trends = s_trends.shift(lag)
@@ -76,7 +75,6 @@ def main():
     print(f"   - Độ trễ tối ưu (Best Lag): {best_lag} ngày")
     print(f"   - Hệ số tương quan Pearson đỉnh cao nhất: r = {best_r:.4f}")
 
-    # Bảng chi tiết một số độ trễ chính
     print("\n   Bảng đối chiếu hệ số tương quan theo các mốc độ trễ:")
     print(f"   {'Độ trễ (Lag)':<15}{'Pearson r':<15}{'Đánh giá (Chuẩn >= 0.60)':<25}")
     print("   " + "-" * 55)

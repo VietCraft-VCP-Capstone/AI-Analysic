@@ -263,7 +263,7 @@ là đầu vào lúc chạy.
 | `vietcraft` | sàn live |
 
 `app/data/` chỉ còn **hai file cấu hình** mà `config.py` nạp trực tiếp:
-`seed_keywords.json` (44 từ khoá hạt giống) và `baselines.json`. **Không thay bằng
+`seed_keywords.do-not-remove.json` (44 từ khoá hạt giống) và `baselines.json`. **Không thay bằng
 DB được** — chúng là tham số, không phải dữ liệu.
 
 Bảy file CSV từng nằm ở đó (`categories`, `tags`, `tag_keyword_map`, `vc_setting`,

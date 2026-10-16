@@ -4,8 +4,6 @@ import os
 import sys
 import time
 
-# Run from anywhere: every module here does `import config`, which only
-# resolves when the script's own directory is the working directory.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
