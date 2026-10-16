@@ -1,25 +1,3 @@
-"""
-restore_listing_daily_metrics.py — Dựng lại 7 cột số của `listing_daily`.
-
-VÌ SAO CẦN: ngày 21/09/2026 một lượt $merge dùng nhầm `whenMatched: "replace"`
-(đáng lẽ "merge") sau một $project chỉ giữ cột khoá — nên views / add_to_carts /
-orders / units_sold / revenue_vnd / cost_vnd / tier bị xoá khỏi cả 796.025 dòng.
-Cột khoá (shop_id, product_type_id, category_id, tags) thì đã điền đúng và giữ nguyên.
-
-TÍNH LẠI TỪ ĐÂU — đúng cách task9_listing_daily.py đã làm:
-    views, add_to_carts   <- SE16-AI/data/1m2/events.csv  (1.271.298 dòng)
-    orders, units_sold,   <- Mongo `orders` + `order_items`
-    revenue_vnd, cost_vnd    (bản CSV của Hiếu chưa từng tồn tại, dữ liệu ở Mongo)
-    tier                  <- Mongo `listings`
-
-ĐỐI CHIẾU BẮT BUỘC: AI-Analysic/data/seed_out/samples/listing_daily.csv giữ 100
-dòng dữ liệu GỐC. Script phải khớp 100/100 dòng đó thì mới được ghi. Không khớp
-là dừng — thà không khôi phục còn hơn khôi phục sai.
-
-    python -m app.core.restore_listing_daily_metrics --check   # chỉ đối chiếu
-    python -m app.core.restore_listing_daily_metrics           # đối chiếu rồi ghi
-"""
-
 import os
 import sys
 import argparse

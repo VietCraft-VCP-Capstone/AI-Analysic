@@ -1,28 +1,4 @@
-"""
-backtest.py — Đánh giá dự báo bằng phương pháp TRƯỢT ĐIỂM CẮT (rolling origin).
 
-Vì sao một lát cắt là chưa đủ
------------------------------
-`baselines.json` hiện dùng MỘT điểm cắt duy nhất (2026-05-24). Điều đó cho ta
-MỘT mẫu về năng lực mô hình. Nếu 12 tuần đó tình cờ dễ hoặc khó, con số sẽ đánh
-lừa và không ai biết.
-
-Rolling origin trượt điểm cắt qua nhiều vị trí, mỗi lần huấn luyện lại và dự
-báo, rồi báo cáo trung bình KÈM ĐỘ LỆCH CHUẨN:
-
-    origin 1: train [.. 2025-09]  test [2025-10 .. 2025-12]
-    origin 2: train [.. 2025-12]  test [2026-01 .. 2026-03]
-    origin 3: train [.. 2026-03]  test [2026-04 .. 2026-06]
-
-Dùng cửa sổ MỞ RỘNG (tập train lớn dần) vì dữ liệu chỉ có 262 điểm — cắt bớt
-quá khứ sẽ mất luôn số mùa vụ ít ỏi.
-
-Chi tiết dễ bỏ sót: với dữ liệu mùa vụ năm, các điểm cắt PHẢI rơi vào những pha
-mùa vụ khác nhau. Nếu cả 8 origin đều cắt vào tháng 5 thì không bao giờ đo được
-mô hình xử lý Tết ra sao. Tham số `step` điều khiển việc này.
-
-Tham chiếu: Tashman (2000), "Out-of-sample tests of forecasting accuracy".
-"""
 
 import numpy as np
 from typing import Any, Callable, Dict, List, Sequence

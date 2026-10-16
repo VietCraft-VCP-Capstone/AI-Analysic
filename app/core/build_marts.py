@@ -1,22 +1,3 @@
-"""
-build_marts.py — Job chạy đêm: đọc bảng nguồn, tính sẵn, ghi vào mart.
-
-Đây là nửa còn thiếu của kiến trúc. 16 endpoint F26–F41 chỉ ĐỌC mart; nếu không
-job nào ghi vào thì mọi endpoint trả 503 `mart_not_ready` — đúng nhưng vô dụng.
-
-    ĐÊM:  job này   -> đọc listing_daily/listings/reviews -> ghi mart
-    NGÀY: API       -> đọc mart -> trả về (p95 < 500ms)
-
-Chạy:
-    .venv/bin/python -m app.core.build_marts --all
-    .venv/bin/python -m app.core.build_marts mart_competitor
-    .venv/bin/python -m app.core.build_marts --all --dry-run    # xem trước, không ghi
-
-⚠ Ghi lên cụm Atlas M0 512 MB DÙNG CHUNG CẢ NHÓM. Mọi hàm ở đây ghi bảng nhỏ
-  (cỡ nghìn dòng). Đừng thêm bảng nào nhân đôi `listing_daily` 796.025 dòng —
-  đã thử ngày 21/09 và làm tràn cụm, chặn ghi với tất cả mọi người.
-  Xem `writer.BLOCKED`.
-"""
 
 import argparse
 import sys
@@ -36,13 +17,7 @@ from app.core.writer import MART_SCHEMA, finish_model_run, save_model_output, st
 
 VERSION = "marts-1.0"
 
-# Hệ số co ngót Bayes để chấm đánh giá. n đánh giá của một listing được kéo về
-# trung bình danh mục với trọng số m. Không co thì một listing 1 đánh giá 5 sao xếp
-# trên listing 200 đánh giá 4,8 sao — vô lý và là lỗi kinh điển của bảng xếp hạng.
-# Công thức: (Σ★ + m·C)/(n + m), trong đó C = trung bình danh mục.
-M_BAYES = 50  # Chọn từ F29 bước 1 — ổn định nhất trong 10/20/50 khi chia đôi
-# review Olist theo thời gian (Pearson 0,818 vs 0,401/0,568). Xem
-# docs/BAYES_M_SELECTION.md.
+M_BAYES = 50  # docs/BAYES_M_SELECTION.md
 
 # Chỉ số Google Trends dưới mức này thì % tăng không đáng tin (thang 0-100).
 NEN_TOI_THIEU = 5.0
@@ -83,10 +58,6 @@ def build_mart_competitor(db) -> List[Dict[str, Any]]:
     den = _hom_nay(db)
     tu = _lui(den, 90)
 
-    # est_sales_90d — ĐÃ CHỐT ở API_CONTRACT.md mục 6 câu 1: tổng số lượng bán
-    # trong 90 ngày. Lấy từ listing_daily.units_sold chứ không nối order_items:
-    # `orders.shop_id` là float NaN ở cả 24.736 dòng nên không quy về shop được,
-    # còn listing_daily đã ở đúng độ mịn (listing_id, date) và có index.
     ban = {r["_id"]: r for r in db["listing_daily"].aggregate([
         {"$match": {"date": {"$gte": tu, "$lte": den}}},
         {"$group": {"_id": "$listing_id",
@@ -312,9 +283,6 @@ def build_mart_demand(db) -> List[Dict[str, Any]]:
         tb_gan = sum(gan) / len(gan)
         tb_truoc = sum(truoc) / len(truoc) if truoc else tb_gan
 
-        # % tăng tính trên NỀN GẦN 0 là vô nghĩa: 1,3 -> 3,9 trên thang 0-100 ra
-        # "tăng 200%", nghe như bùng nổ nhưng thực ra là nhiễu đo lường. Dưới ngưỡng
-        # nền thì trả null và gắn cờ, KHÔNG trả một con số ai cũng tin nhầm.
         nen_du = max(tb_gan, tb_truoc) >= NEN_TOI_THIEU
         tang = (round((tb_gan - tb_truoc) / tb_truoc * 100, 1)
                 if nen_du and tb_truoc else None)
@@ -324,8 +292,6 @@ def build_mart_demand(db) -> List[Dict[str, Any]]:
             "name_vi": ten_tag.get(tag, tag),
             "week": f"{tuan_iso[0]}-W{tuan_iso[1]:02d}",
             "demand_index": round(tb_gan, 2),
-            # `scaled` của Google Trends là chỉ số 0–100, KHÔNG phải số lượt tìm
-            # tuyệt đối. Quy ra "lượt/tuần" là bịa. Giữ nguyên thang và nói rõ.
             "searches_per_week": None,
             "demand_scale_note": "chỉ số Google Trends 0-100, không phải số lượt tìm tuyệt đối",
             "growth_pct": tang,

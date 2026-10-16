@@ -1,20 +1,4 @@
-"""
-MongoDB Atlas storage for the trend collectors.
 
-    pip install "pymongo[srv]"
-    export MONGODB_URI="mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/"
-
-Collections
------------
-trend_keyword     one doc per keyword
-trend_interest    one doc per (keyword, date, granularity, geo)
-trend_related     one doc per (keyword, query, kind, date, geo)
-collector_run     one doc per collector run -- the audit trail
-
-Every write is an upsert on a unique index, so re-running a job is safe.
-That matters: the daily job re-pulls the whole 90-day window each night to
-heal any gap left by a failed run, and upserts keep that from duplicating.
-"""
 
 import datetime as dt
 import os

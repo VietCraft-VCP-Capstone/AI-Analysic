@@ -1,12 +1,3 @@
-"""
-F33 · GET /api/analytics/shop-comparison — biểu đồ radar so mình với 5 shop mạnh nhất.
-
-  BR-190  phân khúc xác định TỰ ĐỘNG = danh mục chiếm tỉ trọng listing lớn nhất
-  BR-191  5 shop = top 5 theo doanh thu ước tính trong phân khúc đó
-  BR-192  chuẩn hoá min–max về 0–100
-  BR-193  cần shop có >= 5 listing đã đăng, không thì insufficient_data
-"""
-
 import sys
 from collections import defaultdict
 from pathlib import Path

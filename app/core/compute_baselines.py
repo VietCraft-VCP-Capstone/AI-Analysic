@@ -1,11 +1,3 @@
-"""
-compute_baselines.py — Tính sẵn con số chuẩn (Baselines) cho 40 từ khoá Google Trends.
-Được sử dụng làm mốc so sánh (benchmarks) bắt buộc cho tất cả các mô hình AI Sprint sau:
-  - Baseline 1 (Naive 1): Dự đoán bằng giá trị kỳ trước liền kề (lag 1).
-  - Baseline 2 (Naive 2): Dự đoán bằng giá trị cùng kỳ năm trước (lag 52 tuần cho weekly).
-Tập test cố định: 12 tuần cuối (weekly) và 30 ngày cuối (daily).
-Lưu kết quả ra file: app/core/baselines.json.
-"""
 
 import os
 import sys

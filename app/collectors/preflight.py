@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-"""
-Check everything that can be checked without spending Google Trends quota.
-
-    python preflight.py
-
-Run this first, every time, before any collector. Each failure below is one
-you would otherwise discover halfway through a backfill -- after the requests
-are already gone and the rate limit is already ticking.
-"""
 
 import importlib
 import os

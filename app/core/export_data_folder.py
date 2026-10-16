@@ -1,33 +1,3 @@
-"""
-export_data_folder.py — Kéo dữ liệu từ MongoDB xuống thư mục `vc-data/` để làm việc
-mô hình ở máy mình.
-
-VÌ SAO CẦN:
-    `orders` · `order_items` · `reviews` · `buyers` · `listing_daily` CHƯA BAO GIỜ
-    tồn tại dưới dạng file — Hiếu nạp thẳng vào Mongo. Muốn train/đo mô hình thì
-    phải kéo về, mà kéo 796.025 dòng qua mạng mỗi lần chạy là hàng phút mỗi lượt.
-    Kéo MỘT LẦN xuống Parquet, sau đó đọc từ đĩa mất chưa tới một giây.
-
-    Atlas giữ nguyên. Đây chỉ là bản sao đọc, không ghi gì lên cụm.
-
-KÉO TỪ HAI NGUỒN:
-    (A) MongoDB  — bảng đã nạp lên cụm
-    (B) FILE trên đĩa — thứ CỐ Ý không nạp lên Mongo, mà vẫn cần để làm mô hình.
-        Nặng nhất là `events.csv`: 1.271.298 sự kiện view/add_to_cart, không đưa
-        lên Atlas vì sẽ vượt hạn mức 512 MB. Nó là dữ liệu phễu ở mức sự kiện —
-        cần cho F28 (tỉ lệ chuyển đổi), F30 (bất thường theo chuỗi xem), F31
-        (nhịp giờ/thứ) — và là ĐƯỜNG KHÔI PHỤC duy nhất cho 6 cột số của
-        `listing_daily`.
-        Kèm thư mục `samples/`: 100 dòng dữ liệu GỐC dùng làm mỏ neo đối chiếu.
-
-ĐỊNH DẠNG: Parquet, không phải CSV.
-    listing_daily dạng CSV là ~60 MB và mỗi lần đọc phải đoán lại kiểu dữ liệu.
-    Parquet nhỏ hơn ~10 lần, giữ đúng kiểu, và đọc nhanh hơn hẳn.
-    Vẫn kèm bản CSV cho mấy bảng nhỏ để mở bằng Excel khi cần nhìn mắt thường.
-
-    python -m app.core.export_data_folder            # kéo bảng chưa có
-    python -m app.core.export_data_folder --force    # kéo lại tất cả
-"""
 
 import os
 import sys
@@ -46,8 +16,6 @@ from app.config import settings
 
 OUT = os.path.join(WORKSPACE, "vc-data")
 
-# (database, collection, thư mục con, cũng xuất CSV?)
-# CSV chỉ bật cho bảng nhỏ — bảng lớn để Parquet thôi cho nhẹ.
 BANG = [
     ("seed", "listing_daily",      "behavior", False),
     ("seed", "orders",             "behavior", False),

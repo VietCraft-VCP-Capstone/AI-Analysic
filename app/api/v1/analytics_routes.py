@@ -1,36 +1,3 @@
-"""
-analytics_routes.py — Khung 16 endpoint F26–F41.
-
-Mục đích của file này: **FE gọi thật được NGAY**, không phải chờ ai làm xong tính
-năng. Mọi đường dẫn đã sống, trả đúng vỏ `{data, meta, error}` của hợp đồng, và
-nói thật là chưa có số — bằng `503 mart_not_ready` kèm tên bảng đang chờ.
-
-Nguồn duy nhất của bảng này: `docs/API_CONTRACT.md` mục 3.
-`tests/test_api_contract.py` so hai bên với nhau, lệch là test đỏ.
-
-════════════════════════════════════════════════════════════════════════════
-CÁCH LÀM TÍNH NĂNG CỦA MÌNH — 3 bước, không sửa file này quá một dòng
-════════════════════════════════════════════════════════════════════════════
-
-  1. Viết router riêng, ví dụ `app/api/v1/f26_shop_overview.py`:
-
-        from fastapi import APIRouter
-        from app.api.v1._template import ok, insufficient, meta_from_record, CurrentShop
-
-        router = APIRouter()
-
-        @router.get("/api/analytics/shop/overview")
-        def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
-            ...
-
-  2. Thêm MỘT dòng vào DA_LAM bên dưới:  "F26": "app.api.v1.f26_shop_overview"
-
-  3. Chạy `.venv/bin/python -m pytest tests/ -q` (hoặc `python tests/test_api_contract.py`)
-
-  Khung tự nhường chỗ: F nào có trong DA_LAM thì router thật thay chỗ khung.
-  Không ai phải sửa của ai, và không ai quên đăng ký — test đếm đủ 16.
-"""
-
 import importlib
 import sys
 from pathlib import Path
@@ -51,10 +18,6 @@ router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # BẢNG 16 ENDPOINT — chép từ docs/API_CONTRACT.md mục 3, không thêm bớt.
-#
-# `mart`: bảng mà endpoint ĐỌC. Chưa có job nào ghi vào thì endpoint trả 503
-#         kèm đúng tên này, để người trực biết đang chờ job của ai.
-# `owner`: hỏi ai khi số ra lạ.
 # ---------------------------------------------------------------------------
 ENDPOINTS: List[Dict[str, Any]] = [
     # F,      method,   path,                                            mart,                   owner,  tham số
@@ -101,20 +64,6 @@ DA_LAM: Dict[str, str] = {
 
 # ---------------------------------------------------------------------------
 # HAI CHỖ HỢP ĐỒNG TỰ MÂU THUẪN — đã chốt ở đây, ghi lại để không ai chốt ngược
-#
-# 1. `mart_listing_daily` (F26 · F27 · F31).
-#    docs/API_CONTRACT.md mục 3 ghi tên này, nhưng app/core/writer.py BLOCKED
-#    CHẶN nó: bảng đó là bản sao 1:1 của `listing_daily` 796.025 dòng, đã thử
-#    ngày 21/09 và làm cụm Atlas M0 (512 MB, DÙNG CHUNG CẢ NHÓM) vọt lên 526/512
-#    rồi chặn ghi với tất cả mọi người.
-#    → Khung này đọc thẳng `listing_daily`, đúng như writer.py hướng dẫn.
-#      4 cột khoá đã backfill sẵn, index đã có. Hợp đồng phải sửa theo, không
-#      phải ngược lại — một bảng bị chặn vì lý do đo được thì không mở lại bằng
-#      một dòng trong tài liệu.
-#
-# 2. Đường dẫn F30 là `/api/notifications/alerts`, KHÔNG phải `/api/analytics/alerts`
-#    (mục 6 câu 3). Theo SRS. Nhất quán thua tương thích: FE của sàn đã trỏ theo SRS.
-# ---------------------------------------------------------------------------
 
 
 def _chua_co_so(ep: Dict[str, Any]) -> None:
@@ -131,9 +80,6 @@ def _dang_ky(ep: Dict[str, Any]) -> None:
     """Đăng ký một đường dẫn khung."""
     mo_ta = f"[{ep['f']}] khung — chờ {ep['owner']}. Đọc mart `{ep['mart']}`."
 
-    # Bắt `ep` bằng closure, KHÔNG bằng tham số mặc định `ep=ep`: FastAPI đọc mọi
-    # tham số của handler là tham số của API, nên `ep=ep` lòi ra Swagger thành một
-    # ô nhập `ep` mà người gọi tưởng là thật.
     def tao_handler(ep_: Dict[str, Any], co_id: bool):
         if co_id:
             def handler(id: str, shop_id: str = CurrentShop):

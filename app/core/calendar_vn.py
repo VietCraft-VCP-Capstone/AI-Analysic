@@ -1,13 +1,3 @@
-"""
-calendar_vn.py — Xử lý lịch Tết âm lịch và chuyển đổi trục thời gian (Lễ Tết Việt Nam).
-
-Vấn đề:
-Tết âm lịch rơi vào các ngày dương lịch khác nhau mỗi năm (lệch tới gần 4 tuần):
-  2021: 12/02 | 2022: 01/02 | 2023: 22/01 | 2024: 10/02 | 2025: 29/01 | 2026: 17/02
-Nếu gộp chuỗi theo tuần dương lịch trong năm (week of year), đỉnh Tết sẽ bị phân mảnh và biến mất.
-Giải pháp:
-Đổi trục thời gian theo số ngày cách Tết gần nhất (days_to_tet).
-"""
 
 import pandas as pd
 import numpy as np

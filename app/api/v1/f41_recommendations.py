@@ -1,19 +1,3 @@
-"""
-F41 · GET /api/analytics/forecast/recommendations — 5 câu khuyên nên làm sản phẩm gì.
-
-Đỉnh kim tự tháp: gộp `niche_score` (cầu) + `mart_competitor` (vị thế) +
-`listing_health` (chất lượng) thành việc cụ thể.
-
-  BR-214  PHẢI cá nhân hoá theo lịch sử — không gợi ý loại phôi mà shop có 0% chuyển đổi
-  BR-215  tối đa 5 khuyến nghị
-  Shop mới chưa có lịch sử -> khuyến nghị chung toàn sàn, scope: "platform"
-
-⚠ TIÊU CHÍ THÀNH CÔNG chưa được nghiệm thu. Bản đăng ký ban đầu định nhờ hai
-  chuyên gia POD chấm điểm; nhóm đã quyết định không tuyển chuyên gia. Thay bằng
-  backtest khuyến nghị (sinh tại T chỉ bằng dữ liệu <= T, đo 30 ngày sau) —
-  CHƯA CHẠY. Mọi phản hồi của endpoint này gắn `validated: false`.
-"""
-
 import sys
 from pathlib import Path
 

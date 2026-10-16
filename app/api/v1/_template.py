@@ -1,42 +1,3 @@
-"""
-_template.py — Vỏ phản hồi chung cho cả 16 endpoint F26–F41.
-
-Đây là file mà 4 người còn lại IMPORT (không phải chép đi sửa). Mọi endpoint
-phân tích trả về cùng một hình dạng, chỉ khác phần `data`:
-
-    {"data": ..., "meta": {...}, "error": null}
-
-Vì sao để trong code chứ không chỉ trong `docs/API_CONTRACT.md`: tài liệu là chữ,
-không ai ép được. Ở đây `ok()` / `insufficient()` tự gắn đủ khối `meta`, nên một
-endpoint viết đúng kiểu là tự động khớp hợp đồng.
-
-  NGUYÊN TẮC SỐ MỘT — THIẾU ≠ 0.
-  Không đủ dữ liệu thì gọi insufficient(), KHÔNG trả 0. Shop mới nhìn thấy
-  "doanh thu 0đ" thay vì "chưa đủ dữ liệu" là lỗi nặng nhất của loại dashboard này.
-
-Cách dùng trong một router tính năng:
-
-    from app.api.v1._template import (
-        ok, insufficient, meta_from_record, mart_not_ready, CurrentShop,
-    )
-
-    @router.get("/shop/overview")
-    def f26_shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
-        doc = db["mart_listing_daily"].find_one({"shop_id": shop_id})
-        if doc is None:
-            mart_not_ready("mart_listing_daily")          # -> 503, KHÔNG phải 500
-        if doc["so_ngay"] < 7:
-            return insufficient(
-                f"Shop mới, chỉ có {doc['so_ngay']} ngày dữ liệu, cần tối thiểu 7",
-                meta_from_record(doc, scope="shop", scope_id=shop_id),
-            )
-        return ok({"revenue_vnd": doc["revenue_vnd"]},
-                  meta_from_record(doc, scope="shop", scope_id=shop_id))
-
-Hợp đồng đầy đủ: docs/API_CONTRACT.md. File này KHÔNG truy vấn MongoDB —
-chỉ khuôn phản hồi và xác thực.
-"""
-
 import hmac
 import os
 import re
@@ -53,26 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import Depends, Header, HTTPException
 
-# Nạp app/.env. Không dùng `settings` ở đây, nhưng import nó là kích hoạt dotenv —
-# nếu không, ai import _template mà chưa import app.config sẽ thấy DEV_SHOP_ID trong
-# .env bị bỏ qua, rồi ngồi tìm mãi không hiểu vì sao vẫn 401.
 from app.config import settings as _nap_env  # noqa: F401
-
-# ---------------------------------------------------------------------------
-# HAI QUYẾT ĐỊNH ĐÃ CHỐT (mục 6 của API_CONTRACT.md, câu 2 và 2b)
-#
-# 1. Bọc {data, meta, error} — KHÔNG trải phẳng. FE đọc một chỗ cho cả 16 màn hình.
-#
-# 2. `status` chỉ nằm MỘT nơi: meta.status, từ vựng ok · partial · insufficient_data.
-#    Trước đây ba tài liệu ghi ba kiểu: API_CONTRACT mục 1 để `quality.status`
-#    (ready/limited/insufficient_data), mục "THIẾU ≠ 0" để `status` ở gốc, còn
-#    task SPEC-02 để `meta.status`. Ba từ vựng cho cùng một khái niệm thì FE phải
-#    viết ba nhánh. Bảng quy đổi cho ai đã đọc bản cũ:
-#        quality.status = ready   -> meta.status = ok
-#        quality.status = limited -> meta.status = partial
-#        insufficient_data        -> giữ nguyên tên
-#    `quality` vẫn còn, nhưng chỉ giữ sample_size · identity_linked · confidence.
-# ---------------------------------------------------------------------------
 
 STATUS_OK = "ok"
 STATUS_PARTIAL = "partial"          # có số nhưng độ tin cậy thấp

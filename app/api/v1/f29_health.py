@@ -1,12 +1,3 @@
-"""
-F29 · GET /api/analytics/listings/{id}/health — điểm sức khoẻ 0-100 kèm việc cần sửa.
-
-  BR-181  chấm lại mỗi phút (quét thay đổi) hoặc job 24h
-  BR-182  >= 80 `tốt` · 50-79 `cần cải thiện` · < 50 `kém`
-  Đọc TRỰC TIẾP từ dữ liệu sàn thật (qua bộ lọc §12 của _live.py), không qua mart.
-  Listing chưa có đánh giá -> `rating` null, KHÔNG mặc định.
-"""
-
 import sys
 from pathlib import Path
 from datetime import datetime, timezone

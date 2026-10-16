@@ -1,16 +1,3 @@
-"""
-F34 · GET /api/analytics/tag-gap?categoryId= — tag đối thủ bán chạy có mà mình chưa có.
-
-⚠ Đây là PHÉP TRỪ TẬP HỢP, không phải gợi ý tag từ tiêu đề.
-  Bản cũ (`tag_suggest_service`) làm khớp từ vựng cân IDF — hữu ích lúc tạo
-  listing, nhưng là bài toán KHÁC. SRS mục 3.9.3 đòi: tag mà nhóm dẫn đầu dùng,
-  listing này chưa có. Quyết định E22.
-
-  BR-194  cần >= 10 listing cạnh tranh mới kết luận
-  BR-196  mức tăng truy cập phải là KHOẢNG %, và phải ghi rõ là ước lượng
-  BR-197  xếp giảm dần theo mức tăng ước lượng
-"""
-
 import sys
 from collections import Counter
 from pathlib import Path
@@ -119,13 +106,6 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
 
     thieu.sort(key=lambda x: -x["lift"])   # BR-197
 
-    # Dữ liệu mồi gán tag NGẪU NHIÊN, nên độ vượt trội đo được là nhiễu chứ không
-    # phải tín hiệu. Đo thật 21/09: tag phổ biến nhất trong top 20 chỉ đạt 15%, và
-    # càng mở rộng nhóm càng tụt về ~8% — đúng dấu hiệu của phân bố ngẫu nhiên.
-    # Nói thẳng ra đây, thay vì để người đọc tưởng đã tìm được ngách.
-    # Kiểm tín hiệu có tính tới SỐ LẦN THỬ. Quét 77 tag trên 20 đối thủ thì cỡ
-    # 4 tag sẽ "vượt trội" hoàn toàn do ngẫu nhiên — nhìn lift thôi là dương tính
-    # giả. Đòi thêm: tag phải xuất hiện đủ nhiều để không giải thích được bằng may rủi.
     so_tag_thu = len(dem_dau)
     ky_vong_gia = sum(1 for t in thieu if t["used_by_competitors"] < NGUONG_DEM_TIN_CAY)
     manh = [t for t in thieu if t["used_by_competitors"] >= NGUONG_DEM_TIN_CAY and t["lift"] >= 2.0]

@@ -1,22 +1,3 @@
-"""
-F35 · GET /api/analytics/pricing?productType=&price=&productId= — giá mình đứng đâu.
-
-  BR-198  phân bố tính từ TOP 20 listing theo doanh số, không phải toàn bộ listing.
-          Lý do: listing ế thường để giá bừa, gộp vào làm lệch phân bố.
-
-Endpoint này chạy cho HAI loại shop, và nói rõ mặt bằng so sánh đến từ đâu:
-
-  shop dữ liệu mồi (`shp_00017`)  giá mình và mặt bằng đều từ mart  -> mode seed_demo
-  shop thật trên sàn (ObjectId)   giá mình THẬT, mặt bằng đi tìm theo thứ tự:
-      1. cùng loại phôi POD trong catalog tham chiếu   -> mode derived
-      2. cùng danh mục, giá THẬT của shop khác trên sàn -> mode live
-      3. không đủ cả hai -> insufficient_data, nói rõ thiếu gì
-
-⚠ Quyết định E21: endpoint này KHÔNG hứa "giá nào bán chạy hơn". Đo được chỉ 24/94 loại
-  phôi có thứ tự giá hot > medium > tail, gần mức ngẫu nhiên. Nó chỉ trả lời "giá này
-  đứng ở đâu".
-"""
-
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional

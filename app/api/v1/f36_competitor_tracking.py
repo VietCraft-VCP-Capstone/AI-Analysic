@@ -1,18 +1,3 @@
-"""
-F36 · /api/analytics/competitor-tracking — theo dõi shop đối thủ.
-
-Endpoint DUY NHẤT trong 16 cái có ghi. 15 cái còn lại chỉ đọc.
-
-  BR-201  tối đa 10 shop -> vượt thì 400 {"error":"tracking_limit_reached","limit":10}
-  BR-202  trùng shop -> 400 {"error":"already_tracked"}
-  BR-203  chỉ báo khi sản phẩm mới rơi vào ngách đang hoạt động của người bán
-  BR-204  bỏ theo dõi DỪNG cảnh báo tương lai, KHÔNG xoá cảnh báo cũ
-
-Trạng thái nằm ở `vietcraft-seed.competitor_tracker`. Đây KHÔNG phải mart (mart do
-job ghi, API đọc) mà là dữ liệu người dùng tạo ra, nên không khai trong MART_SCHEMA
-và không đi qua writer.save_model_output().
-"""
-
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
