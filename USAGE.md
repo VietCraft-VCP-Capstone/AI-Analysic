@@ -385,3 +385,9 @@ python tests/test_api_contract.py                  # 12/12
 python scripts/validate_mart.py --all --offline    # 9/9
 python scripts/peek.py listing_daily --limit 3     # xem một bảng trên MongoDB
 ```
+
+
+run dự án 
+```
+.venv/bin/python -m uvicorn app.main:app --port 8000 --reload
+```
