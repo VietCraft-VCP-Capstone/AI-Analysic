@@ -5,8 +5,6 @@ import sys
 import re
 from collections import defaultdict
 
-# Run from anywhere: every module here does `import config`, which only
-# resolves when the script's own directory is the working directory.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
@@ -14,20 +12,8 @@ import config as cfg
 import store_mongo
 
 
-# ---------------------------------------------------------------------------
-# P0.3 -- integrity of the rescaling step
-# ---------------------------------------------------------------------------
-
 def check_integrity(db):
-    """
-    Verify scaled = raw x (one constant factor per batch).
-
-    This is the step everything downstream trusts. Google normalises 0-100
-    inside each request, so points from different batches are not comparable
-    until the anchor rescale puts them on one scale. If the factor is not
-    constant within a batch, the rescale is broken and every cross-keyword
-    comparison -- Gap Score above all -- is meaningless.
-    """
+    """Verify scaled = raw x (one constant factor per batch)."""
     print("=" * 68)
     print("INTEGRITY -- raw -> scaled")
     print("=" * 68)
@@ -53,8 +39,7 @@ def check_integrity(db):
             ratios = {round(d["scaled"] / d["raw"], 3) for d in docs}
             if len(ratios) > 1:
                 spread = max(ratios) / min(ratios)
-                # Rounding to 2dp on both raw and scaled makes tiny values
-                # noisy; only flag a genuinely inconsistent factor.
+                # 2dp rounding makes tiny values noisy; flag only real drift.
                 if spread > 1.05:
                     print(f"  ! {batch_id}: factor not constant, "
                           f"{len(ratios)} distinct values, spread {spread:.2f}x")
@@ -77,10 +62,6 @@ def check_integrity(db):
     print(f"\n{'PASS' if problems == 0 else f'{problems} PROBLEM(S)'}")
     return problems == 0
 
-
-# ---------------------------------------------------------------------------
-# P0.4 -- data quality
-# ---------------------------------------------------------------------------
 
 EXPECTED_STEP = {"weekly": 7, "daily": 1}
 
@@ -128,8 +109,6 @@ def check_quality(db):
         else:
             print("         no gaps")
 
-    # Non-zero ratio is the number that matters. A series of zeros still has
-    # the right point count; it is still useless to a model.
     print("\nnon-zero ratio (weekly)")
     print("-" * 68)
     rows = list(db.trend_interest.aggregate([
@@ -172,10 +151,6 @@ def check_quality(db):
     return rows
 
 
-# ---------------------------------------------------------------------------
-# P1.4 -- forecast eligibility
-# ---------------------------------------------------------------------------
-
 FORECAST_ELIGIBILITY = {
     "min_weekly_points": 104,   # 2 full periods, required by STL(period=52)
     "min_daily_points":   60,   # floor for auto_arima to fit anything useful
@@ -186,14 +161,7 @@ FORECAST_ELIGIBILITY = {
 
 
 def check_eligibility(db, write=False):
-    """
-    Decide which keywords a model is allowed to consume.
-
-    Deliberately separate from `active`. A keyword can be worth collecting
-    (it is a real market signal) while still being unfit for ARIMA, because
-    the series is mostly zeros. Conflating the two is how a forecast on a
-    flat-zero series ends up in a dashboard.
-    """
+    """Decide which keywords a model may consume (separate from `active`)."""
     print("=" * 68)
     print("FORECAST ELIGIBILITY")
     print("=" * 68)
@@ -275,10 +243,6 @@ def check_eligibility(db, write=False):
     return eligible, rejected
 
 
-# ---------------------------------------------------------------------------
-# P1.3 -- the go/no-go number for discovery
-# ---------------------------------------------------------------------------
-
 def normalise(query):
     q = query.lower().strip()
     q = re.sub(r"\s+", " ", q)
@@ -287,12 +251,7 @@ def normalise(query):
 
 
 def check_discovery_stats(db):
-    """
-    Count what discovery would have to work with. Run --related first.
-
-    This is the gate. Build the discovery pipeline only if these numbers say
-    there is something to discover.
-    """
+    """Count what discovery would have to work with. Run --related first."""
     print("=" * 68)
     print("DISCOVERY INPUT")
     print("=" * 68)
@@ -359,8 +318,6 @@ def check_discovery_stats(db):
     return len(relevant)
     
 
-
-# ---------------------------------------------------------------------------
 
 def main():
     ap = argparse.ArgumentParser(

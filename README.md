@@ -16,7 +16,7 @@ Hệ thống được thiết kế theo kiến trúc **Clean Architecture**.
 ## 2. Luồng Dữ liệu (Data Flow)
 
 ### 2.1. Luồng Thu thập & Đồng bộ (Data Ingestion Pipeline)
-1. **Google Trends & Printify**: Module `app/collectors/` thu thập chuỗi thời gian 5 năm (tuần) và 90 ngày (ngày) dựa trên bộ từ khóa trong `app/data/seed_keywords.json`, ghi vào database `data-collection`.
+1. **Google Trends & Printify**: Module `app/collectors/` thu thập chuỗi thời gian 5 năm (tuần) và 90 ngày (ngày) dựa trên bộ từ khóa trong `app/data/seed_keywords.do-not-remove.json`, ghi vào database `data-collection`.
 2. **Seed Data hợp nhất**: Script `app/seed/import_all_seeds.py` đọc các bảng dữ liệu sàn (Shops, Listings, Buyers, Orders, Listing Daily) và nạp dạng `upsert` vào database `vietcraft-seed`.
 
 ### 2.2. Luồng Xử lý AI & Dự báo (Analytics & Forecasting Flow)
@@ -70,7 +70,7 @@ AI-Analysic/
 │   │   └── writer.py         # Ghi kết quả model chuẩn hóa (Upsert idempotent)
 │   ├── data/                 # [TẬP TRUNG] Dữ liệu tĩnh & mốc benchmark (.json)
 │   │   ├── baselines.json    # Sai số baseline Naive 1 & Naive 2 của 40 từ khóa
-│   │   └── seed_keywords.json# Bộ 44 từ khóa hạt giống & 1 từ khóa mốc (anchor)
+│   │   └── seed_keywords.do-not-remove.json# Bộ 44 từ khóa hạt giống & 1 từ khóa mốc (anchor)
 │   ├── seed/                 # Script sinh dữ liệu seed (catalog, behavior, marketplace)
 │   ├── services/             # Mô hình thống kê & thuật toán AI (STL Loess, Z-score)
 │   ├── config.py             # Single Source of Truth Cấu hình (Load .env & app/data/*.json)
@@ -142,7 +142,7 @@ danh sách ra chỗ khác.
 2. **Không tự viết truy vấn DB riêng trong mô hình AI**: Tất cả các mô hình AI bắt buộc đọc dữ liệu qua `app/core/loader.py` và lưu kết quả qua `app/core/writer.py`.
 3. **Mọi module phải có Self-Check**: Mỗi file Python tạo mới phải có khối `if __name__ == "__main__":` thực hiện tự kiểm tra logic độc lập không phụ thuộc test framework.
 4. **Cách thêm từ khóa theo dõi mới**: 
-   - Thêm vào file [app/data/seed_keywords.json](file:///home/rio/Documents/CODE/nodejs/vc-ai/AI-Analysic/app/data/seed_keywords.json) dạng:
+   - Thêm vào file [app/data/seed_keywords.do-not-remove.json](file:///home/rio/Documents/CODE/nodejs/vc-ai/AI-Analysic/app/data/seed_keywords.do-not-remove.json) dạng:
      `{"keyword": "áo mới", "product_type": "tshirt", "topic": "evergreen"}`.
 
 ---

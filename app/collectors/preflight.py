@@ -3,8 +3,6 @@ import importlib
 import os
 import sys
 
-# Run from anywhere: every module here does `import config`, which only
-# resolves when the script's own directory is the working directory.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
@@ -25,8 +23,6 @@ class Fail(Exception):
 class Warn(Exception):
     """Worth knowing, not worth stopping for."""
 
-
-# ---------------------------------------------------------------------------
 
 @check("Python packages")
 def _packages():
@@ -66,13 +62,10 @@ def _env():
     if "REPLACE_ME" in uri or "<password>" in uri:
         raise Fail("MONGODB_URI still has the placeholder password")
 
-    # A password containing @ / : # ? breaks URI parsing unless encoded, and
-    # the resulting error names the wrong host, which is very confusing.
+    # Unencoded @ / : # ? in the password breaks URI parsing.
     if "://" not in uri:
         raise Fail("MONGODB_URI is not a valid connection string")
 
-    # Only look at credentials when there actually are any -- a URI with no
-    # '@' has no user:pass section, and splitting on it grabs the host.
     netloc = uri.split("://", 1)[1]
     if "@" in netloc:
         password = netloc.rsplit("@", 1)[0].partition(":")[2]
@@ -86,19 +79,15 @@ def _env():
     return f"MONGODB_DB={db_name}"
 
 
-
 @check("Atlas connection + permissions")
 def _atlas():
     import store_mongo
-    db = store_mongo.get_db()          # raises with a readable message
+    db = store_mongo.get_db()
     name = db.name
 
-    # A read proves connection; a write proves the grant. Only the write
-    # catches a user with readWrite on the wrong database -- the exact
-    # failure mode when the database gets renamed.
+    # The write test catches readWrite granted on the wrong database.
     db.command("ping")
-    # db["..."] not db.__getattr__: PyMongo refuses attribute access for
-    # names starting with an underscore.
+    # PyMongo forbids attribute access for names starting with "_".
     probe = db["_preflight"]
     probe.update_one({"_id": "probe"}, {"$set": {"ok": True}}, upsert=True)
     probe.delete_one({"_id": "probe"})
@@ -116,8 +105,6 @@ def _config():
     if duplicates:
         problems.append(f"duplicate keywords: {', '.join(sorted(duplicates))}")
 
-    # The anchor rides in every batch, so having it in SEED_KEYWORDS too just
-    # means paying for the same series twice.
     if cfg.ANCHOR in keywords:
         problems.append(f"ANCHOR '{cfg.ANCHOR}' is also in SEED_KEYWORDS "
                         f"-- remove it, it is collected either way")
@@ -159,8 +146,7 @@ def _trends():
 def _budget():
     import config as cfg
     batches = -(-len(cfg.SEED_KEYWORDS) // cfg.BATCH_SIZE)
-    # Verified by counting session.get: one logical call is two HTTP requests,
-    # because Google returns a token first and the data second.
+    # One logical call = 2 HTTP requests (token, then data).
     print(f"\n     {'command':<26}{'calls':>7}{'HTTP':>7}{'minutes':>9}")
     print("     " + "-" * 49)
     pace = (cfg.SLEEP_MIN + cfg.SLEEP_MAX) / 2
@@ -198,8 +184,6 @@ def _existing():
         parts.append(f"{granularity} {n:,}")
     return " | ".join(parts)
 
-
-# ---------------------------------------------------------------------------
 
 def main():
     print("PREFLIGHT -- nothing here spends Google Trends quota\n")

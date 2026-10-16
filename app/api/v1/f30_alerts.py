@@ -8,6 +8,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_LICH_SU, chan_shop_live, dem_ngay_co_don
 from app.api.v1._mart import cua_so, db, ngay_moi_nhat
 from app.api.v1._template import CurrentShop, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -15,10 +17,20 @@ router = APIRouter()
 
 MART = "anomaly_event"
 KY_HAN = {"7d": 7, "30d": 30, "90d": 90, "all": None}
+NGUONG_TUAN = 8                     # §9.2: ≥8 tuần dữ liệu ngày
+NGUONG_NGAY = NGUONG_TUAN * 7       # quy ra ngày có đơn, đếm được trực tiếp
 
 
 @router.get("/api/notifications/alerts", tags=["F30 · Hiếu"])
 def alerts(shop_id: str = CurrentShop, period: str = "90d"):
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "ngày có đơn hàng thật (8 tuần)", "unit": "ngày",
+                  "current": dem_ngay_co_don(shop_id), "target": NGUONG_NGAY}
+    chan = chan_shop_live(shop_id, THIEU_LICH_SU, "orders", unlock=unlock)
+    if chan is not None:
+        return chan
+
     if period not in KY_HAN:
         invalid_param("period", " | ".join(KY_HAN))
 

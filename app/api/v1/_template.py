@@ -1,4 +1,6 @@
+import hmac
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,9 +44,17 @@ def build_meta(
     sample_size: Optional[int] = None,
     identity_linked: bool = False,
     confidence: str = "medium",
+    unlock: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Dựng khối `meta` đúng hợp đồng. Ba trường cổng ra kiểm là
-    computed_at · model_version · scope — không trường nào được để trống."""
+    computed_at · model_version · scope — không trường nào được để trống.
+
+    `unlock` (§9.2): khi một tính năng bị `insufficient_data`/`partial` vì thiếu dữ liệu
+    sàn thật, đây là con số "đang có bao nhiêu / cần bao nhiêu" để FE vẽ thanh tiến độ
+    thay vì chỉ một câu thông báo chay. Hình dạng cố định:
+        {"requirement": "đơn thật", "current": 12, "target": 20, "unit": "đơn"}
+    Để `None` khi không áp dụng (ví dụ mart dữ liệu mồi chạy bình thường).
+    """
     if mode not in SOURCE_MODES:
         raise ValueError(f"source.mode phải thuộc {SOURCE_MODES}, nhận được {mode!r}")
 
@@ -56,7 +66,7 @@ def build_meta(
             "shop thật là trình bày sai nguồn — đây là lỗi nghiệm thu, không phải cảnh báo."
         )
 
-    return {
+    meta: Dict[str, Any] = {
         "status": STATUS_OK,          # ok() / insufficient() ghi đè lại
         "computed_at": computed_at or _now_iso(),
         "model_version": model_version,
@@ -74,6 +84,9 @@ def build_meta(
             "confidence": confidence,
         },
     }
+    if unlock is not None:
+        meta["unlock"] = unlock
+    return meta
 
 
 def meta_from_record(
@@ -203,6 +216,26 @@ def _dev_tin_header() -> bool:
     return os.getenv("DEV_TRUST_SHOP_HEADER", "").strip() == "1"
 
 
+# ---------------------------------------------------------------------------
+# ĐƯỜNG GATEWAY — BE sàn gọi thay người bán (đường chạy thật)
+#
+# FE không bao giờ gọi thẳng service này. Người bán đăng nhập ở BE sàn, BE kiểm
+# JWT + vai trò seller, tự tra shop của người đó, rồi gọi sang đây kèm:
+#     X-Gateway-Secret: <AI_GATEWAY_SECRET>     bí mật dùng chung BE <-> AI
+#     X-Shop-Id:        <shop mà BE đã xác thực>
+# Nhờ vậy service không cần biết khoá ký JWT của sàn — một bí mật, một chỗ đổi.
+#
+# Secret sai thì 401 luôn, KHÔNG rơi xuống các nhánh dev bên dưới: người gửi header
+# gateway mà sai secret là đang thử mạo danh BE, không phải đang chạy thử.
+# ---------------------------------------------------------------------------
+
+_SHOP_ID_HOP_LE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _gateway_secret() -> str:
+    return os.getenv("AI_GATEWAY_SECRET", "").strip()
+
+
 def che_do_xac_thuc() -> str:
     """Mô tả một dòng cho banner khởi động. Trả chuỗi rỗng khi xác thực đang BẬT."""
     if _dev_shop_id():
@@ -233,10 +266,15 @@ def current_shop_id(
     x_shop_id: Optional[str] = Header(default=None),
 ) -> str:
     """Dependency trả về shop_id của người đang gọi."""
-    # 0. Xác thực giữa Backend và AI Service qua Gateway Secret
-    gateway_secret = os.getenv("AI_GATEWAY_SECRET", "").strip()
-    if gateway_secret and x_gateway_secret == gateway_secret and x_shop_id:
-        return x_shop_id
+    if x_gateway_secret is not None:
+        bi_mat = _gateway_secret()
+        # compare_digest: so theo thời gian hằng số, không lộ độ dài khớp qua độ trễ.
+        if not bi_mat or not hmac.compare_digest(x_gateway_secret.encode(), bi_mat.encode()):
+            raise HTTPException(status_code=401, detail={"error": "unauthorized"})
+        shop = x_shop_id or ""
+        if not _SHOP_ID_HOP_LE.match(shop):
+            invalid_param("X-Shop-Id", "mã shop do gateway gửi, [A-Za-z0-9_-]{1,64}")
+        return shop
 
     dev = _dev_shop_id()
 
@@ -297,6 +335,11 @@ if __name__ == "__main__":
         raise AssertionError("phải chặn source.mode lạ")
     except ValueError:
         print("✓ chặn source.mode ngoài live/seed_demo/derived")
+
+    m = build_meta(unlock={"requirement": "đơn thật", "current": 3, "target": 20, "unit": "đơn"})
+    assert m["unlock"] == {"requirement": "đơn thật", "current": 3, "target": 20, "unit": "đơn"}
+    assert "unlock" not in build_meta(), "không truyền unlock thì không được tự bịa ra field này"
+    print("✓ build_meta(unlock=...) gắn đúng field, mặc định không có")
 
     for fn, code in ((lambda: mart_not_ready("mart_demand"), 503),
                      (lambda: invalid_param("timeRange", "7d|30d|90d"), 400),

@@ -15,18 +15,26 @@ from app.config import settings
 _client: Optional[MongoClient] = None
 
 
-def db():
+def client_dung_chung() -> MongoClient:
     """Một MongoClient dùng chung cho cả tiến trình.
 
     Tạo client mới mỗi request là mỗi lần bắt tay TLS lại với Atlas — thêm
     khoảng 100ms và tốn kết nối của cụm dùng chung. MongoClient vốn an toàn
     khi dùng nhiều luồng, nên giữ một cái là đúng.
+
+    `_live.py` dùng lại chính client này để đọc database sàn thật, nên hai miền
+    dữ liệu chỉ tốn một pool kết nối.
     """
     global _client
     if _client is None:
         _client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=10000,
                               maxPoolSize=20, retryWrites=True)
-    return _client[settings.MONGO_DB_SEED]
+    return _client
+
+
+def db():
+    """Database dữ liệu mồi và mart (`vietcraft-seed`)."""
+    return client_dung_chung()[settings.MONGO_DB_SEED]
 
 
 KHOANG_HOP_LE = {"7d": 7, "30d": 30, "90d": 90, "180d": 180, "365d": 365, "1y": 365}

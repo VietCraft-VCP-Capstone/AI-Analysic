@@ -8,6 +8,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_DOI_THU, chan_shop_live, dem_shop_cung_danh_muc
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, mart_not_ready, meta_from_record, ok
 
@@ -16,6 +18,7 @@ router = APIRouter()
 MART = "mart_competitor"
 TOI_THIEU_LISTING = 5       # BR-193
 SO_DOI_THU = 5              # BR-191
+NGUONG_SHOP_CUNG_DM = 5     # §9.2: ≥5 shop cùng danh mục
 
 TRUC = ["listing_count", "avg_rating", "response_speed", "avg_price", "product_diversity"]
 TEN_TRUC_VI = ["Số sản phẩm", "Điểm đánh giá", "Tốc độ phản hồi", "Giá trung bình", "Độ đa dạng"]
@@ -33,6 +36,14 @@ def _chuan_hoa(gia_tri, tat_ca):
 
 @router.get("/api/analytics/shop-comparison", tags=["F33 · Nhi"])
 def shop_comparison(shop_id: str = CurrentShop):
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "shop cùng danh mục", "unit": "shop",
+                  "current": dem_shop_cung_danh_muc(shop_id), "target": NGUONG_SHOP_CUNG_DM}
+    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "shops", unlock=unlock)
+    if chan is not None:
+        return chan
+
     coll = db()[MART]
     if coll.estimated_document_count() == 0:
         mart_not_ready(MART)

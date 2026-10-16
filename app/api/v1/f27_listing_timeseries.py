@@ -7,6 +7,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_LUOT_XEM, chan_shop_live, dem_luot_xem_listing_30ngay
 from app.api.v1._mart import cua_so, db, doc_khoang, ngay_moi_nhat, tien, ty_le_chuyen_doi
 from app.api.v1._template import CurrentShop, forbidden, insufficient, mart_not_ready, build_meta, not_found, ok
 
@@ -14,6 +16,7 @@ router = APIRouter()
 
 TOI_THIEU_NGAY = 7
 NGUONG_DOC = 5.0        # BR-178: ±5% mỗi ngày so với mức trung bình
+NGUONG_LUOT_XEM = 100   # §9.2: ≥100 lượt xem/listing/30 ngày
 
 
 def _xu_huong(gia_tri):
@@ -37,6 +40,14 @@ def _xu_huong(gia_tri):
 
 @router.get("/api/analytics/listings/{id}/timeseries", tags=["F27 · Hiếu"])
 def listing_timeseries(id: str, shop_id: str = CurrentShop, timeRange: str = "30d"):
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "lượt xem/listing, 30 ngày", "unit": "lượt xem",
+                  "current": dem_luot_xem_listing_30ngay(id), "target": NGUONG_LUOT_XEM}
+    chan = chan_shop_live(shop_id, THIEU_LUOT_XEM, "product_events", unlock=unlock)
+    if chan is not None:
+        return chan
+
     so_ngay = doc_khoang(timeRange)
 
     l = db()["listings"].find_one({"listing_id": id},
