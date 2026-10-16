@@ -1,19 +1,3 @@
-"""
-test_api_contract.py — Giữ 16 endpoint không trôi khỏi docs/API_CONTRACT.md.
-
-Test này KHÔNG kiểm tính năng đúng hay sai. Nó kiểm HÌNH DẠNG: đường dẫn có đúng
-hợp đồng không, mọi phản hồi có đủ khối `meta` không, lỗi có đúng mã và đúng body
-không. Tính năng của ai người nấy test riêng.
-
-Vì sao cần: hợp đồng là file .md, không ai ép được. 5 người sửa 16 endpoint trong
-6 tuần thì chắc chắn có chỗ trôi — đổi tên trường, quên `meta`, trả 0 thay vì
-`insufficient_data`. Test đỏ ngay hôm đó rẻ hơn phát hiện lúc ghép với FE.
-
-Chạy:
-    .venv/bin/python tests/test_api_contract.py          # không cần pytest
-    .venv/bin/python -m pytest tests/ -q                 # sau khi INFRA-02 xong
-"""
-
 import os
 import re
 import sys
@@ -23,15 +7,8 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-# Test tự đặt trạng thái xác thực, KHÔNG để .env của từng máy quyết định — nếu không
-# thì ai bật DEV_SHOP_ID trong .env sẽ thấy test_khong_token_thi_401 đỏ mà không hiểu vì sao.
 os.environ["DEV_TRUST_SHOP_HEADER"] = "1"   # cần shop_id vì SPEC-04 chưa xong
 os.environ["DEV_SHOP_ID"] = ""              # nhưng KHÔNG tắt hẳn xác thực
-
-# Đặt "" chứ không phải pop(): app/.env được nạp lúc import app.config (qua
-# _template), tức là SAU đoạn này. `load_dotenv(override=False)` không ghi đè biến
-# đã tồn tại — kể cả khi giá trị là chuỗi rỗng — nên đặt "" mới chặn được
-# DEV_SHOP_ID trong .env của từng máy. pop() thì .env điền lại và test đỏ oan.
 
 from fastapi.testclient import TestClient
 
@@ -120,6 +97,48 @@ def test_mac_dinh_xac_thuc_van_bat():
     finally:
         if cu is not None:
             os.environ["DEV_TRUST_SHOP_HEADER"] = cu
+
+
+def test_gateway_be_san():
+    """Đường chạy thật: BE sàn xác thực người bán rồi gọi kèm X-Gateway-Secret + X-Shop-Id.
+
+    Secret sai hoặc service chưa đặt secret -> 401, KHÔNG rơi xuống nhánh dev.
+    Không cần MongoDB: mọi nhánh dưới đây dừng ở tầng xác thực.
+    """
+    from fastapi import HTTPException
+
+    from app.api.v1._template import current_shop_id
+
+    def goi(secret, shop="shp_00017"):
+        return current_shop_id(authorization=None, x_debug_shop_id=None,
+                               x_gateway_secret=secret, x_shop_id=shop)
+
+    def ma_loi(fn):
+        try:
+            fn()
+        except HTTPException as e:
+            return e.status_code
+        return None
+
+    cu = os.environ.get("AI_GATEWAY_SECRET")
+    try:
+        os.environ["AI_GATEWAY_SECRET"] = ""
+        assert ma_loi(lambda: goi("bat-ky")) == 401, "chưa đặt secret mà gateway vẫn qua"
+
+        os.environ["AI_GATEWAY_SECRET"] = "bi-mat-dung"
+        assert goi("bi-mat-dung") == "shp_00017", "secret đúng phải trả X-Shop-Id"
+        assert ma_loi(lambda: goi("bi-mat-sai")) == 401, "secret sai phải 401"
+        assert ma_loi(lambda: goi("bi-mat-dung", shop="../shp")) == 400, "X-Shop-Id lạ phải 400"
+
+        r = client.get("/api/analytics/shop/overview",
+                       headers={**SHOP, "X-Gateway-Secret": "bi-mat-sai", "X-Shop-Id": "shp_00017"})
+        assert r.status_code == 401, "secret sai không được rơi xuống nhánh X-Debug-Shop-Id"
+        assert r.json() == {"error": "unauthorized"}
+    finally:
+        if cu is None:
+            os.environ.pop("AI_GATEWAY_SECRET", None)
+        else:
+            os.environ["AI_GATEWAY_SECRET"] = cu
 
 
 def test_body_loi_khong_boc_trong_detail():

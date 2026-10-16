@@ -1,5 +1,0 @@
-﻿setting_key,setting_value,value_type,description_vi,is_editable,updated_at
-usd_vnd_rate,26000,int,Tỷ giá quy đổi USD sang VND cố định của hệ thống,True,2026-08-31T16:38:21.843899+00:00
-min_margin,1.6,decimal,Hệ số lợi nhuận sàn cứng (Giá bán tối thiểu = Giá vốn x 1.6),True,2026-08-31T16:38:21.843899+00:00
-default_margin_low,2.0,decimal,Đầu dưới khoảng lợi nhuận gợi ý mặc định,True,2026-08-31T16:38:21.843899+00:00
-default_margin_high,3.0,decimal,Đầu trên khoảng lợi nhuận gợi ý mặc định,True,2026-08-31T16:38:21.843899+00:00

@@ -1,10 +1,3 @@
-"""
-F40 · GET /api/analytics/forecast/radar — 10 tag nóng lên nhanh nhất tuần này.
-
-  BR-212  radar chỉ vẽ danh mục lớn; tag chi tiết nằm ở danh sách bên dưới
-  BR-213  Momentum cần >= 100 lượt tìm/tuần — CHƯA ÁP DỤNG ĐƯỢC, xem `limitation`
-"""
-
 import sys
 from collections import defaultdict
 from pathlib import Path

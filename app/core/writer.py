@@ -1,12 +1,3 @@
-"""
-writer.py — Module ghi kết quả chuẩn hóa cho toàn bộ các mô hình AI VietCraft.
-Đảm bảo mọi dòng ghi ra database đều có 3 trường:
-  - run_id: Mã lần chạy model
-  - model_version: Phiên bản model
-  - computed_at: Thời gian tính (ISO UTC)
-Chống ghi trùng lặp (idempotent upsert).
-"""
-
 import os
 import sys
 import uuid

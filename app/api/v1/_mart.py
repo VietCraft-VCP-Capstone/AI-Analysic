@@ -1,13 +1,3 @@
-"""
-_mart.py — Lớp đọc dữ liệu dùng chung cho 16 endpoint F26–F41.
-
-Chỉ ĐỌC. Không endpoint nào được ghi (trừ F36 quản lý danh sách theo dõi).
-Job chạy đêm ghi bằng `app/core/writer.py`, không phải ở đây.
-
-Vì sao tách ra khỏi `_template.py`: file kia thuần khuôn phản hồi, không đụng
-MongoDB, nên test được mà không cần mạng. File này mới là chỗ nối database.
-"""
-
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -25,21 +15,29 @@ from app.config import settings
 _client: Optional[MongoClient] = None
 
 
-def db():
+def client_dung_chung() -> MongoClient:
     """Một MongoClient dùng chung cho cả tiến trình.
 
     Tạo client mới mỗi request là mỗi lần bắt tay TLS lại với Atlas — thêm
     khoảng 100ms và tốn kết nối của cụm dùng chung. MongoClient vốn an toàn
     khi dùng nhiều luồng, nên giữ một cái là đúng.
+
+    `_live.py` dùng lại chính client này để đọc database sàn thật, nên hai miền
+    dữ liệu chỉ tốn một pool kết nối.
     """
     global _client
     if _client is None:
         _client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=10000,
                               maxPoolSize=20, retryWrites=True)
-    return _client[settings.MONGO_DB_SEED]
+    return _client
 
 
-KHOANG_HOP_LE = {"7d": 7, "30d": 30, "90d": 90}
+def db():
+    """Database dữ liệu mồi và mart (`vietcraft-seed`)."""
+    return client_dung_chung()[settings.MONGO_DB_SEED]
+
+
+KHOANG_HOP_LE = {"7d": 7, "30d": 30, "90d": 90, "180d": 180, "365d": 365, "1y": 365}
 
 
 def doc_khoang(time_range: str) -> int:

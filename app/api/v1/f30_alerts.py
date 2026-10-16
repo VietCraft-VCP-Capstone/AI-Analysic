@@ -1,13 +1,3 @@
-"""
-F30 · GET /api/notifications/alerts — ngày doanh thu tụt/vọt bất thường.
-
-Đường dẫn theo SRS (`/api/notifications/...`), không phải `/api/analytics/...`.
-
-  ⚠ Ngưỡng |z| > 7.0, KHÔNG phải 2.0 như BR-183. Nhóm đo thực nghiệm: ngưỡng 2.0
-    cho 7,38% báo động giả, ngưỡng 7.0 còn 0,6%. Đã ghi lệch vào docs/SPEC_CHANGES.md.
-  BR-184  chỉ gửi email khi người bán bật "Cảnh báo hiệu suất" — ngoài phạm vi API này
-"""
-
 import sys
 from pathlib import Path
 from typing import Optional
@@ -18,6 +8,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_LICH_SU, chan_shop_live, dem_ngay_co_don
 from app.api.v1._mart import cua_so, db, ngay_moi_nhat
 from app.api.v1._template import CurrentShop, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -25,10 +17,20 @@ router = APIRouter()
 
 MART = "anomaly_event"
 KY_HAN = {"7d": 7, "30d": 30, "90d": 90, "all": None}
+NGUONG_TUAN = 8                     # §9.2: ≥8 tuần dữ liệu ngày
+NGUONG_NGAY = NGUONG_TUAN * 7       # quy ra ngày có đơn, đếm được trực tiếp
 
 
 @router.get("/api/notifications/alerts", tags=["F30 · Hiếu"])
 def alerts(shop_id: str = CurrentShop, period: str = "90d"):
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "ngày có đơn hàng thật (8 tuần)", "unit": "ngày",
+                  "current": dem_ngay_co_don(shop_id), "target": NGUONG_NGAY}
+    chan = chan_shop_live(shop_id, THIEU_LICH_SU, "orders", unlock=unlock)
+    if chan is not None:
+        return chan
+
     if period not in KY_HAN:
         invalid_param("period", " | ".join(KY_HAN))
 
@@ -45,9 +47,6 @@ def alerts(shop_id: str = CurrentShop, period: str = "90d"):
 
     rows = list(coll.find(loc, {"_id": 0}).sort("event_date", -1))
 
-    # Shop không có cảnh báo nào là KẾT QUẢ HỢP LỆ, không phải thiếu dữ liệu.
-    # Nhưng phải phân biệt với "shop này bị loại khỏi phép dò vì chuỗi quá thưa" —
-    # hai chuyện khác hẳn, và người bán cần biết mình thuộc loại nào.
     duoc_do = coll.count_documents({"entity_id": shop_id}) > 0
     mau = rows[0] if rows else coll.find_one({}, {"_id": 0})
     meta = meta_from_record(mau, scope="shop", scope_id=shop_id, collection=MART,

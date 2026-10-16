@@ -29,7 +29,7 @@ VALID_PROVINCE_CODES = {
     "094", "095", "096",
 }
 
-# 1. XÁC THỰC SỐ CCCD
+
 def validate_cccd_number(raw: str) -> Dict[str, Any]:
     """Kiểm tra cấu trúc số CCCD 12 số theo quy chuẩn Bộ Công an.
 
@@ -74,8 +74,8 @@ def validate_cccd_number(raw: str) -> Dict[str, Any]:
         result["is_valid"] = True
 
     return result
-    
-# 2. KIỂM TRA CHẤT LƯỢNG ẢNH
+
+
 def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
     """Kiểm tra chất lượng ảnh CCCD: độ phân giải, mờ (blur), độ sáng."""
     import cv2
@@ -116,7 +116,6 @@ def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
     return result
 
 
-# 3. PHÁT HIỆN CHỤP LẠI TỪ MÀN HÌNH (Moiré Pattern)
 def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
     """Phát hiện ảnh chụp lại từ màn hình bằng phân tích tần số FFT."""
     import cv2
@@ -144,7 +143,7 @@ def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
         if is_screen_capture else None,
     }
 
-# 4. PHÁT HIỆN BỐ CỤC CCCD (Layout Detection)
+
 FRONT_KEYWORDS = [
     "CĂN CƯỚC", "CÔNG DÂN", "CITIZEN", "CARD",
     "Họ và tên", "Full name", "Sinh", "Date of birth",
@@ -194,7 +193,6 @@ def detect_cccd_layout(ocr_texts: List[str], side: str = "front") -> Dict[str, A
         if not is_valid else None,
     }
 
-# 5. TRÍCH XUẤT THÔNG TIN TỪ OCR (Parsing)
 
 def _clean_text(text: str) -> str:
     """Loại bỏ ký tự thừa, chuẩn hóa khoảng trắng."""
@@ -264,7 +262,6 @@ def _extract_date(texts: List[str], label_patterns: List[str]) -> Optional[str]:
                           combined, re.IGNORECASE)
         if match:
             raw = match.group(1)
-            # Chuẩn hóa dấu phân cách
             parts = re.split(r"[\s/\-\.]+", raw)
             if len(parts) == 3:
                 d, m, y = parts
@@ -486,12 +483,10 @@ def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
         checks["has_name"] = bool(ocr_data.get("full_name"))
         checks["has_dob"] = bool(ocr_data.get("date_of_birth"))
 
-    # Điểm tin cậy tổng hợp
     total_checks = len(checks)
     passed_checks = sum(1 for v in checks.values() if v)
     confidence = round(passed_checks / total_checks, 2) if total_checks > 0 else 0
 
-    # Tổng hợp cảnh báo
     warnings: List[str] = []
     warnings.extend(quality.get("warnings", []))
     if screen_check.get("warning"):

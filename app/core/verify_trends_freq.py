@@ -1,11 +1,3 @@
-"""
-verify_trends_freq.py — Kiểm tra tần suất và tính toàn vẹn của chuỗi Google Trends.
-Đảm bảo:
-  1. Chuỗi theo tuần kết thúc đúng vào Chủ nhật (W-SUN).
-  2. Chuỗi theo ngày không bị thiếu ngày nào trong 90 ngày quan sát.
-Xuất báo cáo chi tiết vào docs/qc/trends_freq.md.
-"""
-
 import os
 import sys
 import pandas as pd

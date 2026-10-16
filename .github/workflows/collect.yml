@@ -1,12 +1,5 @@
 name: collect trends
 
-# This file MUST live at  .github/workflows/collect.yml  in the repo root.
-# GitHub reads workflows from that one path only; anywhere else is ignored
-# silently.
-#
-# The collector code lives deeper in the tree, so every step sets
-# working-directory. Change DATA_DIR if you move the folder.
-
 on:
   schedule:
     - cron: "0 22 * * *"      # 05:00 VN

@@ -1,16 +1,3 @@
-"""
-F34 · GET /api/analytics/tag-gap?categoryId= — tag đối thủ bán chạy có mà mình chưa có.
-
-⚠ Đây là PHÉP TRỪ TẬP HỢP, không phải gợi ý tag từ tiêu đề.
-  Bản cũ (`tag_suggest_service`) làm khớp từ vựng cân IDF — hữu ích lúc tạo
-  listing, nhưng là bài toán KHÁC. SRS mục 3.9.3 đòi: tag mà nhóm dẫn đầu dùng,
-  listing này chưa có. Quyết định E22.
-
-  BR-194  cần >= 10 listing cạnh tranh mới kết luận
-  BR-196  mức tăng truy cập phải là KHOẢNG %, và phải ghi rõ là ước lượng
-  BR-197  xếp giảm dần theo mức tăng ước lượng
-"""
-
 import sys
 from collections import Counter
 from pathlib import Path
@@ -22,6 +9,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_DOI_THU, chan_shop_live, dem_shop_cung_danh_muc
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -32,11 +21,21 @@ TOI_THIEU_DOI_THU = 10      # BR-194
 SO_DAN_DAU = 20             # "nhóm dẫn đầu" = top 20 theo est_sales_90d
 TOI_THIEU_DUNG = 2          # tag phải xuất hiện ít nhất 2 lần trong nhóm dẫn đầu
 NGUONG_VUOT_TROI = 1.3      # nhóm dẫn đầu phải dùng tag này nhiều hơn mặt bằng >= 30%
+TRAN_UOC_LUONG = 25         # trần % traffic dám ước lượng — trên mức này là hứa hão
 NGUONG_DEM_TIN_CAY = 5      # dưới 5/20 lần thì không phân biệt được với may rủi
+NGUONG_SHOP_CUNG_DM = 5     # §9.2: ≥5 shop cùng danh mục
 
 
 @router.get("/api/analytics/tag-gap", tags=["F34 · Đạt"])
 def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "shop cùng danh mục", "unit": "shop",
+                  "current": dem_shop_cung_danh_muc(shop_id), "target": NGUONG_SHOP_CUNG_DM}
+    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "products", unlock=unlock)
+    if chan is not None:
+        return chan
+
     coll = db()[MART]
     if coll.estimated_document_count() == 0:
         mart_not_ready(MART)
@@ -77,13 +76,11 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             continue
         share_dau = n / len(dan_dau)
         share_ca = dem_ca[tag] / len(doi_thu) if dem_ca[tag] else 0
-        # ĐỘ VƯỢT TRỘI, không phải tỉ lệ tuyệt đối. Câu hỏi đúng không phải "bao
-        # nhiêu đối thủ dùng tag này" mà "nhóm BÁN CHẠY có dùng nó nhiều hơn mặt
-        # bằng chung không". Tỉ lệ tuyệt đối cao vẫn vô nghĩa nếu ai cũng dùng.
         vuot = round(share_dau / share_ca, 2) if share_ca else None
         if vuot is None or vuot < NGUONG_VUOT_TROI:
             continue
-        thap = max(3, round((vuot - 1) * 20))
+        cao = min(TRAN_UOC_LUONG, max(6, round((vuot - 1) * 20) * 2))
+        thap = max(3, cao // 2)
         thieu.append({
             "tag_id": tag,
             "name": ten_tag.get(tag, tag),
@@ -92,20 +89,13 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             "category_share_pct": round(share_ca * 100),
             "lift": vuot,
             "estimated_traffic_gain": {
-                "low_pct": thap, "high_pct": min(25, thap * 2),
+                "low_pct": thap, "high_pct": cao,
                 "basis": "correlational",
             },
         })
 
-    thieu.sort(key=lambda x: -x["lift"])   # BR-197
+    thieu.sort(key=lambda x: -x["lift"])
 
-    # Dữ liệu mồi gán tag NGẪU NHIÊN, nên độ vượt trội đo được là nhiễu chứ không
-    # phải tín hiệu. Đo thật 21/09: tag phổ biến nhất trong top 20 chỉ đạt 15%, và
-    # càng mở rộng nhóm càng tụt về ~8% — đúng dấu hiệu của phân bố ngẫu nhiên.
-    # Nói thẳng ra đây, thay vì để người đọc tưởng đã tìm được ngách.
-    # Kiểm tín hiệu có tính tới SỐ LẦN THỬ. Quét 77 tag trên 20 đối thủ thì cỡ
-    # 4 tag sẽ "vượt trội" hoàn toàn do ngẫu nhiên — nhìn lift thôi là dương tính
-    # giả. Đòi thêm: tag phải xuất hiện đủ nhiều để không giải thích được bằng may rủi.
     so_tag_thu = len(dem_dau)
     ky_vong_gia = sum(1 for t in thieu if t["used_by_competitors"] < NGUONG_DEM_TIN_CAY)
     manh = [t for t in thieu if t["used_by_competitors"] >= NGUONG_DEM_TIN_CAY and t["lift"] >= 2.0]

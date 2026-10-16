@@ -1,0 +1,20 @@
+.env
+**/.env
+.env.local
+**/.env.local
+
+# Môi trường ảo & cache biên dịch của máy dev
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Lịch sử git, CI cục bộ — không cần trong ảnh chạy
+.git/
+.github/
+
+# Rác tạm / log cục bộ
+preflight_out.txt

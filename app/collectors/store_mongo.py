@@ -1,20 +1,4 @@
-"""
-MongoDB Atlas storage for the trend collectors.
 
-    pip install "pymongo[srv]"
-    export MONGODB_URI="mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/"
-
-Collections
------------
-trend_keyword     one doc per keyword
-trend_interest    one doc per (keyword, date, granularity, geo)
-trend_related     one doc per (keyword, query, kind, date, geo)
-collector_run     one doc per collector run -- the audit trail
-
-Every write is an upsert on a unique index, so re-running a job is safe.
-That matters: the daily job re-pulls the whole 90-day window each night to
-heal any gap left by a failed run, and upserts keep that from duplicating.
-"""
 
 import datetime as dt
 import os
@@ -31,13 +15,7 @@ DB_NAME = os.environ.get("MONGODB_DB", "data-collection")
 
 
 def get_db(uri=None, db_name=None):
-    """
-    Connect and hand back a database handle.
-
-    The database name comes from --mongo-db, then MONGODB_DB, then the
-    default. Any database in the connection string path is ignored on
-    purpose -- being explicit here beats a surprise from a copied URI.
-    """
+    """Connect to Atlas; db name from --mongo-db, then MONGODB_DB, then the default."""
     global DB_NAME
     uri = uri or os.environ.get("MONGODB_URI")
     if not uri:
@@ -119,19 +97,7 @@ def finish_run(db, run_id, status, rows_written, note=""):
 
 
 def upsert_keywords(db, seed_keywords, anchor):
-    """
-    Make Atlas match config.py exactly.
-
-    Upserting alone is not enough. The collectors read their keyword list from
-    Atlas, not from config.py, so a keyword deleted from config but left
-    active in the database keeps getting collected forever. The same goes for
-    a former anchor: leave is_anchor set on it and you end up with two, and
-    which one wins is down to sort order.
-
-    So this deactivates anything no longer in config, and clears is_anchor
-    from everything that is not the current anchor. Nothing is deleted --
-    old rows stay in trend_interest, they just stop being refreshed.
-    """
+    """Sync Atlas with config: upsert seeds, retire removed ones, keep a single anchor."""
     wanted = {k for k, _, _ in seed_keywords} | {anchor}
 
     ops = [
@@ -210,7 +176,6 @@ def write_interest(db, payload):
     ops = []
     for keyword, rec in payload["series"].items():
         for point in rec["points"]:
-            # Store the date as a real datetime so Mongo can sort and range it.
             observed = dt.datetime.fromisoformat(point["date"]).replace(
                 tzinfo=dt.timezone.utc)
             ops.append(UpdateOne(
@@ -269,7 +234,7 @@ def write_related(db, payload):
 
 
 def health(db):
-    """`--mongo-health` -- proof for yourself and for the defence."""
+    """Print the `--mongo-health` summary."""
     points = db.trend_interest.count_documents({})
     keywords = len(db.trend_interest.distinct("keyword"))
     print(f"{points} points across {keywords} keywords\n")

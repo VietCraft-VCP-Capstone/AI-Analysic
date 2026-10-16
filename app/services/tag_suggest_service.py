@@ -161,8 +161,6 @@ class TagSuggestService:
         return rows[:top_k]
 
 
-# --------------------------------------------------------------------------- #
-
 def load_from_csv(data_dir: str = DATA_DIR,
                   exclude_aliases: Optional[Set[Tuple[str, str]]] = None) -> TagSuggestService:
     def read(name: str) -> List[Dict[str, str]]:

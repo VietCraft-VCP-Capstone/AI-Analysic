@@ -1,68 +1,122 @@
-"""
-F29 · GET /api/analytics/listings/{id}/health — điểm sức khoẻ 0-100 kèm việc cần sửa.
-
-  BR-181  chấm lại mỗi 24h (job build_marts chạy đêm)
-  BR-182  >= 80 `tốt` · 50-79 `cần cải thiện` · < 50 `kém`
-          Trọng số phải cộng đúng 1.0 — cổng ra kiểm
-  Listing chưa có đánh giá -> `rating_shrunk: null`, KHÔNG mặc định 4.0 sao
-"""
-
 import sys
 from pathlib import Path
+from datetime import datetime, timezone
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from fastapi import APIRouter
+from typing import Optional
 
-from app.api.v1._mart import db
-from app.api.v1._template import CurrentShop, forbidden, insufficient, mart_not_ready, meta_from_record, not_found, ok
+from fastapi import APIRouter
+from bson import ObjectId
+from pydantic import BaseModel, Field
+
+from app.api.v1._live import db_live, la_shop_live
+from app.api.v1._template import CurrentShop, forbidden, insufficient, meta_from_record, not_found, ok, build_meta
+from app.core.f29.calculator import HealthScoreCalculator
+from app.core.f29.preview import preview_health
 
 router = APIRouter()
 
-MART = "listing_health"
+
+def _kiem_quyen_listing(id: str, shop_id: str) -> None:
+    """404 nếu listing không có, 403 nếu listing thuộc shop khác."""
+    try:
+        product_id = ObjectId(id)
+    except Exception:
+        not_found("listing")
+    product = db_live()["products"].find_one({"_id": product_id}, {"_id": 1, "shop_id": 1})
+    if not product:
+        not_found("listing")
+    if product.get("shop_id") != ObjectId(shop_id):
+        forbidden()
 
 
 @router.get("/api/analytics/listings/{id}/health", tags=["F29 · Hạt"])
 def health(id: str, shop_id: str = CurrentShop):
-    l = db()["listings"].find_one({"listing_id": id}, {"_id": 0, "shop_id": 1})
-    if l is None:
-        not_found("listing")
-    if l.get("shop_id") != shop_id:
-        forbidden()
+    """Đọc điểm sức khoẻ trực tiếp từ listing_health_scores collection."""
 
-    coll = db()[MART]
-    if coll.estimated_document_count() == 0:
-        mart_not_ready(MART)
-
-    r = coll.find_one({"listing_id": id}, {"_id": 0}, sort=[("date", -1)])
-    if r is None:
-        return insufficient(f"Listing `{id}` chưa được chấm điểm — job chấm mỗi 24h, "
-                            f"listing mới tạo phải chờ lượt chạy tới")
-
-    meta = meta_from_record(r, scope="listing", scope_id=id, collection=MART,
-                            mode="seed_demo", sample_size=r.get("n_reviews", 0),
-                            confidence="high" if not r.get("axes_missing") else "medium")
-
-    if r.get("health_score") is None:
+    if not la_shop_live(shop_id):
         return insufficient(
-            "Không trục nào đủ dữ liệu để chấm điểm listing này", meta)
+            "Cần cấu hình gian hàng trước khi xem sức khoẻ listing",
+            build_meta(scope="listing", scope_id=id, database="vietcraft", mode="live")
+        )
+
+    _kiem_quyen_listing(id, shop_id)
+
+    calculator = HealthScoreCalculator()
+    result = calculator.calculate(id)
+
+    if result is None:
+        return insufficient(
+            "Sản phẩm này không hợp lệ để chấm điểm",
+            build_meta(scope="listing", scope_id=id, database="vietcraft", mode="live")
+        )
+
+    score = result.get("score")
+    status = result.get("status")
+    axes = result.get("axes", {})
+    axes_missing = result.get("axes_missing", [])
+
+    if score is None:
+        return insufficient(
+            "Không đủ dữ liệu để chấm điểm sản phẩm này",
+            build_meta(
+                scope="listing",
+                scope_id=id,
+                database="vietcraft",
+                mode="live",
+                attributed_to_live_shop=True,
+                confidence="low"
+            )
+        )
+
+    meta = build_meta(
+        computed_at=result.get("computed_at"),
+        model_version=result.get("model_version", "health-1.0"),
+        scope="listing",
+        scope_id=id,
+        database="vietcraft",
+        collection="products",
+        mode="live",
+        attributed_to_live_shop=True,
+        sample_size=None,
+        confidence="high" if not axes_missing else "medium"
+    )
 
     return ok({
-        "listing_id": id,
-        "title": r.get("title"),
-        "date": r["date"],
-        "health_score": r["health_score"],
-        "band": r["band"],
-        "conversion_rate": r.get("conversion_rate"),
-        "category_avg_cr": r.get("category_avg_cr"),
-        "cr_index": r.get("cr_index"),
-        "rating_shrunk": r.get("rating_shrunk"),     # null khi chưa có đánh giá
-        "n_reviews": r.get("n_reviews", 0),
-        "breakdown": r["breakdown"],
-        "axes_missing": r.get("axes_missing") or [],
-        "todo": r.get("todo") or [],
+        "product_id": id,
+        "score": score,
+        "status": status,
+        "axes": axes,
+        "axes_missing": axes_missing,
+        "todos": result.get("todos", []),
         "note": ("Trục thiếu dữ liệu bị LOẠI khỏi phép tính và trọng số chia lại cho "
                  "các trục còn lại — không cho 0 điểm, vì thiếu dữ liệu khác với kém."),
     }, meta)
+
+
+class HealthPreviewBody(BaseModel):
+    n_images: Optional[float] = Field(default=None, ge=0, le=50)
+    description_length: Optional[float] = Field(default=None, ge=0, le=20000)
+    n_tags: Optional[float] = Field(default=None, ge=0, le=50)
+    in_stock_ratio_pct: Optional[float] = Field(default=None, ge=0, le=100)
+
+
+@router.post("/api/analytics/listings/{id}/health/preview", tags=["F29 · Hạt"])
+def health_preview(id: str, body: HealthPreviewBody, shop_id: str = CurrentShop):
+    """Xem điểm nếu sửa (§4.3): chấm lại với giá trị giả định. Chỉ đọc, không ghi điểm."""
+    meta_args = dict(scope="listing", scope_id=id, database="vietcraft", mode="live")
+    if not la_shop_live(shop_id):
+        return insufficient("Cần cấu hình gian hàng trước khi xem sức khoẻ listing", build_meta(**meta_args))
+
+    _kiem_quyen_listing(id, shop_id)
+
+    result = preview_health(HealthScoreCalculator(), id, body.model_dump())
+    if result is None or result["score"] is None:
+        return insufficient("Không đủ dữ liệu để chấm điểm sản phẩm này", build_meta(**meta_args))
+
+    meta = build_meta(model_version=result.get("model_version") or "health-1.0",
+                      collection="products", attributed_to_live_shop=True, **meta_args)
+    return ok(result, meta)

@@ -1,30 +1,3 @@
-#!/usr/bin/env python3
-"""
-Google Trends collector for VietCraft.
-
-Look at the data before storing it -- no database needed:
-
-    python collect_trends.py --backfill weekly --no-db --out ./data
-
-Then store it in MongoDB Atlas:
-
-    python collect_trends.py --backfill weekly --mongo --out ./data
-    python collect_trends.py --backfill daily  --mongo    # feeds ARIMA
-    python collect_trends.py --related --mongo            # rising queries, weekly
-    python collect_trends.py --daily --mongo              # the cron job
-    python collect_trends.py --mongo-health               # what is stored now
-
-    python collect_trends.py --inspect ./data/trends_weekly.json
-
-Why the anchor matters
-----------------------
-Google normalises interest 0-100 *within each request*. Two keywords fetched in
-separate requests sit on different scales and cannot be compared -- a 100 in one
-batch may be a tenth the real volume of a 40 in another. So every batch carries
-one fixed anchor keyword, and each batch is then multiplied by a factor that
-puts its anchor on a common level. Model on `scaled`, never on `raw`.
-"""
-
 import argparse
 import datetime as dt
 import json
@@ -34,8 +7,6 @@ import sys
 import time
 import uuid
 
-# Run from anywhere: every module here does `import config`, which only
-# resolves when the script's own directory is the working directory.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
@@ -50,10 +21,6 @@ except ImportError:                                    # pymongo not installed
     store_mongo = None
 
 
-# --------------------------------------------------------------------------
-# keywords -- from the database when there is one, otherwise from config
-# --------------------------------------------------------------------------
-
 def keywords_from_config():
     rows = [{"id": i, "keyword": k, "product_type": p, "topic": t,
              "is_anchor": False}
@@ -66,9 +33,7 @@ def keywords_from_config():
 def load_keywords(mdb=None):
     """Atlas first, config.py as the fallback."""
     if mdb is not None:
-        # Reconcile every run. The stored list is the one the collectors use,
-        # so if it drifts from config.py the drift is invisible until you
-        # notice retired keywords still arriving in the data.
+        # Sync every run so keywords removed from config stop being collected.
         store_mongo.upsert_keywords(mdb, cfg.SEED_KEYWORDS, cfg.ANCHOR)
         anchor, others = store_mongo.load_keywords(mdb)
         if anchor:
@@ -76,31 +41,11 @@ def load_keywords(mdb=None):
     return keywords_from_config()
 
 
-# --------------------------------------------------------------------------
-# fetching
-# --------------------------------------------------------------------------
-
 HTTP_CALLS = {"n": 0}
 
 
 def make_client():
-    """
-    One configured Trends client, with its own retry loop disabled and its
-    HTTP calls counted.
 
-    Two things the defaults get wrong for this workload:
-
-    1. max_retries. trendspy retries inside _get(), and fetch_batch() retries
-       around it. Nested, they multiply -- one stuck batch can fire dozens of
-       requests at a service that has already said stop. TRENDSPY_RETRIES=1
-       hands retry control to the outer loop, which waits minutes rather than
-       seconds.
-
-    2. request_delay=1.0 is far too fast for Google Trends.
-
-    The counter exists because one logical call is two HTTP requests, so batch
-    counts understate real usage by half.
-    """
     client = Trends(
         language="en",
         tzs=cfg.TZ_OFFSET,
@@ -128,13 +73,6 @@ def polite_sleep():
 
 
 def fetch_batch(tr, terms, timeframe):
-    """
-    One request, with backoff tuned for how Google actually behaves.
-
-    A 429 is not a transient blip -- it means the quota is spent and the only
-    cure is waiting. Retrying after ten seconds just extends the block, so
-    rate-limit errors get minutes while other errors get seconds.
-    """
     for attempt in range(1, cfg.MAX_RETRIES + 1):
         try:
             df = tr.interest_over_time(terms, timeframe=timeframe, geo=cfg.GEO)
@@ -200,18 +138,11 @@ _ANCHOR_COPIES = []       # one entry per batch: {"batch_id", "points"}
 
 
 def collect(granularity, timeframe, out_dir=None, mdb=None):
-    """
-    Fetch every keyword at one granularity, rescale against the anchor,
-    then write to whichever sinks were given.
-
-    Completed batches are checkpointed to disk. If Google rate-limits you
-    halfway through, rerun the same command later -- it skips what it already
-    has instead of starting over and burning more quota.
-    """
+ 
     anchor, others = load_keywords(mdb)
     tr = make_client()
     batches_meta = []
-    series = {}                       # keyword -> record
+    series = {}
     _ANCHOR_COPIES.clear()
 
     done = load_checkpoint(granularity)
@@ -338,12 +269,7 @@ def collect(granularity, timeframe, out_dir=None, mdb=None):
 
 
 def rescale(series, batches_meta):
-    """
-    Put every batch on a common scale.
-
-    Reference = the largest anchor mean across batches. A batch whose anchor
-    averaged half that gets its values doubled, and so on.
-    """
+ 
     means = {b["batch_id"]: b["anchor_mean"]
              for b in batches_meta if b.get("ok") and b.get("anchor_mean")}
     usable = {b: m for b, m in means.items() if m > 0}
@@ -360,18 +286,13 @@ def rescale(series, batches_meta):
 
     for record in series.values():
         if record.get("is_anchor"):
-            continue                       # handled below
+            continue
         factor = factors.get(record["batch_id"])
         if factor is None:
             continue
         for point in record["points"]:
             point["scaled"] = round(point["raw"] * factor, 2)
 
-    # The anchor appears in every batch, so it has N noisy copies. Storing
-    # the copy from whichever batch came first, multiplied by that batch's
-    # factor, gives an anchor series that disagrees with itself. Instead,
-    # average the rescaled copies -- that is the reference level by
-    # construction, and it is what every other keyword is now relative to.
     anchor_copies = [c for c in _ANCHOR_COPIES if c["batch_id"] in factors]
     anchor_record = next((r for r in series.values() if r.get("is_anchor")), None)
     if anchor_record and anchor_copies:
@@ -392,10 +313,6 @@ def rescale(series, batches_meta):
     print(f"\nrescaled {len(factors)} batches "
           f"(reference anchor mean {reference:.1f}, factor spread {spread:.1f}x)")
 
-
-# --------------------------------------------------------------------------
-# output
-# --------------------------------------------------------------------------
 
 def print_summary(payload):
     """The eyeball view. A 5-year weekly pull is ~13k points -- this is not."""
@@ -434,7 +351,6 @@ def write_json(payload, out_dir, granularity):
     with open(full, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
 
-    # A small companion file you can actually open and read.
     peek = {
         "collected_at": payload["collected_at"],
         "granularity": granularity,
@@ -464,8 +380,6 @@ def inspect(path):
     with open(path, encoding="utf-8") as fh:
         print_summary(json.load(fh))
 
-
-# --------------------------------------------------------------------------
 
 def collect_related(out_dir=None, mdb=None):
     _, others = load_keywords(mdb)
@@ -518,7 +432,6 @@ def collect_related(out_dir=None, mdb=None):
 
     if mdb is not None:
         store_mongo.write_related(mdb, payload)
-
 
 
 def main():
@@ -583,8 +496,7 @@ def main():
     if args.backfill == "daily":
         collect("daily", cfg.TIMEFRAME_DAILY, args.out, mdb)
     if args.daily:
-        # Re-pulling the whole 90-day window each run is deliberate: it
-        # self-heals any gap left by a failed night.
+        # Re-pull the full 90-day window so a failed night self-heals.
         collect("daily", cfg.TIMEFRAME_DAILY, args.out, mdb)
     if args.related:
         collect_related(args.out, mdb)

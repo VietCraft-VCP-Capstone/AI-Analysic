@@ -1,20 +1,3 @@
-"""
-build_mvp_export.py — Tính sẵn theo lô, xuất JSON cho MVP.
-
-Kiến trúc Batch Precomputation theo đúng ai-bi-v2.md: việc nặng (STL, backtest
-trượt điểm cắt trên 45 keyword × 3 mô hình) chạy offline một lần, kết quả ghi ra
-JSON; máy chủ MVP chỉ đọc file đã tính sẵn nên phản hồi tức thì và không cần
-MongoDB hay CSV lúc chạy.
-
-Xuất ra:
-    docs/RESULTS.json                      bằng chứng khoa học: MASE từng mô hình
-    pricing-mvp/data/trend_forecast.json   Sản phẩm A — dự báo mùa vụ Tết
-    pricing-mvp/data/market_gap.json       Sản phẩm C — ma trận cung cầu
-    pricing-mvp/data/readiness.json        Sản phẩm D — bảng chờ dữ liệu
-
-Chạy:  .venv/bin/python app/core/build_mvp_export.py
-"""
-
 import csv
 import io
 import json

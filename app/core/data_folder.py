@@ -1,19 +1,3 @@
-"""
-data_folder.py — Đọc dữ liệu từ thư mục `vc-data/` thay vì gọi MongoDB.
-
-DÙNG KHI: viết/đo/train mô hình, chạy đi chạy lại nhiều lần.
-ĐỪNG DÙNG KHI: cần số mới nhất của cron Trends — lúc đó kéo lại bằng
-               `python -m app.core.export_data_folder --force`.
-
-    from app.core.data_folder import nap
-
-    df  = nap("listing_daily")                       # cả bảng
-    df  = nap("listing_daily", cot=["listing_id","date","views"])   # chỉ vài cột
-    df  = nap("listing_daily", shop_id="shp_00017")  # lọc luôn lúc đọc
-
-Đọc theo cột là chỗ Parquet ăn đứt CSV: lấy 3 cột trong 796.025 dòng thì nó chỉ
-đọc đúng 3 cột đó trên đĩa, không nạp cả bảng vào RAM rồi mới bỏ đi.
-"""
 
 import os
 import glob

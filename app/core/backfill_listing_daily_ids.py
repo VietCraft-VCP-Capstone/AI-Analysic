@@ -1,37 +1,3 @@
-"""
-backfill_listing_daily_ids.py — Điền 4 cột khoá đang rỗng trong `listing_daily`.
-
-ĐÂY LÀ BẢN MẪU CHO 3 BẢNG NỀN CÒN LẠI. Ai làm mart_listing_quality /
-mart_competitor / mart_demand thì chép khung này, đổi pipeline ở giữa.
-
-VÌ SAO CẦN JOB NÀY
-    `listing_daily` (796.025 dòng, Hiếu sinh) có đủ cột số nhưng BỐN cột khoá nối
-    đều là chuỗi rỗng 100%:  shop_id · product_type_id · category_id · tags
-    Không có chúng thì không tính được doanh thu theo shop (F26) hay theo danh
-    mục (F31). Job này nối sang `listings` để điền, rồi ghi ra bảng mart riêng.
-
-VÌ SAO SỬA TẠI CHỖ CHỨ KHÔNG SINH BẢNG MỚI
-    Bản đầu sinh ra một bảng `mart_listing_daily` riêng. SAI HAI LẦN:
-      1. Atlas bản free chỉ có 512 MB. Nhân đôi bảng 796k dòng làm cụm vượt hạn
-         mức (526/512 MB) và CHẶN GHI VỚI CẢ NHÓM. Đã phải xoá để gỡ.
-      2. Lý do "giữ bản gốc" không đứng vững: bốn cột đó đang RỖNG 100%.
-         Điền vào chuỗi rỗng thì không có thông tin nào bị mất.
-    => Sửa tại chỗ. Đây cũng đúng phương án task DATA-01 đề ra ban đầu.
-
-    BÀI HỌC CHO 3 BẢNG NỀN CÒN LẠI: trên M0 free tier, ĐỪNG vật chất hoá một
-    bảng mart nhân đôi collection lớn. Hoặc sửa tại chỗ, hoặc gộp trước khi ghi
-    (mart chỉ nên nhỏ hơn nguồn nhiều lần).
-
-VÌ SAO CHẠY SERVER-SIDE
-    796.025 document kéo về Python rồi đẩy ngược lên mất hàng chục phút qua mạng.
-    Pipeline $lookup + $merge chạy TRONG MongoDB, dữ liệu không rời máy chủ.
-    Đổi lại: không dùng được writer.save_model_output(), nên job tự gắn ba trường
-    bắt buộc và TỰ KIỂM khoá theo đúng MART_SCHEMA — xem _check_contract().
-
-CHẠY
-    python -m app.core.build_mart_listing_daily --dry-run   # xem mẫu, không ghi
-    python -m app.core.build_mart_listing_daily             # dựng thật
-"""
 
 import os
 import sys
@@ -98,17 +64,8 @@ def _pipeline(run_id: str, computed_at: str, limit: int = 0, month: str = "") ->
             "_id": 0,
             "listing_id": 1,
             "date": 1,
-            # KHÔNG chép lại cột số — chúng đã nằm sẵn trong chính bảng này.
-            # $merge whenMatched=merge chỉ đặt các trường có trong tài liệu mới.
-            # THIẾU ≠ 0: listing không tìm thấy thì để null, KHÔNG để chuỗi rỗng.
-            # null nói "chưa biết"; chuỗi rỗng bị nhầm thành một nhóm hợp lệ khi gộp.
             **{f: {"$ifNull": [f"$_l.{f}", None]} for f in JOIN_FIELDS},
-            # KHÔNG gắn run_id / model_version / computed_at / scope vào đây.
-            # Bốn trường đó là yêu cầu của cổng ra cho bảng MART, không phải cho
-            # bảng THÔ. Chúng giống hệt nhau ở cả 796.025 dòng, nên gắn vào từng
-            # dòng là 178 byte x 796.025 = 135 MB rác — đã làm cụm Atlas ngốn
-            # 440/512 MB và phải gỡ lại ngày 21/09.
-            # Xuất xứ ghi vào `model_run`, MỘT document, ở cuối hàm main().
+           
         }},
     ]
     return stages
@@ -155,11 +112,6 @@ def main(dry_run: bool = False) -> int:
         db[SOURCE].aggregate(
             _pipeline(run_id, computed_at, month=m) +
             [{"$merge": {"into": TARGET, "on": key,
-                         # merge chứ KHÔNG replace, discard chứ KHÔNG insert.
-                         # replace ghi đè NGUYÊN tài liệu bằng kết quả $project —
-                         # mà $project chỉ giữ cột khoá, nên views/orders/revenue
-                         # BIẾN MẤT. Đã xảy ra thật 21/09: xoá 7 cột của 796.025
-                         # dòng, phải dựng lại từ events.csv + orders/order_items.
                          "whenMatched": "merge", "whenNotMatched": "discard"}}],
             maxTimeMS=600_000,
         )

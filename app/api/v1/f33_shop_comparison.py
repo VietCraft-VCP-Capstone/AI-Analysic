@@ -1,12 +1,3 @@
-"""
-F33 · GET /api/analytics/shop-comparison — biểu đồ radar so mình với 5 shop mạnh nhất.
-
-  BR-190  phân khúc xác định TỰ ĐỘNG = danh mục chiếm tỉ trọng listing lớn nhất
-  BR-191  5 shop = top 5 theo doanh thu ước tính trong phân khúc đó
-  BR-192  chuẩn hoá min–max về 0–100
-  BR-193  cần shop có >= 5 listing đã đăng, không thì insufficient_data
-"""
-
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -17,6 +8,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_guard import THIEU_DOI_THU, chan_shop_live, dem_shop_cung_danh_muc
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, mart_not_ready, meta_from_record, ok
 
@@ -25,6 +18,7 @@ router = APIRouter()
 MART = "mart_competitor"
 TOI_THIEU_LISTING = 5       # BR-193
 SO_DOI_THU = 5              # BR-191
+NGUONG_SHOP_CUNG_DM = 5     # §9.2: ≥5 shop cùng danh mục
 
 TRUC = ["listing_count", "avg_rating", "response_speed", "avg_price", "product_diversity"]
 TEN_TRUC_VI = ["Số sản phẩm", "Điểm đánh giá", "Tốc độ phản hồi", "Giá trung bình", "Độ đa dạng"]
@@ -42,6 +36,14 @@ def _chuan_hoa(gia_tri, tat_ca):
 
 @router.get("/api/analytics/shop-comparison", tags=["F33 · Nhi"])
 def shop_comparison(shop_id: str = CurrentShop):
+    unlock = None
+    if la_shop_live(shop_id):
+        unlock = {"requirement": "shop cùng danh mục", "unit": "shop",
+                  "current": dem_shop_cung_danh_muc(shop_id), "target": NGUONG_SHOP_CUNG_DM}
+    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "shops", unlock=unlock)
+    if chan is not None:
+        return chan
+
     coll = db()[MART]
     if coll.estimated_document_count() == 0:
         mart_not_ready(MART)
@@ -61,7 +63,6 @@ def shop_comparison(shop_id: str = CurrentShop):
             f"Shop mới có {len(cua_toi)} listing, cần tối thiểu {TOI_THIEU_LISTING} "
             f"mới dựng được biểu đồ so sánh (BR-193)", meta)
 
-    # BR-190: phân khúc = danh mục có nhiều listing nhất của shop này.
     dem_cat = defaultdict(int)
     for r in cua_toi:
         dem_cat[r["category_id"]] += 1
@@ -89,8 +90,6 @@ def shop_comparison(shop_id: str = CurrentShop):
         return {
             "listing_count": s["n"],
             "avg_rating": sum(s["sao"]) / len(s["sao"]) if s["sao"] else None,
-            # Phản hồi NHANH là tốt -> đảo dấu trước khi chuẩn hoá, để 100 luôn là "tốt"
-            # trên mọi trục. Không đảo thì shop chậm nhất lại nằm ngoài cùng biểu đồ.
             "response_speed": -phan_hoi.get(sid, 0),
             "avg_price": sum(s["gia"]) / len(s["gia"]) if s["gia"] else None,
             "product_diversity": len(s["loai"]),

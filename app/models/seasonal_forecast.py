@@ -1,37 +1,3 @@
-"""
-seasonal_forecast.py — Dự báo mùa vụ có nhận biết Tết âm lịch.
-
-Bài toán
---------
-Tết trượt tới gần 4 tuần trên lịch dương: 2021 rơi 12/02, 2023 rơi 22/01,
-2026 rơi 17/02. Mô hình mùa vụ chu kỳ 52 tuần cố định giả định đỉnh rơi đúng
-tuần đó mỗi năm, nên nó BÔI đỉnh Tết thành một gò thấp và rộng, làm mất hoàn
-toàn độ cao thật.
-
-Cách làm
---------
-Bóc hiệu ứng Tết theo TRỤC ÂM LỊCH trước, rồi mới phân rã phần còn lại bằng
-STL trên trục dương lịch:
-
-  1. mức nền    = trung vị trượt 52 tuần (bỏ xu hướng, giữ mùa vụ)
-  2. phần lệch  = giá trị − mức nền
-  3. hiệu ứng Tết = trung vị phần lệch, gom theo bucket 7 ngày của days_to_tet
-                    trong cửa sổ [−70, +35] ngày quanh mùng 1
-  4. chuỗi đã bóc Tết = giá trị − hiệu ứng Tết
-  5. STL(chuỗi đã bóc Tết, period=52) -> xu hướng + mùa vụ dương lịch
-  6. dự báo = ngoại suy xu hướng + mùa vụ theo pha + hiệu ứng Tết theo
-              days_to_tet của NGÀY TƯƠNG LAI
-
-Bước 6 là điểm mấu chốt: ngày tương lai được tra hiệu ứng Tết theo khoảng cách
-âm lịch của chính nó, nên đỉnh được đặt đúng chỗ dù Tết năm đó rơi vào tuần nào.
-
-Đây chính là kỹ thuật "biến hồi quy sự kiện có cửa sổ trước/sau" mà
-X-13ARIMA-SEATS dùng cho lễ di động, chỉ là cài đặt trực tiếp thay vì qua
-regARIMA. Tham chiếu: Lin & Liu (2003) về điều chỉnh Tết Trung Hoa.
-
-GIỚI HẠN: chỉ quan sát được 5 mùa Tết, nên mỗi bucket 7 ngày chỉ có ~5 quan sát.
-Hiệu ứng Tết ước lượng được là thô. Số mẫu mỗi bucket được trả ra trong kết quả.
-"""
 
 import numpy as np
 import pandas as pd
@@ -53,22 +19,13 @@ DEFAULT_PERIOD = 52
 TREND_FIT_POINTS = 52      # số điểm cuối dùng để ngoại suy xu hướng
 
 
-# --------------------------------------------------------------------------- #
-# mốc so sánh
-# --------------------------------------------------------------------------- #
-
 def seasonal_naive(train: Sequence[float], horizon: int, period: int = DEFAULT_PERIOD) -> List[float]:
     """Mốc so sánh: lấy giá trị cùng kỳ mùa trước. Mọi mô hình phải thắng được cái này."""
     t = np.asarray(train, dtype=float)
     if t.size < period:
-        # Không đủ một mùa: lùi về naive thường.
         return [float(t[-1])] * horizon
     return [float(t[-period + (i % period)]) for i in range(horizon)]
 
-
-# --------------------------------------------------------------------------- #
-# hiệu ứng Tết
-# --------------------------------------------------------------------------- #
 
 def _bucket_of(day_offset: int) -> int:
     lo, hi = TET_WINDOW
@@ -115,10 +72,6 @@ def _tet_value(effect: Dict[int, Dict[str, float]], date: Any) -> float:
     entry = effect.get(b)
     return entry["effect"] if entry else 0.0
 
-
-# --------------------------------------------------------------------------- #
-# mô hình
-# --------------------------------------------------------------------------- #
 
 def tet_aware_forecast(dates: Sequence[Any], values: Sequence[float],
                        future_dates: Sequence[Any],

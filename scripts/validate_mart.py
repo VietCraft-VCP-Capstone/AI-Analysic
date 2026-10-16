@@ -1,28 +1,3 @@
-"""
-validate_mart.py — Kiểm dữ liệu trong bảng mart có đúng hợp đồng MART_SCHEMA không.
-
-`writer.save_model_output()` chặn lúc GHI. Script này kiểm lúc ĐỌC — bắt những
-dòng đã nằm sẵn trong database từ trước khi có hợp đồng, hoặc do job khác ghi
-thẳng không qua writer.
-
-Kiểm 5 thứ, mỗi bảng:
-  1. đủ 3 trường xuất xứ  run_id · model_version · computed_at
-  2. đủ trường khoá, và không trường khoá nào rỗng
-  3. không hai dòng trùng khoá
-  4. đủ cột thân bắt buộc theo `fields_bat_buoc`
-  5. không cột lạ ngoài `fields` (cảnh báo, không tính là hỏng)
-
-Gom MỌI lỗi rồi báo một lần — dừng ở lỗi đầu tiên thì phải chạy lại 8 lượt mới
-biết hết. Cùng cách app/seed/import_all_seeds.py hàm preflight() đang làm.
-
-Chạy:
-    .venv/bin/python scripts/validate_mart.py --all --sample 100
-    .venv/bin/python scripts/validate_mart.py listing_health
-    .venv/bin/python scripts/validate_mart.py --all --offline    # không nối Mongo
-
-CHỈ ĐỌC. Không ghi gì lên cụm Atlas M0 512 MB dùng chung.
-"""
-
 import argparse
 import sys
 from collections import Counter

@@ -1,19 +1,3 @@
-"""
-F41 · GET /api/analytics/forecast/recommendations — 5 câu khuyên nên làm sản phẩm gì.
-
-Đỉnh kim tự tháp: gộp `niche_score` (cầu) + `mart_competitor` (vị thế) +
-`listing_health` (chất lượng) thành việc cụ thể.
-
-  BR-214  PHẢI cá nhân hoá theo lịch sử — không gợi ý loại phôi mà shop có 0% chuyển đổi
-  BR-215  tối đa 5 khuyến nghị
-  Shop mới chưa có lịch sử -> khuyến nghị chung toàn sàn, scope: "platform"
-
-⚠ TIÊU CHÍ THÀNH CÔNG chưa được nghiệm thu. Bản đăng ký ban đầu định nhờ hai
-  chuyên gia POD chấm điểm; nhóm đã quyết định không tuyển chuyên gia. Thay bằng
-  backtest khuyến nghị (sinh tại T chỉ bằng dữ liệu <= T, đo 30 ngày sau) —
-  CHƯA CHẠY. Mọi phản hồi của endpoint này gắn `validated: false`.
-"""
-
 import sys
 from pathlib import Path
 
@@ -23,6 +7,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._live import la_shop_live
+from app.api.v1._live_recommendations import recommendations_live
 from app.api.v1._mart import db, tien
 from app.api.v1._template import CurrentShop, mart_not_ready, meta_from_record, ok
 
@@ -33,6 +19,10 @@ TOI_DA = 5           # BR-215
 
 @router.get("/api/analytics/forecast/recommendations", tags=["F41 · Đạt"])
 def recommendations(shop_id: str = CurrentShop):
+    # Shop thật: dựng gợi ý từ tín hiệu thật (F29/F38/F40), KHÔNG dùng mart dữ liệu mồi.
+    if la_shop_live(shop_id):
+        return recommendations_live(shop_id)
+
     ngach = list(db()["niche_score"].find({}, {"_id": 0}).sort("gap_score", -1).limit(30))
     if not ngach:
         mart_not_ready("niche_score")

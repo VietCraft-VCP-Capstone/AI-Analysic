@@ -1,26 +1,9 @@
-#!/usr/bin/env python3
-"""
-Printify catalogue collector -- the price floor for the pricing model.
-
-    export PRINTIFY_TOKEN="..."      # Printify -> Account -> Connections -> API
-    python collect_printify.py
-
-Run this once. Catalogue data barely changes, so cache it and move on.
-Without a base cost, "optimal price" has no meaning -- you have no idea where
-the margin actually starts.
-
-Rate limit: catalogue endpoints allow 100 requests/minute, so this walks
-blueprints -> print providers -> variants slowly and deliberately.
-"""
-
 import argparse
 import json
 import os
 import sys
 import time
 
-# Run from anywhere: every module here does `import config`, which only
-# resolves when the script's own directory is the working directory.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.getcwd())
 
@@ -131,9 +114,6 @@ def main():
     ap.add_argument("--out", metavar="DIR", help="also write JSON here")
     args = ap.parse_args()
 
-    # Read at call time, not import time: relying on config.py having already
-    # loaded .env before this module-level line runs is a trap waiting for
-    # someone to reorder the imports.
     if not os.environ.get("PRINTIFY_TOKEN"):
         sys.exit("Set PRINTIFY_TOKEN in .env (Printify -> Account -> "
                  "Connections -> Generate token).")

@@ -17,7 +17,6 @@ from app.config import settings
 from app.api.v1._template import che_do_xac_thuc
 from app.api.v1.analytics_routes import gan_vao as gan_analytics
 from app.api.v1.anomaly import router as anomaly_router
-from app.api.v1.health_score import router as health_score_router
 from app.api.v1.cccd_ocr import router as cccd_ocr_router
 from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
 
@@ -64,10 +63,27 @@ async def lifespan(app: FastAPI):
     else:
         ra("  [OK] Xac thuc DANG BAT. Moi endpoint tra 401 neu khong co token.")
         ra("       Chua co SPEC-04 (JWT) thi chay thu bang: DEV_SHOP_ID=shp_00017")
+    if os.getenv("AI_GATEWAY_SECRET", "").strip():
+        ra("  [OK] Gateway BE san: BAT (AI_GATEWAY_SECRET). BE goi kem X-Shop-Id da xac thuc.")
+    else:
+        ra("  [!]  Gateway BE san: TAT. Dat AI_GATEWAY_SECRET giong ben BE de san goi duoc.")
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
+
+    try:
+        from app.core.f29_scheduler import start_scheduler
+        start_scheduler()
+        ra("  [OK] F29 scheduler: da bat (quet doi moi 60s + quet toan san 0h UTC).")
+    except Exception as e:
+        ra(f"  [!] F29 scheduler KHONG bat duoc: {type(e).__name__}: {e}")
     ra("=" * 72)
 
     yield
+
+    try:
+        from app.core.f29_scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -123,14 +139,62 @@ def read_health():
     return {"status": "ok", "service": "ai-analytics"}
 
 
+@app.get("/ready")
+def read_ready():
+    from datetime import datetime, timezone
+
+    from app.api.v1._live import db_live
+    from app.api.v1._mart import db
+
+    try:
+        db_live().command("ping")
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "mongo_unreachable", "detail": str(e)[:200]},
+        )
+
+    try:
+        mart_db = db()
+        co_mart = (
+            mart_db["mart_listing_quality"].count_documents({}, limit=1) > 0
+            or mart_db["listing_health"].count_documents({}, limit=1) > 0
+        )
+    except Exception:
+        co_mart = False
+
+    if not co_mart:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "mart_empty"})
+
+    body = {"status": "ok"}
+
+    try:
+        mart_db = db()
+        latest = mart_db["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
+        if latest and latest.get("computed_at"):
+            raw = latest["computed_at"]
+            computed_at = None
+            if isinstance(raw, str):
+                computed_at = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            elif isinstance(raw, datetime):
+                computed_at = raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+            if computed_at is not None:
+                gio_tre = (datetime.now(timezone.utc) - computed_at).total_seconds() / 3600.0
+                if gio_tre > 26:
+                    body["status"] = "stale"
+                    body["last_run_hours_ago"] = round(gio_tre, 1)
+    except Exception:
+        pass
+
+    return JSONResponse(status_code=200, content=body)
+
+
 TRANG_THAI_F = gan_analytics(app)
 
 # Include routes
 app.include_router(anomaly_router, prefix=f"{settings.API_V1_STR}/anomaly", tags=["Anomaly Detection"])
-app.include_router(health_score_router, prefix=f"{settings.API_V1_STR}/health_score", tags=["Health Evaluation"])
 app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", tags=["CCCD OCR & Verification"])
 app.include_router(smart_suggestion_router)
-
 
 
 

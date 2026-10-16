@@ -1,13 +1,3 @@
-"""
-F39 · GET /api/analytics/forecast/niches?categoryId= — ngách nhiều cầu ít cung.
-
-Đọc mart `niche_score` (do app/core/build_marts.py ghi từ Google Trends THẬT).
-
-  BR-210  tính lại mỗi 24h lúc nửa đêm GMT+7
-  BR-211  BẮT BUỘC lọc bỏ ngách chứa từ khoá cấm (bản quyền / NSFW),
-          đọc collection `banned_keywords` trên sàn live
-"""
-
 import sys
 from pathlib import Path
 from typing import Optional
@@ -19,14 +9,16 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 from pymongo import MongoClient
 
+from app.api.v1._live import LOC_SP_THAT, db_live, la_shop_live
 from app.api.v1._mart import db
-from app.api.v1._template import CurrentShop, mart_not_ready, meta_from_record, ok
+from app.api.v1._template import CurrentShop, build_meta, mart_not_ready, meta_from_record, ok, partial
 from app.config import settings
 
 router = APIRouter()
 
 MART = "niche_score"
 TOP_N = 20
+NGUONG_CUNG_LIVE = 20    # §9.2: ≥20 listing live cùng tag mới tin được phần CUNG
 
 
 _client_live = None
@@ -69,25 +61,55 @@ def niches(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
         if tag_cat:
             sach = [r for r in sach if set(r.get("tag_ids") or []) & tag_cat]
 
+    niches_out = [{
+        "rank": i,
+        "keyword": r["keyword"],
+        "tag_id": r.get("tag_id"),
+        "demand_pct": r["demand_pct"],
+        "supply_pct": r["supply_pct"],
+        "gap_score": r["gap_score"],
+        "n_listings": r["n_listings"],
+        "demand_index": r["demand_index"],
+        "trend": r["trend"],
+        "growth_pct": r.get("growth_pct"),
+        "quadrant": r.get("quadrant"),
+        "sparkline_7d": r.get("sparkline_7d"),
+    } for i, r in enumerate(sach[:TOP_N], 1)]
+
+    # Shop THẬT: cầu (Google Trends) vẫn là số thật, giữ nguyên. Cung so với CATALOG
+    # SEED thì không có nghĩa với sàn thật — che phần cung, không bịa số, và nói rõ
+    # cần bao nhiêu listing thật cùng tag thì mới tính lại được (§9.2).
+    if la_shop_live(shop_id):
+        so_sp_that = db_live()["products"].count_documents(
+            {**LOC_SP_THAT, "tags": {"$exists": True, "$ne": []}})
+        for n in niches_out:
+            n["supply_pct"] = None
+            n["gap_score"] = None
+            n["n_listings"] = None
+            n["supply_insufficient"] = True
+
+        meta = build_meta(model_version="live-read-1.0", scope="platform", scope_id="all",
+                          database=settings.MONGO_DB_LIVE, collection="products",
+                          mode="live", attributed_to_live_shop=True,
+                          sample_size=len(niches_out), confidence="medium",
+                          unlock={"requirement": "listing thật có tag", "unit": "listing",
+                                  "current": so_sp_that, "target": NGUONG_CUNG_LIVE})
+        return partial({
+            "niches": niches_out,
+            "total_niches": len(sach),
+            "banned_filtered": da_loc,
+            "banned_list_size": len(cam),
+            "limitation": ("Cầu lấy từ Google Trends Việt Nam THẬT. Phần CUNG tạm ẩn vì sàn "
+                           "thật chưa có đủ listing gắn tag để so — supply_pct/gap_score/"
+                           "n_listings sẽ tự hiện khi đủ dữ liệu."),
+        }, "Chưa đủ listing thật gắn tag để tính phần CUNG của ngách — chỉ hiện phần CẦU.", meta)
+
     meta = meta_from_record(rows[0], scope="platform", scope_id="all", collection=MART,
                             mode="derived",       # cầu từ Trends thật, cung từ listing mồi
                             sample_size=len(rows), confidence="medium")
 
     return ok({
-        "niches": [{
-            "rank": i,
-            "keyword": r["keyword"],
-            "tag_id": r.get("tag_id"),
-            "demand_pct": r["demand_pct"],
-            "supply_pct": r["supply_pct"],
-            "gap_score": r["gap_score"],
-            "n_listings": r["n_listings"],
-            "demand_index": r["demand_index"],
-            "trend": r["trend"],
-            "growth_pct": r.get("growth_pct"),
-            "quadrant": r.get("quadrant"),
-            "sparkline_7d": r.get("sparkline_7d"),
-        } for i, r in enumerate(sach[:TOP_N], 1)],
+        "niches": niches_out,
         "total_niches": len(sach),
         "banned_filtered": da_loc,
         "banned_list_size": len(cam),

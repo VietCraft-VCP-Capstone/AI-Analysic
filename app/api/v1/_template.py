@@ -1,43 +1,6 @@
-"""
-_template.py — Vỏ phản hồi chung cho cả 16 endpoint F26–F41.
-
-Đây là file mà 4 người còn lại IMPORT (không phải chép đi sửa). Mọi endpoint
-phân tích trả về cùng một hình dạng, chỉ khác phần `data`:
-
-    {"data": ..., "meta": {...}, "error": null}
-
-Vì sao để trong code chứ không chỉ trong `docs/API_CONTRACT.md`: tài liệu là chữ,
-không ai ép được. Ở đây `ok()` / `insufficient()` tự gắn đủ khối `meta`, nên một
-endpoint viết đúng kiểu là tự động khớp hợp đồng.
-
-  NGUYÊN TẮC SỐ MỘT — THIẾU ≠ 0.
-  Không đủ dữ liệu thì gọi insufficient(), KHÔNG trả 0. Shop mới nhìn thấy
-  "doanh thu 0đ" thay vì "chưa đủ dữ liệu" là lỗi nặng nhất của loại dashboard này.
-
-Cách dùng trong một router tính năng:
-
-    from app.api.v1._template import (
-        ok, insufficient, meta_from_record, mart_not_ready, CurrentShop,
-    )
-
-    @router.get("/shop/overview")
-    def f26_shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
-        doc = db["mart_listing_daily"].find_one({"shop_id": shop_id})
-        if doc is None:
-            mart_not_ready("mart_listing_daily")          # -> 503, KHÔNG phải 500
-        if doc["so_ngay"] < 7:
-            return insufficient(
-                f"Shop mới, chỉ có {doc['so_ngay']} ngày dữ liệu, cần tối thiểu 7",
-                meta_from_record(doc, scope="shop", scope_id=shop_id),
-            )
-        return ok({"revenue_vnd": doc["revenue_vnd"]},
-                  meta_from_record(doc, scope="shop", scope_id=shop_id))
-
-Hợp đồng đầy đủ: docs/API_CONTRACT.md. File này KHÔNG truy vấn MongoDB —
-chỉ khuôn phản hồi và xác thực.
-"""
-
+import hmac
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,29 +14,10 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import Depends, Header, HTTPException
 
-# Nạp app/.env. Không dùng `settings` ở đây, nhưng import nó là kích hoạt dotenv —
-# nếu không, ai import _template mà chưa import app.config sẽ thấy DEV_SHOP_ID trong
-# .env bị bỏ qua, rồi ngồi tìm mãi không hiểu vì sao vẫn 401.
 from app.config import settings as _nap_env  # noqa: F401
 
-# ---------------------------------------------------------------------------
-# HAI QUYẾT ĐỊNH ĐÃ CHỐT (mục 6 của API_CONTRACT.md, câu 2 và 2b)
-#
-# 1. Bọc {data, meta, error} — KHÔNG trải phẳng. FE đọc một chỗ cho cả 16 màn hình.
-#
-# 2. `status` chỉ nằm MỘT nơi: meta.status, từ vựng ok · partial · insufficient_data.
-#    Trước đây ba tài liệu ghi ba kiểu: API_CONTRACT mục 1 để `quality.status`
-#    (ready/limited/insufficient_data), mục "THIẾU ≠ 0" để `status` ở gốc, còn
-#    task SPEC-02 để `meta.status`. Ba từ vựng cho cùng một khái niệm thì FE phải
-#    viết ba nhánh. Bảng quy đổi cho ai đã đọc bản cũ:
-#        quality.status = ready   -> meta.status = ok
-#        quality.status = limited -> meta.status = partial
-#        insufficient_data        -> giữ nguyên tên
-#    `quality` vẫn còn, nhưng chỉ giữ sample_size · identity_linked · confidence.
-# ---------------------------------------------------------------------------
-
 STATUS_OK = "ok"
-STATUS_PARTIAL = "partial"          # có số nhưng độ tin cậy thấp
+STATUS_PARTIAL = "partial"
 STATUS_INSUFFICIENT = "insufficient_data"
 
 SOURCE_MODES = ("live", "seed_demo", "derived")
@@ -82,10 +26,6 @@ SOURCE_MODES = ("live", "seed_demo", "derived")
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-
-# ---------------------------------------------------------------------------
-# KHỐI META
-# ---------------------------------------------------------------------------
 
 def build_meta(
     *,
@@ -100,9 +40,17 @@ def build_meta(
     sample_size: Optional[int] = None,
     identity_linked: bool = False,
     confidence: str = "medium",
+    unlock: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Dựng khối `meta` đúng hợp đồng. Ba trường cổng ra kiểm là
-    computed_at · model_version · scope — không trường nào được để trống."""
+    computed_at · model_version · scope — không trường nào được để trống.
+
+    `unlock` (§9.2): khi một tính năng bị `insufficient_data`/`partial` vì thiếu dữ liệu
+    sàn thật, đây là con số "đang có bao nhiêu / cần bao nhiêu" để FE vẽ thanh tiến độ
+    thay vì chỉ một câu thông báo chay. Hình dạng cố định:
+        {"requirement": "đơn thật", "current": 12, "target": 20, "unit": "đơn"}
+    Để `None` khi không áp dụng (ví dụ mart dữ liệu mồi chạy bình thường).
+    """
     if mode not in SOURCE_MODES:
         raise ValueError(f"source.mode phải thuộc {SOURCE_MODES}, nhận được {mode!r}")
 
@@ -114,7 +62,7 @@ def build_meta(
             "shop thật là trình bày sai nguồn — đây là lỗi nghiệm thu, không phải cảnh báo."
         )
 
-    return {
+    meta: Dict[str, Any] = {
         "status": STATUS_OK,          # ok() / insufficient() ghi đè lại
         "computed_at": computed_at or _now_iso(),
         "model_version": model_version,
@@ -132,6 +80,9 @@ def build_meta(
             "confidence": confidence,
         },
     }
+    if unlock is not None:
+        meta["unlock"] = unlock
+    return meta
 
 
 def meta_from_record(
@@ -156,10 +107,6 @@ def meta_from_record(
         **kw,
     )
 
-
-# ---------------------------------------------------------------------------
-# VỎ PHẢN HỒI
-# ---------------------------------------------------------------------------
 
 def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Có số thật, tin được."""
@@ -187,10 +134,6 @@ def insufficient(reason: str, meta: Optional[Dict[str, Any]] = None) -> Dict[str
     meta["reason"] = reason
     return {"data": None, "meta": meta, "error": None}
 
-
-# ---------------------------------------------------------------------------
-# LỖI — bảng mã ở mục 1 hợp đồng
-# ---------------------------------------------------------------------------
 
 def mart_not_ready(collection: str) -> None:
     """503 — job chưa chạy lần nào, bảng rỗng.
@@ -220,38 +163,8 @@ def not_found(what: str = "listing") -> None:
     raise HTTPException(status_code=404, detail={"error": "not_found", "resource": what})
 
 
-# ---------------------------------------------------------------------------
-# XÁC THỰC — shop_id LUÔN lấy từ JWT, không nhận từ query
-#
-# BR-174 / BR-177: người bán chỉ xem được dữ liệu shop mình sở hữu. Nhận shop_id
-# từ query thì ai cũng đổi được thành shop người khác — đây là lý do tham số đó
-# không tồn tại trong bất kỳ endpoint nào của hợp đồng.
-#
-# ⚠ Phần GIẢI MÃ token thuộc SPEC-04 (Nhi, hạn 24/09) — chưa có thuật toán, khoá
-# ký và tên trường từ sàn. Chỗ nối đã để sẵn ở decode_shop_id() bên dưới: Nhi chỉ
-# điền vào một hàm, 16 endpoint không phải sửa dòng nào.
-# ---------------------------------------------------------------------------
-
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 
-
-# ---------------------------------------------------------------------------
-# HAI CÁCH TẮT XÁC THỰC LÚC LÀM TÍNH NĂNG — cả hai mặc định TẮT.
-#
-#   DEV_SHOP_ID=shp_00017      TẮT HẲN xác thực. Mọi request thành shop này,
-#                              không cần token, không cần header. Dùng khi đang
-#                              viết tính năng và không muốn vướng đăng nhập.
-#
-#   DEV_TRUST_SHOP_HEADER=1    Vẫn phải gửi header X-Debug-Shop-Id, nhưng đổi
-#                              được shop giữa các request. Dùng khi cần thử
-#                              BR-174/BR-177: shop A có xem được dữ liệu shop B không.
-#
-# Đọc lúc GỌI chứ không lúc import, để đổi .env rồi `--reload` là ăn ngay, và để
-# test tự đặt được trạng thái của mình.
-#
-# ⚠ KHÔNG BAO GIỜ bật trên môi trường có dữ liệu thật: bật lên là ai cũng tự xưng
-#   shop nào cũng được. `main.py` in cảnh báo to lúc khởi động khi thấy đang bật.
-# ---------------------------------------------------------------------------
 
 def _dev_shop_id() -> str:
     return os.getenv("DEV_SHOP_ID", "").strip()
@@ -259,6 +172,13 @@ def _dev_shop_id() -> str:
 
 def _dev_tin_header() -> bool:
     return os.getenv("DEV_TRUST_SHOP_HEADER", "").strip() == "1"
+
+
+_SHOP_ID_HOP_LE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _gateway_secret() -> str:
+    return os.getenv("AI_GATEWAY_SECRET", "").strip()
 
 
 def che_do_xac_thuc() -> str:
@@ -289,26 +209,24 @@ def decode_shop_id(token: str) -> str:
 def current_shop_id(
     authorization: Optional[str] = Header(default=None),
     x_debug_shop_id: Optional[str] = Header(default=None),
-    x_shop_id: Optional[str] = Header(default=None),
     x_gateway_secret: Optional[str] = Header(default=None),
+    x_shop_id: Optional[str] = Header(default=None),
 ) -> str:
     """Dependency trả về shop_id của người đang gọi."""
-    # 1. Xác thực qua Backend Gateway (X-Gateway-Secret)
-    expected_secret = os.getenv("AI_GATEWAY_SECRET", "").strip()
-    if expected_secret and x_gateway_secret and x_gateway_secret.strip() == expected_secret:
-        shop = (x_shop_id or x_debug_shop_id or "").strip()
-        if shop:
-            return shop
-        dev = _dev_shop_id()
-        return dev or "shp_00017"
+    if x_gateway_secret is not None:
+        bi_mat = _gateway_secret()
+        # compare_digest: so theo thời gian hằng số, không lộ độ dài khớp qua độ trễ.
+        if not bi_mat or not hmac.compare_digest(x_gateway_secret.encode(), bi_mat.encode()):
+            raise HTTPException(status_code=401, detail={"error": "unauthorized"})
+        shop = x_shop_id or ""
+        if not _SHOP_ID_HOP_LE.match(shop):
+            invalid_param("X-Shop-Id", "mã shop do gateway gửi, [A-Za-z0-9_-]{1,64}")
+        return shop
 
     dev = _dev_shop_id()
 
-    # Header đi TRƯỚC DEV_SHOP_ID: DEV_SHOP_ID là giá trị MẶC ĐỊNH cho đỡ phải gõ,
-    # không phải cái khoá cứng.
-    effective_header = x_debug_shop_id or x_shop_id
-    if effective_header and (dev or _dev_tin_header()):
-        return effective_header.strip()
+    if x_debug_shop_id and (dev or _dev_tin_header()):
+        return x_debug_shop_id
 
     if dev:
         return dev
@@ -360,6 +278,11 @@ if __name__ == "__main__":
         raise AssertionError("phải chặn source.mode lạ")
     except ValueError:
         print("✓ chặn source.mode ngoài live/seed_demo/derived")
+
+    m = build_meta(unlock={"requirement": "đơn thật", "current": 3, "target": 20, "unit": "đơn"})
+    assert m["unlock"] == {"requirement": "đơn thật", "current": 3, "target": 20, "unit": "đơn"}
+    assert "unlock" not in build_meta(), "không truyền unlock thì không được tự bịa ra field này"
+    print("✓ build_meta(unlock=...) gắn đúng field, mặc định không có")
 
     for fn, code in ((lambda: mart_not_ready("mart_demand"), 503),
                      (lambda: invalid_param("timeRange", "7d|30d|90d"), 400),
