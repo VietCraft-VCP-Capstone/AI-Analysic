@@ -17,7 +17,7 @@ router = APIRouter()
 
 MART = "forecast_point"
 CUA_SO = {"30": 30, "60": 60, "90": 90}
-NGUONG_TUAN = 12         # §9.2: ≥12 tuần đơn hàng
+NGUONG_TUAN = 12
 
 
 def _bang_so_sanh(shop_id: str):
@@ -45,7 +45,6 @@ def forecast_revenue(shop_id: str = CurrentShop,
         invalid_param("window", " | ".join(CUA_SO))
     h = CUA_SO[str(window)]
 
-    # targetId mặc định là shop của người gọi. Xin shop khác -> 403 (BR-174/177).
     muc_tieu = targetId or shop_id
     if muc_tieu != shop_id:
         forbidden()
@@ -54,9 +53,6 @@ def forecast_revenue(shop_id: str = CurrentShop,
     if coll.estimated_document_count() == 0:
         mart_not_ready(MART)
 
-    # Job lưu chuỗi 90 ngày; cắt ra đúng cửa sổ người dùng xin. ARIMA dự báo 90
-    # bước cho ra đúng 30 giá trị đầu giống hệt khi dự báo 30 bước, nên cắt là
-    # tương đương mà không phải lưu ba bản (xem ghi chú trong writer.MART_SCHEMA).
     diem = list(coll.find({"entity_type": "shop", "entity_id": muc_tieu},
                           {"_id": 0}).sort("forecast_date", 1).limit(h))
     if not diem:
@@ -79,7 +75,7 @@ def forecast_revenue(shop_id: str = CurrentShop,
         "points": [{
             "date": p["forecast_date"],
             "yhat": tien(p["yhat"]),
-            "lo95": tien(p["lo95"]),      # BR-207: đã kẹp ở 0 lúc ghi
+            "lo95": tien(p["lo95"]),
             "hi95": tien(p["hi95"]),
         } for p in diem],
         "total_forecast_vnd": tien(sum(p["yhat"] for p in diem)),

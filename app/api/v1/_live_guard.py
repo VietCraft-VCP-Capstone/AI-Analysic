@@ -1,11 +1,3 @@
-"""
-_live_guard.py — Chặn "chưa đủ dữ liệu" cho shop thật và bộ đếm tiến độ mở khoá (§9.2).
-
-Một câu chung như "chưa đủ dữ liệu" không giúp gì: người bán cần biết THIẾU CÁI GÌ,
-nếu không họ sẽ nghĩ tính năng bị hỏng. Các hàm `dem_*` điền
-`unlock = {"requirement", "current", "target", "unit"}` để FE vẽ thanh tiến độ.
-"""
-
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -16,24 +8,18 @@ from app.api.v1._template import build_meta, insufficient
 from app.config import settings
 
 THIEU_LUOT_XEM = "Cần đủ lượt xem sản phẩm để tính. Sàn mới bắt đầu ghi lượt xem nên số liệu còn ít."
-
 THIEU_LICH_SU = "Cần thêm thời gian bán hàng để mô hình học được nhịp bán bình thường của shop."
-
 THIEU_DOI_THU = "Cần thêm shop cùng ngành có đơn trên sàn để so sánh có ý nghĩa."
 
 
 def chua_ho_tro_live(ly_do: str) -> str:
-    """Ghép lý do kỹ thuật với câu trấn an, để người bán biết đây không phải lỗi."""
+    """Ghép lý do kỹ thuật với câu trấn an."""
     return f"{ly_do} Đây không phải lỗi, số liệu sẽ tự hiện khi đủ dữ liệu."
 
 
 def chan_shop_live(shop_id: str, ly_do: str, collection: str = "orders",
                    unlock: Optional[Dict[str, Any]] = None):
-    """`insufficient_data` cho shop thật khi endpoint chưa có đường dữ liệu sàn thật;
-    `None` với shop dữ liệu mồi để endpoint chạy tiếp như cũ.
-
-    Mart khoá theo mã shop mồi nên shop thật sẽ ra "shop chưa có listing nào" — người
-    bán tưởng hàng mình biến mất. Chặn ở đây để nói đúng nguyên nhân."""
+    """insufficient_data cho shop live khi chưa đủ dữ liệu."""
     if not la_shop_live(shop_id):
         return None
 

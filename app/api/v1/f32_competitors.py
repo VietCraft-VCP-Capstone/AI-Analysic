@@ -75,11 +75,10 @@ def _competitors_live(shop_id: str, categoryId: Optional[str]):
     meta = meta_from_record(trong_cat[0], scope="category", scope_id=cat, collection=MART,
                             mode="derived", attributed_to_live_shop=True, sample_size=len(trong_cat))
 
-    doi_thu = sorted(trong_cat, key=lambda r: -r["est_sales_90d"])      # BR-188
+    doi_thu = sorted(trong_cat, key=lambda r: -r["est_sales_90d"])
     gia_cat = sorted(r["price_vnd"] for r in trong_cat)
     sao_cat = sorted(r["rating_shrunk"] for r in trong_cat if r["rating_shrunk"] is not None)
 
-    # Sản phẩm THẬT của shop thuộc danh mục đang xem.
     loai_trong_cat = {pt for pt, c in map_cat.items() if c == cat}
     cua_minh = [p for p in sp if p["product_type_id"] in loai_trong_cat]
 
@@ -138,7 +137,6 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
     if coll.estimated_document_count() == 0:
         mart_not_ready(MART)
 
-    # BR-186: chỉ những danh mục người bán thật sự có hàng.
     cua_toi = sorted(coll.distinct("category_id", {"shop_id": shop_id}))
     if not cua_toi:
         return insufficient("Shop chưa có listing nào nên chưa so sánh được với ai")
@@ -154,7 +152,7 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
 
     trong_cat = list(coll.find({"category_id": cat}, chieu))
     cua_minh = [r for r in trong_cat if r["shop_id"] == shop_id]
-    doi_thu = [r for r in trong_cat if r["shop_id"] != shop_id]        # BR-189
+    doi_thu = [r for r in trong_cat if r["shop_id"] != shop_id]
 
     meta = meta_from_record(trong_cat[0], scope="category", scope_id=cat, collection=MART,
                             mode="seed_demo", sample_size=len(trong_cat))
@@ -164,7 +162,7 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             f"Danh mục `{cat}` chỉ có {len(doi_thu)} listing của shop khác, "
             f"chưa đủ để xếp hạng (cần từ 5)", meta)
 
-    doi_thu.sort(key=lambda r: -r["est_sales_90d"])                     # BR-188
+    doi_thu.sort(key=lambda r: -r["est_sales_90d"])
     gia_cat = sorted(r["price_vnd"] for r in trong_cat)
     sao_cat = sorted(r["rating_shrunk"] for r in trong_cat if r["rating_shrunk"] is not None)
 
@@ -197,8 +195,6 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             "favorite_count": r["favorite_count"],
         } for i, r in enumerate(doi_thu[:TOP_N], 1)],
         "my_position": {
-            # null khi chưa có căn cứ — shop chưa có đánh giá nào thì không có
-            # phân vị sao, và đó KHÁC với "xếp chót".
             "price_percentile": _phan_vi(gia_tb, gia_cat),
             "rating_percentile": _phan_vi(sao_tb, sao_cat),
             "my_avg_price_vnd": tien(gia_tb) if gia_tb is not None else None,

@@ -1,13 +1,3 @@
-"""Dữ liệu Olist và 2 trục đo được (đánh giá, nội dung) cho F29b/F29c.
-
-Không tự viết công thức: mọi phép chấm gọi thẳng `app.core.f29.scoring` (health-1.0),
-để con số kiểm định đúng là con số seller thấy trên live.
-
-- Đánh giá: co ngót Bayes m=50, C = trung bình gộp mọi review trước T (như engine
-  dùng trung bình toàn sàn), quy 1★=0 … 5★=100.
-- Nội dung: Olist không có tag, nên chỉ chấm ảnh + mô tả (thành phần tag = None).
-"""
-
 import sys
 from pathlib import Path
 

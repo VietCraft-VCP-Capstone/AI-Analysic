@@ -9,7 +9,6 @@ logger = logging.getLogger("cccd_ocr_api")
 
 router = APIRouter()
 
-# Kích thước file tối đa: 10MB
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
 ALLOWED_CONTENT_TYPES = {
@@ -25,8 +24,6 @@ async def ocr_cccd(
     file: UploadFile = File(..., description="Ảnh CCCD (JPG/PNG/WebP, tối đa 10MB)"),
     side: str = Form("front", description="Mặt của CCCD: 'front' hoặc 'back'"),
 ):
- 
-    # Validate side parameter
     if side not in ("front", "back"):
         raise HTTPException(
             status_code=400,
@@ -34,7 +31,6 @@ async def ocr_cccd(
                     "message": "Tham số 'side' phải là 'front' hoặc 'back'."},
         )
 
-    # Validate content type
     content_type = (file.content_type or "").lower()
     if content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -43,7 +39,6 @@ async def ocr_cccd(
                     "message": f"Chỉ chấp nhận ảnh JPG, PNG, WebP. Nhận được: {content_type}"},
         )
 
-    # Đọc nội dung file
     image_bytes = await file.read()
 
     if len(image_bytes) > MAX_FILE_SIZE:

@@ -1,22 +1,3 @@
-"""
-build_health_score_example.py — Sinh docs/health_score_example.csv.
-
-Chấm 5.000 listing seed offline (vc-ai/vc-data/master/listings.parquet,
-listing_variants.parquet, samples/reviews.csv) bằng CHÍNH các hàm của engine
-health-1.0 (app/core/f29/scoring.py), rồi chọn 20 dòng đại diện. CSV ghi kèm
-input thô để cộng tay đối chiếu với docs/HEALTH_SPEC.md.
-
-Quy ước cho dữ liệu offline:
-  - Chuyển đổi n/a cho mọi dòng: offline không có lượt xem.
-  - Seed không có `product_type` nhưng mọi biến thể có `stock_qty`, nên coi là
-    READY_TO_SHIP để minh hoạ trục tồn kho.
-  - Độ mới tính từ `created_at` (seed không có lịch sử sửa nội dung), "hôm nay"
-    cố định 2026-08-30 — ngày dữ liệu mồi dừng — để file tái lập được.
-  - C của Bayes = trung bình gộp mọi review mẫu, như engine dùng trung bình toàn sàn.
-
-Chạy: .venv/bin/python scripts/build_health_score_example.py
-"""
-
 import sys
 from datetime import datetime, timezone
 from pathlib import Path

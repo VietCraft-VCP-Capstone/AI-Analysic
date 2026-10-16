@@ -76,19 +76,9 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             continue
         share_dau = n / len(dan_dau)
         share_ca = dem_ca[tag] / len(doi_thu) if dem_ca[tag] else 0
-        # ĐỘ VƯỢT TRỘI, không phải tỉ lệ tuyệt đối. Câu hỏi đúng không phải "bao
-        # nhiêu đối thủ dùng tag này" mà "nhóm BÁN CHẠY có dùng nó nhiều hơn mặt
-        # bằng chung không". Tỉ lệ tuyệt đối cao vẫn vô nghĩa nếu ai cũng dùng.
         vuot = round(share_dau / share_ca, 2) if share_ca else None
         if vuot is None or vuot < NGUONG_VUOT_TROI:
             continue
-        # Dải ước lượng [x, 2x] với x = (vuot - 1) * 20, kẹp trần ở TRAN_UOC_LUONG.
-        #
-        # Bản cũ kẹp trần ĐẦU TRÊN thôi: `high = min(25, low * 2)`. Với vuot > 2,25 thì
-        # low vượt 25 và dải thành NGƯỢC — đo thật trên shp_00017 ra "thấp 53%, cao 25%".
-        # Kẹp cả hai đầu thì dải sụp thành một điểm (25 đến 25), cũng vi phạm BR-196 vì
-        # điều khoản đó đòi một KHOẢNG, không phải một con số đơn.
-        # Nên: kẹp đầu trên trước, rồi đặt đầu dưới bằng nửa đầu trên.
         cao = min(TRAN_UOC_LUONG, max(6, round((vuot - 1) * 20) * 2))
         thap = max(3, cao // 2)
         thieu.append({
@@ -104,7 +94,7 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             },
         })
 
-    thieu.sort(key=lambda x: -x["lift"])   # BR-197
+    thieu.sort(key=lambda x: -x["lift"])
 
     so_tag_thu = len(dem_dau)
     ky_vong_gia = sum(1 for t in thieu if t["used_by_competitors"] < NGUONG_DEM_TIN_CAY)

@@ -62,10 +62,6 @@ DA_LAM: Dict[str, str] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# HAI CHỖ HỢP ĐỒNG TỰ MÂU THUẪN — đã chốt ở đây, ghi lại để không ai chốt ngược
-
-
 def _chua_co_so(ep: Dict[str, Any]) -> None:
     """Chưa job nào ghi vào mart -> 503 kèm tên bảng đang chờ.
 

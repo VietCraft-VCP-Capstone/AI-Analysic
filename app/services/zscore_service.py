@@ -24,7 +24,6 @@ TET_WINDOW = (-70, 35)
 
 class ZScoreService:
 
-    # ------------------------------------------------------------------ #
     @staticmethod
     def robust_scale(residual: np.ndarray) -> Tuple[float, str]:
         """
@@ -50,7 +49,6 @@ class ZScoreService:
 
         return 0.0, "degenerate_no_spread"
 
-    # ------------------------------------------------------------------ #
     @staticmethod
     def robust_scores(values: Union[Sequence[float], np.ndarray]) -> Tuple[np.ndarray, float, str]:
         """Điểm z hiệu chỉnh: lệch khỏi trung vị, chia cho thang đo bền vững."""
@@ -62,7 +60,6 @@ class ZScoreService:
             return np.zeros_like(arr), 0.0, method
         return (arr - float(np.median(arr))) / scale, scale, method
 
-    # ------------------------------------------------------------------ #
     @staticmethod
     def _calendar_flags(dates: Sequence[Any], n: int) -> List[Union[bool, None]]:
         """Đánh dấu điểm nằm trong cửa sổ Tết, nơi mô hình chu kỳ cố định lệch pha."""
@@ -77,7 +74,6 @@ class ZScoreService:
                 flags.append(None)
         return flags
 
-    # ------------------------------------------------------------------ #
     @staticmethod
     def analyze(
         data: Sequence[float],
@@ -214,7 +210,6 @@ class ZScoreService:
             ),
         }
 
-    # ------------------------------------------------------------------ #
     @staticmethod
     def detect_anomalies(
         data: Sequence[float],

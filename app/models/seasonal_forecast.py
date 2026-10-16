@@ -19,22 +19,13 @@ DEFAULT_PERIOD = 52
 TREND_FIT_POINTS = 52      # số điểm cuối dùng để ngoại suy xu hướng
 
 
-# --------------------------------------------------------------------------- #
-# mốc so sánh
-# --------------------------------------------------------------------------- #
-
 def seasonal_naive(train: Sequence[float], horizon: int, period: int = DEFAULT_PERIOD) -> List[float]:
     """Mốc so sánh: lấy giá trị cùng kỳ mùa trước. Mọi mô hình phải thắng được cái này."""
     t = np.asarray(train, dtype=float)
     if t.size < period:
-        # Không đủ một mùa: lùi về naive thường.
         return [float(t[-1])] * horizon
     return [float(t[-period + (i % period)]) for i in range(horizon)]
 
-
-# --------------------------------------------------------------------------- #
-# hiệu ứng Tết
-# --------------------------------------------------------------------------- #
 
 def _bucket_of(day_offset: int) -> int:
     lo, hi = TET_WINDOW
@@ -81,10 +72,6 @@ def _tet_value(effect: Dict[int, Dict[str, float]], date: Any) -> float:
     entry = effect.get(b)
     return entry["effect"] if entry else 0.0
 
-
-# --------------------------------------------------------------------------- #
-# mô hình
-# --------------------------------------------------------------------------- #
 
 def tet_aware_forecast(dates: Sequence[Any], values: Sequence[float],
                        future_dates: Sequence[Any],

@@ -66,7 +66,6 @@ async def detect_anomalies(payload: AnomalyRequest):
             top_n=payload.top_n,
         )
     except ValueError as e:
-        # Đầu vào không hợp lệ là lỗi của người gọi, không phải lỗi máy chủ.
         raise HTTPException(status_code=400, detail=str(e))
 
     return AnomalyResponse(anomalies=result["points"], **{

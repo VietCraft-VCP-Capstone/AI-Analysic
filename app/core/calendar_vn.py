@@ -51,13 +51,11 @@ def days_to_tet(date_val: Union[str, datetime, date, pd.Timestamp]) -> int:
     ts = pd.to_datetime(date_val)
     year = ts.year
 
-    # Tìm ngày Tết gần nhất (so sánh Tết năm trước, năm nay và năm sau)
     candidate_years = [y for y in [year - 1, year, year + 1] if y in TET_DATES]
     if not candidate_years:
         raise ValueError(f"Không tìm thấy năm Tết phù hợp cho ngày {date_val}")
 
     diffs = [(ts - pd.Timestamp(TET_DATES[y])).days for y in candidate_years]
-    # Chọn ngày có khoảng cách tuyệt đối nhỏ nhất
     min_diff = min(diffs, key=abs)
     return int(min_diff)
 

@@ -1,19 +1,3 @@
-"""
-test_api_contract.py — Giữ 16 endpoint không trôi khỏi docs/API_CONTRACT.md.
-
-Test này KHÔNG kiểm tính năng đúng hay sai. Nó kiểm HÌNH DẠNG: đường dẫn có đúng
-hợp đồng không, mọi phản hồi có đủ khối `meta` không, lỗi có đúng mã và đúng body
-không. Tính năng của ai người nấy test riêng.
-
-Vì sao cần: hợp đồng là file .md, không ai ép được. 5 người sửa 16 endpoint trong
-6 tuần thì chắc chắn có chỗ trôi — đổi tên trường, quên `meta`, trả 0 thay vì
-`insufficient_data`. Test đỏ ngay hôm đó rẻ hơn phát hiện lúc ghép với FE.
-
-Chạy:
-    .venv/bin/python tests/test_api_contract.py          # không cần pytest
-    .venv/bin/python -m pytest tests/ -q                 # sau khi INFRA-02 xong
-"""
-
 import os
 import re
 import sys
@@ -23,15 +7,8 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-# Test tự đặt trạng thái xác thực, KHÔNG để .env của từng máy quyết định — nếu không
-# thì ai bật DEV_SHOP_ID trong .env sẽ thấy test_khong_token_thi_401 đỏ mà không hiểu vì sao.
 os.environ["DEV_TRUST_SHOP_HEADER"] = "1"   # cần shop_id vì SPEC-04 chưa xong
 os.environ["DEV_SHOP_ID"] = ""              # nhưng KHÔNG tắt hẳn xác thực
-
-# Đặt "" chứ không phải pop(): app/.env được nạp lúc import app.config (qua
-# _template), tức là SAU đoạn này. `load_dotenv(override=False)` không ghi đè biến
-# đã tồn tại — kể cả khi giá trị là chuỗi rỗng — nên đặt "" mới chặn được
-# DEV_SHOP_ID trong .env của từng máy. pop() thì .env điền lại và test đỏ oan.
 
 from fastapi.testclient import TestClient
 

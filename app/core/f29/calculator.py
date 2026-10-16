@@ -141,7 +141,6 @@ class HealthScoreCalculator:
 
         now = datetime.now(timezone.utc)
 
-        # Đọc mọi biến thể một lần, dùng chung cho tồn kho, cảnh báo lỗ vốn và inputs_hash.
         variants = list(self.live_db["product_variants"].find(
             {"product_id": product_oid},
             {"is_active": 1, "stock_quantity": 1, "retail_price": 1, "base_cost": 1},

@@ -1,15 +1,3 @@
-"""
-f29_bayes_m_selection.py — Chọn hằng số co ngót Bayes m (F29, bước 1 Track A).
-
-Gán review Olist cho product_id qua đơn một sản phẩm, chia đôi review theo thời
-gian (review_creation_date), đo độ ổn định (Pearson, MAE, RMSE) của điểm co ngót
-giữa hai nửa với m = 10/20/50. Dùng đúng hàm `bayes_shrunk_rating` của engine và
-prior C = trung bình toàn sàn như HEALTH_SPEC.
-
-Kết quả đầy đủ: vc-ai/AI-Analysic/docs/BAYES_M_SELECTION.md
-Chạy: .venv/bin/python scripts/f29_bayes_m_selection.py
-"""
-
 import sys
 from pathlib import Path
 

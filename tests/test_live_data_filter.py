@@ -1,14 +1,3 @@
-"""
-test_live_data_filter.py — Kiểm tra bộ lọc dữ liệu giả (seed) theo PLAN_SELLER_AI_LISTING_HEALTH.md §12.
-
-Yêu cầu §12.4:
-1. Sản phẩm seed_ref không được chấm và không lọt vào trung vị.
-2. Đơn có seed_ref nhưng không có is_simulated vẫn bị loại.
-3. Review của đơn mô phỏng không tính vào trục đánh giá.
-4. Shop chỉ có sản phẩm seed_ref thì trả insufficient_data.
-5. Chặn việc query products/orders trên live mà không đi qua bộ lọc.
-"""
-
 import sys
 from pathlib import Path
 

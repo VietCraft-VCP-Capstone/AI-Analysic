@@ -50,17 +50,11 @@ def _meta(shop_id, n, live=False, unlock=None):
 
 @router.get("/api/analytics/competitor-tracking", tags=["F36 · Đạt"])
 def danh_sach(shop_id: str = CurrentShop):
-    # Danh sách theo dõi (CRUD) là dữ liệu NGƯỜI DÙNG tạo, không phải mart — luôn hiển
-    # thị được bất kể shop mồi hay shop thật, bất kể đủ dữ liệu hay chưa (thêm/xoá vẫn
-    # chạy được qua them()/bo() bên dưới, không bị guard này đụng tới).
     theo_doi = list(_kho().find({"shop_id": shop_id, "active": True}, {"_id": 0}))
     ma = [t["tracked_shop_id"] for t in theo_doi]
 
     co_live = la_shop_live(shop_id)
 
-    # Chỉ phần HIỂN THỊ CẢNH BÁO (listing mới của đối thủ) mới cần đủ dữ liệu — và với
-    # shop mồi, phần đó đọc mart `mart_competitor`, nên mart rỗng thì vẫn phải báo 503
-    # như cũ. Shop thật không đọc mart này nên không áp dụng mart_not_ready.
     if not co_live and db()[MART].estimated_document_count() == 0:
         mart_not_ready(MART)
 
@@ -75,12 +69,7 @@ def danh_sach(shop_id: str = CurrentShop):
         if not du_du_lieu:
             unlock = {"requirement": "shop cùng danh mục", "unit": "shop",
                       "current": so_doi_thu, "target": NGUONG_SHOP_CUNG_DM}
-        # BR-203: ngách đang hoạt động của tôi = tập tag trên sản phẩm THẬT đang bán.
         tag_toi = {t for p in san_pham_live(shop_id) for t in p.get("tags") or []}
-        # Cảnh báo "listing mới của đối thủ" đọc mart `mart_competitor` — mart đó là
-        # dữ liệu mồi, không khớp shop thật, nên để trống thay vì trộn hai miền dữ liệu.
-        # Xem ghi chú mismatch BE ở cuối file: chưa có nguồn "sản phẩm mới của đối thủ"
-        # cho sàn thật.
     else:
         tag_toi = {t for r in db()[MART].find({"shop_id": shop_id}, {"_id": 0, "tags": 1})
                    for t in r.get("tags") or []}
@@ -143,11 +132,11 @@ def them(shop_id: str = CurrentShop, body: dict = Body(default={})):
 
     kho = _kho()
     if kho.find_one({"shop_id": shop_id, "tracked_shop_id": muc_tieu, "active": True}):
-        invalid_param("shop_id", "already_tracked")            # BR-202
+        invalid_param("shop_id", "already_tracked")
     if kho.count_documents({"shop_id": shop_id, "active": True}) >= TOI_DA:
         from fastapi import HTTPException
         raise HTTPException(status_code=400,
-                            detail={"error": "tracking_limit_reached", "limit": TOI_DA})  # BR-201
+                            detail={"error": "tracking_limit_reached", "limit": TOI_DA})
 
     kho.update_one(
         {"shop_id": shop_id, "tracked_shop_id": muc_tieu},
@@ -166,7 +155,6 @@ def bo(shop_id: str = CurrentShop, body: dict = Body(default={}),
     if not muc_tieu:
         invalid_param("shop_id", "mã shop cần bỏ theo dõi")
 
-    # BR-204: chỉ tắt cờ, KHÔNG xoá bản ghi — cảnh báo cũ phải còn tra được.
     kq = _kho().update_one({"shop_id": shop_id, "tracked_shop_id": muc_tieu},
                            {"$set": {"active": False, "removed_at": _now()}})
     if not kq.matched_count:

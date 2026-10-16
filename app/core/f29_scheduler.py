@@ -1,29 +1,3 @@
-"""
-f29_scheduler.py — Job quét F29 (§5, BR-181): chấm lại điểm sức khoẻ khi dữ liệu đổi.
-
-Hai job, DÙNG CHUNG MỘT ENGINE (`HealthScoreCalculator`) với API `/health` và
-`/listings/health/preview` — batch, chấm lại khi sửa và preview không được phép
-lệch công thức nhau (§5):
-
-  - `scan_changed_products()` — quét mỗi 60 giây: `products` / `product_variants`
-    có `updated_at` > mốc quét trước. BR-181 cam kết ĐỘ TRỄ "≤ 1 phút" giữa lúc
-    seller sửa và lúc điểm cập nhật — không phải lịch chạy đúng từng giây.
-  - `nightly_full_rescan()` — quét lúc 0h UTC mỗi 24h, chấm TOÀN BỘ listing hợp
-    lệ kể cả sản phẩm `updated_at` không đổi. Bù cho các đường ghi không chạm
-    `products.updated_at` (ví dụ duyệt tag nằm ở collection `tags`, không phải
-    `products`).
-
-Mốc "lần quét trước" lưu ở `vietcraft.scheduler_state` (một bản ghi mỗi job,
-khoá bằng `_id`) — KHÔNG lưu file cục bộ trên máy chạy service: máy demo khởi
-động lại bất cứ lúc nào, và nếu sau này chạy nhiều hơn một tiến trình AI thì
-mọi tiến trình phải thấy cùng một mốc.
-
-Idempotency: mỗi lần chấm xong đều `save()` qua `HealthScoreCalculator`, upsert
-theo khoá `{product_id, date}` — chạy `scan_changed_products()` hay
-`nightly_full_rescan()` hai lần liên tiếp cho cùng dữ liệu chỉ ghi đè cùng một
-bản ghi, không insert trùng (xem `tests/f29/test_persistence.py`).
-"""
-
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,10 +9,6 @@ if str(ROOT_DIR) not in sys.path:
 
 from app.api.v1._live import db_live, LOC_SP_THAT
 from app.core.f29.calculator import HealthScoreCalculator
-
-# ---------------------------------------------------------------------------
-# TRẠNG THÁI LẦN QUÉT GẦN NHẤT
-# ---------------------------------------------------------------------------
 
 STATE_COLLECTION = "scheduler_state"
 STATE_ID_MINUTE_SCAN = "f29_minute_scan"
@@ -91,10 +61,6 @@ def _recalculate_and_save(
     return n_ok
 
 
-# ---------------------------------------------------------------------------
-# HAI JOB
-# ---------------------------------------------------------------------------
-
 def scan_changed_products() -> int:
     """BR-181: quét `products` / `product_variants` có `updated_at` mới hơn lần
     quét trước, chấm lại điểm và lưu. Trả số sản phẩm đã chấm.
@@ -133,10 +99,6 @@ def scan_changed_products() -> int:
         }
 
     n_ok = _recalculate_and_save(changed_ids) if changed_ids else 0
-
-    # Lưu mốc lúc BẮT ĐẦU quét, không phải lúc xong: việc chấm điểm có thể mất
-    # vài giây, và một thay đổi xảy ra đúng lúc đó vẫn phải nằm SAU mốc để lần
-    # quét kế tiếp bắt được — tránh lọt mất thay đổi giữa hai lần quét.
     _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at)
     return n_ok
 
@@ -153,8 +115,6 @@ def nightly_full_rescan() -> int:
     n_ok = _recalculate_and_save(all_ids) if all_ids else 0
 
     _set_last_scan_time(STATE_ID_NIGHTLY, scan_started_at)
-    # Job đêm vừa quét toàn sàn, nên job phút không cần chấm lại ngay những sản
-    # phẩm không đổi gì thêm — đẩy luôn mốc quét-theo-phút lên để khỏi trùng.
     _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at)
     return n_ok
 

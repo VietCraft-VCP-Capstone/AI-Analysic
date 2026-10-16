@@ -66,13 +66,8 @@ async def lifespan(app: FastAPI):
         ra("  [OK] Gateway BE san: BAT (AI_GATEWAY_SECRET). BE goi kem X-Shop-Id da xac thuc.")
     else:
         ra("  [!]  Gateway BE san: TAT. Dat AI_GATEWAY_SECRET giong ben BE de san goi duoc.")
-    # Không in cổng ở đây: uvicorn tự in dòng "Uvicorn running on ..." với cổng
-    # THẬT, còn settings.PORT chỉ là mặc định và sẽ sai nếu chạy --port khác.
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
 
-    # F29 §5: quét thay đổi mỗi 60s (BR-181) + quét toàn sàn 0h UTC mỗi ngày.
-    # Bọc try/except: Mongo chưa nối được thì service vẫn khởi động, chỉ là job
-    # sẽ tự lỗi và log tới khi nối được (xem f29_scheduler._recalculate_and_save).
     try:
         from app.core.f29_scheduler import start_scheduler
         start_scheduler()
@@ -143,10 +138,6 @@ def read_health():
     return {"status": "ok", "service": "ai-analytics"}
 
 
-# Readiness endpoint — khác /health (chỉ trả tĩnh "ok" nếu tiến trình còn sống):
-# /ready kiểm tra THẬT là Mongo kết nối được VÀ có ít nhất 1 mart cốt lõi có dữ
-# liệu, để docker-compose / người vận hành biết lúc nào service dùng được chứ
-# không chỉ "đã khởi động". Không đụng route /health ở trên.
 @app.get("/ready")
 def read_ready():
     from datetime import datetime, timezone
@@ -154,7 +145,6 @@ def read_ready():
     from app.api.v1._live import db_live
     from app.api.v1._mart import db
 
-    # 1) Mongo kết nối được? (ping thử qua db_live(), giống _live.py dùng)
     try:
         db_live().command("ping")
     except Exception as e:
@@ -163,7 +153,6 @@ def read_ready():
             content={"status": "not_ready", "reason": "mongo_unreachable", "detail": str(e)[:200]},
         )
 
-    # 2) Ít nhất 1 mart cốt lõi (mart_listing_quality / listing_health) có dữ liệu?
     try:
         mart_db = db()
         co_mart = (
@@ -178,11 +167,6 @@ def read_ready():
 
     body = {"status": "ok"}
 
-    # 3) Cảnh báo job trễ quá 26h (plan B2) — đọc bản mới nhất trong
-    # listing_health_scores, do job app/core/f29_scheduler.py ghi. Vẫn bọc
-    # try/except: nếu collection chưa tồn tại / rỗng (job chưa chạy lần nào,
-    # hoặc đang chạy trên Mongo riêng không có dữ liệu) thì BỎ QUA, không để
-    # /ready sập vì việc này — đây chỉ là cảnh báo, không phải điều kiện sẵn sàng.
     try:
         mart_db = db()
         latest = mart_db["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
@@ -204,12 +188,6 @@ def read_ready():
     return JSONResponse(status_code=200, content=body)
 
 
-# ---------------------------------------------------------------------------
-# 16 endpoint phân tích F26–F41.
-#
-# Đường dẫn theo đúng docs/API_CONTRACT.md mục 3 (`/api/analytics/...`), KHÔNG
-# nằm dưới /api/v1 — hợp đồng với FE sàn đã chốt như vậy.
-# ---------------------------------------------------------------------------
 TRANG_THAI_F = gan_analytics(app)
 
 # Include routes

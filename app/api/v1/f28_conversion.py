@@ -63,6 +63,6 @@ def conversion(id: str, shop_id: str = CurrentShop):
         "category_id": r.get("category_id"),
         "cr_index": r["cr_index"],
         "weakest_step": r["weakest_step"],
-        "tips": r.get("tips") or [],        # rỗng khi CR không thấp hơn danh mục >= 20%
+        "tips": r.get("tips") or [],
         "window": {"from": r.get("window_from"), "to": r.get("window_to")},
     }, meta)

@@ -32,7 +32,6 @@ TOI_THIEU = 8            # dưới ngưỡng này phân vị không có nghĩa
 
 DAI = [(10, "far_below"), (30, "below"), (70, "competitive"), (90, "premium"), (101, "far_above")]
 
-# Giải thích nguồn mã loại phôi. Người bán cần biết mã này do họ chọn hay do máy đoán.
 NGUON_LOAI = {
     "seller": "bạn tự chọn",
     "vi": "máy đoán từ tên sản phẩm",
@@ -72,10 +71,6 @@ def _khoang_de_xuat(pb: Dict[str, int], co_so: str) -> Dict[str, Any]:
     }
 
 
-# ---------------------------------------------------------------------------
-# ĐƯỜNG SHOP THẬT
-# ---------------------------------------------------------------------------
-
 def _pricing_live(shop_id: str, productType: Optional[str],
                   price: Optional[float], productId: Optional[str]):
     sp = san_pham_live(shop_id)
@@ -88,7 +83,6 @@ def _pricing_live(shop_id: str, productType: Optional[str],
                        attributed_to_live_shop=True, sample_size=0),
         )
 
-    # Danh sách sản phẩm để FE dựng bộ chọn. Đây là sản phẩm THẬT của người bán.
     cua_toi = [{
         "product_id": p["product_id"],
         "title": p["title"],
@@ -102,8 +96,6 @@ def _pricing_live(shop_id: str, productType: Optional[str],
     if productId and chon is None:
         invalid_param("productId", "mã một sản phẩm của shop bạn")
 
-    # Loại phôi: người bán chọn thì tin người bán, không thì lấy của sản phẩm đang xem,
-    # không nữa thì lấy loại phổ biến nhất trong shop.
     if productType:
         pt, nguon_loai = productType, "seller"
     elif chon:
@@ -116,12 +108,6 @@ def _pricing_live(shop_id: str, productType: Optional[str],
         pt = max(dem, key=lambda k: dem[k]) if dem else None
         nguon_loai = next((p["type_source"] for p in sp if p["product_type_id"] == pt), "unknown")
 
-    # Giá của mình: tham số price thắng, rồi tới giá sản phẩm đang xem.
-    #
-    # CHƯA CHỌN SẢN PHẨM THÌ KHÔNG PHÁN XÉT. Bản đầu lấy trung vị giá các sản phẩm cùng
-    # loại phôi của shop rồi chấm "cao hơn hầu hết" — nhưng trung vị của một bộ ấm chén
-    # gốm và một cái cốc in là con số không đại diện cho sản phẩm nào cả, và người bán sẽ
-    # nhận một kết luận về thứ họ chưa hỏi. Để trống, và mời họ chọn một sản phẩm.
     if price is not None:
         gia_toi: Optional[float] = price
     elif chon:
@@ -131,7 +117,6 @@ def _pricing_live(shop_id: str, productType: Optional[str],
 
     loai_cua_toi = sorted({p["product_type_id"] for p in sp if p["product_type_id"]})
 
-    # ---- Mặt bằng 1: catalog tham chiếu POD, cùng loại phôi -----------------
     if pt:
         coll = db()[MART]
         if coll.estimated_document_count() == 0:
@@ -181,7 +166,6 @@ def _pricing_live(shop_id: str, productType: Optional[str],
                 ),
             }, meta)
 
-    # ---- Mặt bằng 2: giá THẬT của shop khác trên sàn, cùng danh mục ---------
     danh_muc = sorted({c for p in sp for c in p["categories"]}) if not chon else sorted(chon["categories"])
     gia_that = gia_cung_danh_muc_live(danh_muc, tru_shop=shop_id)
     meta_live = build_meta(model_version="live-pricing-1.0", scope="shop", scope_id=shop_id,
@@ -215,7 +199,6 @@ def _pricing_live(shop_id: str, productType: Optional[str],
             ),
         }, meta_live)
 
-    # ---- Không đủ cả hai ---------------------------------------------------
     return insufficient(
         (f"Chưa dựng được mặt bằng giá cho sản phẩm này. Tên sản phẩm "
          f"{'không ánh xạ được sang loại phôi nào' if not pt else f'ánh xạ sang loại phôi {pt} nhưng catalog chưa đủ sản phẩm cùng loại'}"
@@ -224,10 +207,6 @@ def _pricing_live(shop_id: str, productType: Optional[str],
         meta_live,
     )
 
-
-# ---------------------------------------------------------------------------
-# ĐƯỜNG SHOP DỮ LIỆU MỒI
-# ---------------------------------------------------------------------------
 
 def _pricing_seed(shop_id: str, productType: Optional[str], price: Optional[float]):
     coll = db()[MART]

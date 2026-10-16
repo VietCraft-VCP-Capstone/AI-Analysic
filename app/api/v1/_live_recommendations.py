@@ -1,19 +1,3 @@
-"""
-_live_recommendations.py — F41 (gợi ý nên làm sản phẩm gì) cho shop THẬT.
-
-Bản mart của F41 gộp `niche_score` + `mart_competitor` — cả hai đều là mart dữ liệu
-mồi, không khớp shop thật (xem `_live.py`). Với shop thật, gộp lại từ BA TÍN HIỆU
-THẬT thay vì mart:
-
-  1. Sản phẩm điểm F29 thấp của chính shop — đọc THẲNG `vietcraft.listing_health_scores`
-     (collection do `app/core/f29/` ghi). File này CHỈ ĐỌC, không ghi gì vào đó.
-  2. Mùa vụ sắp tới — mart `seasonal_profile` (F38), phân rã Google Trends Việt Nam THẬT.
-  3. Tag đang nóng — mart `mart_demand` (F40), cũng từ Google Trends thật.
-
-`validated: false` giữ nguyên như bản mart — tiêu chí thành công (backtest) chưa chạy
-cho CẢ HAI đường, không riêng gì đường live.
-"""
-
 import sys
 from datetime import date
 from pathlib import Path
@@ -27,11 +11,11 @@ from app.api.v1._live import db_live, san_pham_live
 from app.api.v1._mart import db
 from app.api.v1._template import build_meta, insufficient, ok
 from app.config import settings
-from app.api.v1.f38_seasonal import _cua_so_ra_hang  # noqa: PLC0415 (helper nội bộ, chỉ đọc)
+from app.api.v1.f38_seasonal import _cua_so_ra_hang  # noqa: PLC0415
 
 TOI_DA = 5
-TOI_DA_YEU = 3           # tối đa bao nhiêu gợi ý "sửa listing yếu" trong tổng 5
-DIEM_YEU = 50            # BR §9.2 dùng cùng ngưỡng F29: score < 50
+TOI_DA_YEU = 3
+DIEM_YEU = 50
 
 
 def _f29_thap(shop_id: str, gioi_han: int = 50) -> List[Dict[str, Any]]:

@@ -26,11 +26,9 @@ SO_TOP_PRODUCT = 5
 def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
     so_ngay = doc_khoang(timeRange)
 
-    # Shop thật trên sàn đọc đơn hàng thật, không đọc dữ liệu mồi.
     if la_shop_live(shop_id):
         return overview_live(shop_id, so_ngay, timeRange)
 
-    # Mốc thời gian lấy từ dữ liệu, không lấy hôm nay — xem ghi chú ở ngay_moi_nhat().
     moi_nhat = ngay_moi_nhat({"shop_id": shop_id})
     if moi_nhat is None:
         mart_not_ready("listing_daily")
@@ -45,8 +43,6 @@ def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
     (kq,) = db()["listing_daily"].aggregate([
         {"$match": {"shop_id": shop_id, "date": {"$gte": tu_truoc, "$lte": den}}},
         {"$facet": {
-            # Nhánh "chuoi" gộp theo ngày, nên tổng kỳ này cộng lại từ đây trong
-            # Python — không cần một nhánh riêng quét lại đúng tập dữ liệu đó.
             "chuoi": [{"$match": {"date": {"$gte": tu}}},
                       {"$group": {"_id": "$date", **tong}},
                       {"$sort": {"_id": 1}}],
@@ -56,7 +52,6 @@ def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
                     {"$group": {"_id": "$listing_id", "revenue_vnd": {"$sum": "$revenue_vnd"},
                                 "orders": {"$sum": "$orders"}}},
                     {"$sort": {"revenue_vnd": -1}}, {"$limit": SO_TOP_PRODUCT},
-                    # Lấy luôn tiêu đề ở đây, đỡ một lượt đi-về nữa (~90ms).
                     {"$lookup": {"from": "listings", "localField": "_id",
                                  "foreignField": "listing_id", "as": "l"}},
                     {"$project": {"revenue_vnd": 1, "orders": 1,
@@ -98,7 +93,6 @@ def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
             "views": kpi("views", int),
             "orders": kpi("orders", int),
             "revenue_vnd": kpi("revenue_vnd"),
-            # CR có thể là None ở một trong hai kỳ -> pop_pct cũng None, không ép về 0
             "conversion_pct": {
                 "value": cr_nay,
                 "pop_pct": phan_tram_thay_doi(cr_nay, cr_truoc) if (cr_nay is not None and cr_truoc) else None,
@@ -109,16 +103,16 @@ def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
         "top_products": [{"listing_id": t["_id"], "title": t.get("title"),
                           "orders": int(t["orders"]), "revenue_vnd": tien(t["revenue_vnd"])}
                          for t in kq["top"]],
-        "recent_feedback": [],      # chờ F29; trả [] chứ không bịa
+        "recent_feedback": [],
     }, meta)
 
 
 def _meta(shop_id, tu, den, co_ngay):
     return build_meta(
-        model_version="live-read-1.0",       # đọc thẳng nguồn, không qua job
+        model_version="live-read-1.0",
         scope="shop", scope_id=shop_id,
         database="vietcraft-seed", collection="listing_daily",
-        mode="seed_demo",                    # dữ liệu mồi — FE phải hiện nhãn
+        mode="seed_demo",
         attributed_to_live_shop=False,
         sample_size=co_ngay, identity_linked=False,
         confidence="high" if co_ngay >= 30 else "medium",

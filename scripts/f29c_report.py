@@ -1,27 +1,3 @@
-"""
-f29c_report.py — F29c: báo cáo chỉ tiêu đăng ký health_pearson trên Olist thật.
-
-Theo PLAN_SELLER_AI_LISTING_HEALTH.md §6.3, §6.4 và bản đăng ký (SRS 4.2.2,
-chỉ tiêu `health_pearson >= 0,65` trên 500 listing — cổng ra chỉ cần CÓ SỐ THẬT,
-đạt ngưỡng thì không bắt buộc).
-
-Áp ĐÚNG engine health-1.0 (app/core/f29/scoring.py, qua scripts/f29_olist_axes.py)
-lên 500 sản phẩm Olist bán chạy nhất TRƯỚC T=2018-01-01. Trên Olist chỉ 2/5 trục đo
-được (đánh giá, nội dung ảnh+mô tả); 3 trục còn lại n/a nên `total_score` của engine
-tự chia lại trọng số (0,25/0,45 và 0,20/0,45; một trục thì trục đó 100%).
-
-Không rò rỉ: điểm chỉ dùng dữ liệu TRƯỚC T. Kết quả đo là doanh số SAU T
-(chuẩn hoá theo cửa sổ 7,95 tháng cố định, như F29b), cắt ở 2018-08-31.
-
-Ghi:
-  - docs/HEALTH_SCATTER_OLIST.png — biểu đồ phân tán điểm vs doanh số sau T
-  - docs/RESULTS.json -> metrics.health_pearson (source "olist_real", kèm p-value, n)
-  - health_score_olist_top500.csv (trong scripts/, để kiểm tra tay) — không bắt
-    buộc theo đề bài nhưng hữu ích để soát lại từng dòng
-
-Chạy: .venv/bin/python scripts/f29c_report.py
-"""
-
 import json
 from datetime import datetime, timezone
 from pathlib import Path

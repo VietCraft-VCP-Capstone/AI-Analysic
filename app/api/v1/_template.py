@@ -17,7 +17,7 @@ from fastapi import Depends, Header, HTTPException
 from app.config import settings as _nap_env  # noqa: F401
 
 STATUS_OK = "ok"
-STATUS_PARTIAL = "partial"          # có số nhưng độ tin cậy thấp
+STATUS_PARTIAL = "partial"
 STATUS_INSUFFICIENT = "insufficient_data"
 
 SOURCE_MODES = ("live", "seed_demo", "derived")
@@ -26,10 +26,6 @@ SOURCE_MODES = ("live", "seed_demo", "derived")
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
-
-# ---------------------------------------------------------------------------
-# KHỐI META
-# ---------------------------------------------------------------------------
 
 def build_meta(
     *,
@@ -112,10 +108,6 @@ def meta_from_record(
     )
 
 
-# ---------------------------------------------------------------------------
-# VỎ PHẢN HỒI
-# ---------------------------------------------------------------------------
-
 def ok(data: Any, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Có số thật, tin được."""
     meta = meta or build_meta()
@@ -142,10 +134,6 @@ def insufficient(reason: str, meta: Optional[Dict[str, Any]] = None) -> Dict[str
     meta["reason"] = reason
     return {"data": None, "meta": meta, "error": None}
 
-
-# ---------------------------------------------------------------------------
-# LỖI — bảng mã ở mục 1 hợp đồng
-# ---------------------------------------------------------------------------
 
 def mart_not_ready(collection: str) -> None:
     """503 — job chưa chạy lần nào, bảng rỗng.
@@ -175,38 +163,8 @@ def not_found(what: str = "listing") -> None:
     raise HTTPException(status_code=404, detail={"error": "not_found", "resource": what})
 
 
-# ---------------------------------------------------------------------------
-# XÁC THỰC — shop_id LUÔN lấy từ JWT, không nhận từ query
-#
-# BR-174 / BR-177: người bán chỉ xem được dữ liệu shop mình sở hữu. Nhận shop_id
-# từ query thì ai cũng đổi được thành shop người khác — đây là lý do tham số đó
-# không tồn tại trong bất kỳ endpoint nào của hợp đồng.
-#
-# ⚠ Phần GIẢI MÃ token thuộc SPEC-04 (Nhi, hạn 24/09) — chưa có thuật toán, khoá
-# ký và tên trường từ sàn. Chỗ nối đã để sẵn ở decode_shop_id() bên dưới: Nhi chỉ
-# điền vào một hàm, 16 endpoint không phải sửa dòng nào.
-# ---------------------------------------------------------------------------
-
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 
-
-# ---------------------------------------------------------------------------
-# HAI CÁCH TẮT XÁC THỰC LÚC LÀM TÍNH NĂNG — cả hai mặc định TẮT.
-#
-#   DEV_SHOP_ID=shp_00017      TẮT HẲN xác thực. Mọi request thành shop này,
-#                              không cần token, không cần header. Dùng khi đang
-#                              viết tính năng và không muốn vướng đăng nhập.
-#
-#   DEV_TRUST_SHOP_HEADER=1    Vẫn phải gửi header X-Debug-Shop-Id, nhưng đổi
-#                              được shop giữa các request. Dùng khi cần thử
-#                              BR-174/BR-177: shop A có xem được dữ liệu shop B không.
-#
-# Đọc lúc GỌI chứ không lúc import, để đổi .env rồi `--reload` là ăn ngay, và để
-# test tự đặt được trạng thái của mình.
-#
-# ⚠ KHÔNG BAO GIỜ bật trên môi trường có dữ liệu thật: bật lên là ai cũng tự xưng
-#   shop nào cũng được. `main.py` in cảnh báo to lúc khởi động khi thấy đang bật.
-# ---------------------------------------------------------------------------
 
 def _dev_shop_id() -> str:
     return os.getenv("DEV_SHOP_ID", "").strip()
@@ -215,19 +173,6 @@ def _dev_shop_id() -> str:
 def _dev_tin_header() -> bool:
     return os.getenv("DEV_TRUST_SHOP_HEADER", "").strip() == "1"
 
-
-# ---------------------------------------------------------------------------
-# ĐƯỜNG GATEWAY — BE sàn gọi thay người bán (đường chạy thật)
-#
-# FE không bao giờ gọi thẳng service này. Người bán đăng nhập ở BE sàn, BE kiểm
-# JWT + vai trò seller, tự tra shop của người đó, rồi gọi sang đây kèm:
-#     X-Gateway-Secret: <AI_GATEWAY_SECRET>     bí mật dùng chung BE <-> AI
-#     X-Shop-Id:        <shop mà BE đã xác thực>
-# Nhờ vậy service không cần biết khoá ký JWT của sàn — một bí mật, một chỗ đổi.
-#
-# Secret sai thì 401 luôn, KHÔNG rơi xuống các nhánh dev bên dưới: người gửi header
-# gateway mà sai secret là đang thử mạo danh BE, không phải đang chạy thử.
-# ---------------------------------------------------------------------------
 
 _SHOP_ID_HOP_LE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -278,10 +223,6 @@ def current_shop_id(
 
     dev = _dev_shop_id()
 
-    # Header đi TRƯỚC DEV_SHOP_ID: DEV_SHOP_ID là giá trị MẶC ĐỊNH cho đỡ phải gõ,
-    # không phải cái khoá cứng. Đè ngược lại thì ai đặt DEV_SHOP_ID trong .env sẽ
-    # thấy mọi request đều ra cùng một shop dù đã gửi header khác — và số trả về
-    # trông vẫn hợp lý nên rất khó phát hiện. Đã dính đúng bẫy này khi thử F34.
     if x_debug_shop_id and (dev or _dev_tin_header()):
         return x_debug_shop_id
 

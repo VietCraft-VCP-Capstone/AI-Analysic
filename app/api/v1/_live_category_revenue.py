@@ -1,22 +1,3 @@
-"""
-_live_category_revenue.py — F31 (doanh thu theo danh mục + giờ vàng) cho shop THẬT.
-
-Tách khỏi `f31_category_revenue.py` theo đúng cách `_live_overview.py` đã tách F26:
-hai đường đọc hai nguồn khác nhau (mart Olist mồi vs. đơn hàng thật), gộp vào một hàm
-là mỗi lần sửa một đường lại có nguy cơ làm hỏng đường kia.
-
-F31 CHỈ cần `orders` — KHÔNG cần `product_events`/lượt xem:
-  - Khung giờ vàng: gộp theo `order_hour_of_week` (BE ghi sẵn, xem order.model.ts).
-    Quy ước BE: `order_hour_of_week = getDay()*24 + getHours()`, với `getDay()` kiểu
-    JS (0 = Chủ Nhật .. 6 = Thứ Bảy). Đổi sang ISO dow (1 = Thứ Hai .. 7 = Chủ Nhật)
-    để khớp `THU_VI` mà bản mart F31 đang dùng.
-  - Doanh thu theo danh mục: nối `items.product_id` -> `products.categories` (chữ tự
-    do người bán đặt, lọc qua `LOC_SP_THAT` để bỏ sản phẩm seed).
-
-Doanh thu một đơn tính như F26 (`_live_overview._tien_don`): ưu tiên tổng đã chốt ở
-`financial_breakdown`, không có thì cộng từng dòng hàng `retail_price * quantity`.
-"""
-
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -29,10 +10,8 @@ from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, db_live
 from app.api.v1._mart import doc_khoang, tien
 from app.api.v1._template import build_meta, insufficient, ok
 
-# Chỉ tính đơn đã trả tiền, cùng quy ước với F26 (`_live_overview.TRANG_THAI_TINH_TIEN`):
-# đơn PENDING chưa chắc thành doanh thu, đơn REFUNDED đã trả lại tiền.
 TRANG_THAI_TINH_TIEN = ["PAID"]
-TOI_THIEU_DON = 20      # §9.2: ≥20 đơn thật
+TOI_THIEU_DON = 20
 
 THU_VI = {1: "Thứ Hai", 2: "Thứ Ba", 3: "Thứ Tư", 4: "Thứ Năm",
           5: "Thứ Sáu", 6: "Thứ Bảy", 7: "Chủ Nhật"}
@@ -99,8 +78,7 @@ def category_revenue_live(shop_id: str, time_range: str):
             f"Shop mới có {len(don)} đơn thật đã thanh toán, cần tối thiểu {TOI_THIEU_DON} "
             f"mới tính được doanh thu theo danh mục và khung giờ đáng tin.", meta)
 
-    # --- Khung giờ vàng: trên TOÀN BỘ lịch sử đơn thật, không cắt theo timeRange —
-    # cùng lý do với bản mart (cắt ngắn thì mỗi ô heatmap còn vài đơn, nhịp giờ thành nhiễu).
+    # Khung giờ vàng
     khung: Dict[Any, Dict[str, Any]] = {}
     for d in don:
         ohw = d.get("order_hour_of_week")
@@ -114,7 +92,7 @@ def category_revenue_live(shop_id: str, time_range: str):
     dinh = khung_list[0] if khung_list else None
     tong_don_lich_su = len(don)
 
-    # --- Doanh thu theo danh mục: cắt theo timeRange, neo vào ngày đơn mới nhất.
+    # Doanh thu theo danh mục
     ngay_don = sorted(n for n in (_ngay(d.get("created_at")) for d in don) if n)
     moi_nhat = ngay_don[-1] if ngay_don else None
     if moi_nhat:
@@ -151,17 +129,11 @@ def category_revenue_live(shop_id: str, time_range: str):
                 o["orders"].add(str(d.get("_id")))
                 o["units"] += sl
 
-    # Chuẩn hoá % theo tổng CÁC DANH MỤC (không phải tổng đơn): một sản phẩm có thể
-    # thuộc nhiều danh mục nên tổng này có thể vượt tong_dt — share_pct vẫn cộng đúng 100%
-    # trong phạm vi bảng phân rã theo danh mục.
     tong_cat = sum(v["revenue_vnd"] for v in theo_cat.values()) or 1
 
     return ok({
         "range": time_range, "from": tu, "to": den, "anchored_to_latest_data": True,
         "by_product_type": [{
-            # Sàn thật dùng danh mục chữ tự do (Product.categories), không có mã loại
-            # phôi POD cố định như dữ liệu mồi — product_type_id/name_vi giữ CÙNG TÊN
-            # TRƯỜNG để FE không phải phân nhánh, nhưng giá trị là tên danh mục thật.
             "product_type_id": c,
             "name_vi": c,
             "revenue_vnd": tien(v["revenue_vnd"]),

@@ -63,7 +63,6 @@ def shop_comparison(shop_id: str = CurrentShop):
             f"Shop mới có {len(cua_toi)} listing, cần tối thiểu {TOI_THIEU_LISTING} "
             f"mới dựng được biểu đồ so sánh (BR-193)", meta)
 
-    # BR-190: phân khúc = danh mục có nhiều listing nhất của shop này.
     dem_cat = defaultdict(int)
     for r in cua_toi:
         dem_cat[r["category_id"]] += 1
@@ -91,8 +90,6 @@ def shop_comparison(shop_id: str = CurrentShop):
         return {
             "listing_count": s["n"],
             "avg_rating": sum(s["sao"]) / len(s["sao"]) if s["sao"] else None,
-            # Phản hồi NHANH là tốt -> đảo dấu trước khi chuẩn hoá, để 100 luôn là "tốt"
-            # trên mọi trục. Không đảo thì shop chậm nhất lại nằm ngoài cùng biểu đồ.
             "response_speed": -phan_hoi.get(sid, 0),
             "avg_price": sum(s["gia"]) / len(s["gia"]) if s["gia"] else None,
             "product_diversity": len(s["loai"]),

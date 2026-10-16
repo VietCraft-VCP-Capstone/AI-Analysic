@@ -47,9 +47,6 @@ def alerts(shop_id: str = CurrentShop, period: str = "90d"):
 
     rows = list(coll.find(loc, {"_id": 0}).sort("event_date", -1))
 
-    # Shop không có cảnh báo nào là KẾT QUẢ HỢP LỆ, không phải thiếu dữ liệu.
-    # Nhưng phải phân biệt với "shop này bị loại khỏi phép dò vì chuỗi quá thưa" —
-    # hai chuyện khác hẳn, và người bán cần biết mình thuộc loại nào.
     duoc_do = coll.count_documents({"entity_id": shop_id}) > 0
     mau = rows[0] if rows else coll.find_one({}, {"_id": 0})
     meta = meta_from_record(mau, scope="shop", scope_id=shop_id, collection=MART,

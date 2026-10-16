@@ -1,16 +1,3 @@
-"""
-_live_overview.py — Tổng quan shop (F26) tính từ ĐƠN HÀNG THẬT trên sàn.
-
-Tách khỏi `f26_shop_overview.py` để đường dữ liệu mồi không bị đụng tới: hai đường đọc
-hai nguồn khác nhau, gộp vào một hàm là mỗi lần sửa một đường lại có nguy cơ làm hỏng
-đường kia.
-
-Điều quan trọng nhất ở đây: **lượt xem và tỉ lệ chuyển đổi trả `null`**, không trả 0.
-Sàn chưa bật theo dõi hành vi người mua (`product_events` chưa tồn tại) nên không có
-lượt xem. Trả 0 lượt xem thì tỉ lệ chuyển đổi thành 0% và người bán sẽ tưởng không ai
-xem hàng của mình, trong khi thật ra là chưa đo.
-"""
-
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -24,8 +11,6 @@ from app.api.v1._live import _so, db_live
 from app.api.v1._mart import phan_tram_thay_doi, tien
 from app.api.v1._template import build_meta, insufficient, ok
 
-# Chỉ tính đơn đã trả tiền. Đơn PENDING chưa chắc thành doanh thu, gộp vào là khoe số
-# chưa có; đơn REFUNDED đã trả lại tiền.
 TRANG_THAI_TINH_TIEN = ["PAID"]
 SO_TOP_PRODUCT = 5
 
@@ -95,8 +80,6 @@ def overview_live(shop_id: str, so_ngay: int, time_range: str):
     dt_nay = sum(_tien_don(d) for d in ky_nay)
     dt_truoc = sum(_tien_don(d) for d in ky_truoc)
 
-    # Chuỗi theo ngày: điền đủ mọi ngày trong cửa sổ, ngày không có đơn là 0 đơn —
-    # đây là 0 THẬT (không bán được gì), khác với lượt xem là chưa đo.
     theo_ngay: Dict[str, Dict[str, int]] = {}
     for i in range(so_ngay):
         k = (tu + timedelta(days=i)).date().isoformat()

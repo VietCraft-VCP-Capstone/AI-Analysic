@@ -37,7 +37,6 @@ def _kiem_quyen_listing(id: str, shop_id: str) -> None:
 def health(id: str, shop_id: str = CurrentShop):
     """Đọc điểm sức khoẻ trực tiếp từ listing_health_scores collection."""
 
-    # Kiểm shop
     if not la_shop_live(shop_id):
         return insufficient(
             "Cần cấu hình gian hàng trước khi xem sức khoẻ listing",
@@ -46,7 +45,6 @@ def health(id: str, shop_id: str = CurrentShop):
 
     _kiem_quyen_listing(id, shop_id)
 
-    # Tính điểm
     calculator = HealthScoreCalculator()
     result = calculator.calculate(id)
 

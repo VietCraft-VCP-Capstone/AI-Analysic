@@ -55,7 +55,7 @@ def listing_timeseries(id: str, shop_id: str = CurrentShop, timeRange: str = "30
     if l is None:
         not_found("listing")
     if l.get("shop_id") != shop_id:
-        forbidden()                                  # BR-177
+        forbidden()
 
     moi_nhat = ngay_moi_nhat({"listing_id": id})
     if moi_nhat is None:
