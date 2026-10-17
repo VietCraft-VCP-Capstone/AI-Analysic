@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 # Thêm thư mục gốc vào sys.path để cho phép chạy trực tiếp `python app/main.py`
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -18,6 +19,7 @@ from app.api.v1._template import che_do_xac_thuc
 from app.api.v1.analytics_routes import gan_vao as gan_analytics
 from app.api.v1.anomaly import router as anomaly_router
 from app.api.v1.cccd_ocr import router as cccd_ocr_router
+from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -165,7 +167,7 @@ def read_ready():
     if not co_mart:
         return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "mart_empty"})
 
-    body = {"status": "ok"}
+    body: dict[str, Any] = {"status": "ok"}
 
     try:
         mart_db = db()
@@ -193,6 +195,7 @@ TRANG_THAI_F = gan_analytics(app)
 # Include routes
 app.include_router(anomaly_router, prefix=f"{settings.API_V1_STR}/anomaly", tags=["Anomaly Detection"])
 app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", tags=["CCCD OCR & Verification"])
+app.include_router(smart_suggestion_router)
 
 
 

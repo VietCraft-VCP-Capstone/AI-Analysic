@@ -182,6 +182,8 @@ def che_do_xac_thuc() -> str:
         return f"TAT HOAN TOAN — moi request thanh shop `{_dev_shop_id()}` (DEV_SHOP_ID)"
     if _dev_tin_header():
         return "TIN HEADER X-Debug-Shop-Id, khong kiem token (DEV_TRUST_SHOP_HEADER=1)"
+    if os.getenv("AI_GATEWAY_SECRET"):
+        return "XAC THUC QUA BE GATEWAY (X-Gateway-Secret)"
     return ""
 
 
