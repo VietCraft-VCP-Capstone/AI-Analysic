@@ -1,7 +1,4 @@
-"""Phần SHOP THẬT của nhóm đối thủ F32–F34, F36. Không cần MongoDB: DB giả trong bộ nhớ.
-
-    .venv/Scripts/python tests/test_competitor_live.py
-"""
+"""F32–F36 cho shop thật, chạy trên DB giả trong bộ nhớ."""
 
 import copy
 import sys
@@ -30,11 +27,7 @@ MODULES = (f32, f33, f34, f36, cl)
 _GOC = {(m, t): getattr(m, t) for m in MODULES for t in ("db", "db_live", "_bay_gio") if hasattr(m, t)}
 
 
-# Sàn mẫu (bám mục 8 của PLAN_SELLER_COMPETITOR_AI.md, thu nhỏ):
-#   A       shop đang xem: 3 Áo thun + 2 Hoodie + 1 Cốc sứ, không có tag ao-cap-doi
-#   E,B..H  7 đối thủ ở Áo, mỗi shop 6 sản phẩm; 20 sản phẩm có đơn, 10 trong đó gắn ao-cap-doi
-#   I, J    3 Cốc sứ: danh mục Cốc ly chưa đủ 5 đối thủ
-#   B       A theo dõi; hôm qua đăng 1 Áo thun (trùng ngách) và 1 Tranh (không trùng)
+# A: shop đang xem; B..H: 7 đối thủ ở Áo; I, J: Cốc ly chưa đủ đối thủ; A theo dõi B, B vừa đăng 1 Áo + 1 Tranh.
 def _san_mau():
     dm = {}
     for slug, ten, cha in (("ao", "Áo", None), ("coc-ly", "Cốc ly", None), ("tranh", "Tranh", None),
@@ -415,20 +408,23 @@ def test_f36_shop_that_khong_them_bot_qua_module_ai():
             assert e.status_code == 400
 
 
-if __name__ == "__main__":
-    print("=== KIỂM PHẦN SHOP THẬT CỦA NHÓM ĐỐI THỦ ===")
-    cac_test = [(t, v) for t, v in globals().items() if t.startswith("test_") and callable(v)]
-    hong = 0
-    for ten, ham in cac_test:
-        try:
-            ham()
-            print(f"  ✓ {ten}")
-        except AssertionError as e:
-            hong += 1
-            print(f"  ✗ {ten}\n      {e}")
-    teardown_module()
-    print()
-    if hong:
-        print(f"❌ {hong}/{len(cac_test)} TEST HỎNG")
-        sys.exit(1)
-    print(f"✅ {len(cac_test)}/{len(cac_test)} TEST PASS")
+def test_f35_catalog_trong_thi_so_gia_that_cung_danh_muc():
+    from app.api.v1 import f35_pricing as f35
+
+    class _MartTrong:
+        def estimated_document_count(self):
+            return 0
+
+    sp = [{"product_id": "p1", "title": "Áo thun Hoa sen", "price_vnd": 200000, "product_type_id": "tshirt",
+           "type_source": "vi", "handmade_hint": False, "categories": ["Áo thun"]}]
+    goc = {k: getattr(f35, k) for k in ("db", "san_pham_live", "gia_cung_danh_muc_live")}
+    try:
+        f35.db = lambda: {"mart_competitor": _MartTrong()}
+        f35.san_pham_live = lambda _sid: sp
+        f35.gia_cung_danh_muc_live = lambda _dm, tru_shop=None: sorted(range(100000, 300001, 20000))
+        r = f35.pricing(shop_id=str(ObjectId()), productType=None, price=None, productId="p1")
+    finally:
+        for k, v in goc.items():
+            setattr(f35, k, v)
+    assert r["data"]["basis_kind"] == "live_category" and r["data"]["percentile"] == 55
+    assert r["data"]["limitation"].startswith("Catalog tham chiếu chưa có dữ liệu")

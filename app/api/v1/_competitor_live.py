@@ -86,8 +86,7 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
                       reviews: Iterable[dict], wishlists: Iterable[dict], shops: Iterable[dict],
                       categories: Iterable[dict], tags: Iterable[dict],
                       now: Any) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
-    """Mỗi sản phẩm đang bán một dòng, cùng cột với `mart_competitor` để F32–F34 dùng chung logic.
-    Thiếu giá hoặc danh mục thì bỏ, không ghi 0 hay chuỗi rỗng."""
+    """Mỗi sản phẩm đang bán một dòng, cùng cột với `mart_competitor`; thiếu giá hoặc danh mục thì bỏ."""
     now = _utc(now)
     tu = now - timedelta(days=CUA_SO_BAN_NGAY)
     bo_qua: Counter = Counter()
@@ -276,7 +275,7 @@ def _doc_nguon(live, now: datetime) -> Dict[str, List[dict]]:
 
 
 def dong_live(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
-    # shortcut: tính lại mỗi request từ toàn bộ sản phẩm + đơn 90 ngày; sàn lớn thì cần cache hoặc job đêm.
+    # shortcut: tính lại mỗi request từ cả sàn; sàn lớn thì cần cache hoặc job đêm.
     now = now or _bay_gio()
     return tinh_dong_doi_thu(**_doc_nguon(db_live(), now), now=now)[0]
 
@@ -369,45 +368,3 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
     }, build_meta(model_version=MODEL, scope="shop", scope_id=shop_id, computed_at=_iso(now),
                   database=settings.MONGO_DB_LIVE, collection="shop_followers", mode="live",
                   attributed_to_live_shop=True, identity_linked=True, sample_size=len(ma)))
-
-
-if __name__ == "__main__":
-    print("=== TỰ KIỂM TRA _COMPETITOR_LIVE.PY (không cần MongoDB) ===")
-    now = datetime(2026, 10, 15, tzinfo=timezone.utc)
-    cu, moi = now - timedelta(days=30), now - timedelta(days=1)
-    cat = [{"_id": "c1", "slug": "ao", "name": "Áo", "parent_id": None},
-           {"_id": "c2", "slug": "ao-thun", "name": "Áo thun", "parent_id": "c1"}]
-    tag = [{"_id": "t1", "slug": "ao-cap-doi", "name": "Áo cặp đôi"}]
-    shops = [{"_id": "sA", "owner_id": "uA", "shop_name": "A", "average_response_time_seconds": 0},
-             {"_id": "sB", "owner_id": "uB", "shop_name": "B", "average_response_time_seconds": 120}]
-    sp = [{"_id": "p1", "shop_id": "sA", "status": "PUBLISHED", "category_ids": ["c2"], "tag_ids": ["t1"], "created_at": cu},
-          {"_id": "p2", "shop_id": "sB", "status": "PUBLISHED", "category_ids": ["c2"], "tags": ["Áo cặp đôi"], "created_at": moi},
-          {"_id": "p3", "shop_id": "sB", "status": "PUBLISHED", "category_ids": [], "created_at": cu},
-          {"_id": "p4", "shop_id": "sB", "status": "PUBLISHED", "is_hidden": True, "category_ids": ["c2"], "created_at": cu}]
-    bt = [{"product_id": p, "retail_price": g, "is_active": True} for p, g in (("p1", 200000), ("p2", 150000), ("p3", 90000), ("p4", 1))]
-    don = [{"_id": "o1", "order_status": "DELIVERED", "created_at": moi,
-            "items": [{"product_id": "p1", "quantity": 2, "retail_price": 200000},
-                      {"product_id": "p1", "quantity": 1, "retail_price": 200000}]},
-           {"_id": "o2", "order_status": "CANCELLED", "created_at": moi, "items": [{"product_id": "p2", "quantity": 9}]},
-           {"_id": "o3", "order_status": "DELIVERED", "is_simulated": True, "created_at": moi, "items": [{"product_id": "p2", "quantity": 9}]},
-           {"_id": "o4", "order_status": "DELIVERED", "created_at": now - timedelta(days=120), "items": [{"product_id": "p2", "quantity": 9}]}]
-    dong, bo_qua = tinh_dong_doi_thu(sp, bt, don, [], [], shops, cat, tag, now)
-    theo = {r["product_id"]: r for r in dong}
-
-    assert set(theo) == {"p1", "p2"} and bo_qua["thieu_danh_muc"] == 1 and bo_qua["khong_dang_ban"] == 1
-    assert theo["p1"]["est_sales_90d"] == 3 and theo["p1"]["orders_90d"] == 1
-    assert theo["p2"]["est_sales_90d"] == 0 and bo_qua["don_khong_tinh"] == 3
-    assert theo["p1"]["category_id"] == "ao" and theo["p1"]["product_type_id"] == "ao-thun"
-    assert theo["p1"]["tags"] == ["ao-cap-doi"] == theo["p2"]["tags"]
-    assert theo["p1"]["rating_shrunk"] is None and theo["p1"]["shop_response_seconds"] is None
-    assert theo["p2"]["shop_response_seconds"] == 120
-    print("✓ dòng đối thủ: đơn đã giao 90 ngày, danh mục cấp 1/lá, tag slug, null khi chưa có số")
-
-    canh = tinh_canh_bao(dong, shops, [{"shop_id": "sB", "buyer_ids": ["uA"]}], now)
-    assert [(c["watcher_shop_id"], c["product_id"]) for c in canh] == [("sA", "p2")]
-    print("✓ cảnh báo sản phẩm mới của shop đang theo dõi khi trùng ngách")
-
-    b = _Bang([{"shop_id": "a", "category_id": "x"}, {"shop_id": "b", "category_id": "x"}])
-    assert len(b.find({"category_id": "x"})) == 2 and b.distinct("category_id", {"shop_id": "a"}) == ["x"]
-    print("✓ _Bang lọc bằng == như Mongo")
-    print("✅ TẤT CẢ SELF-CHECKS CỦA _COMPETITOR_LIVE.PY ĐÃ PASS!")
