@@ -3,13 +3,12 @@ from typing import Any, Dict, Optional
 
 from bson import ObjectId
 
-from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, db_live, la_shop_live
+from app.api.v1._live import LOC_DON_THAT, db_live, la_shop_live
 from app.api.v1._template import build_meta, insufficient
 from app.config import settings
 
 THIEU_LUOT_XEM = "Cần đủ lượt xem sản phẩm để tính. Sàn mới bắt đầu ghi lượt xem nên số liệu còn ít."
 THIEU_LICH_SU = "Cần thêm thời gian bán hàng để mô hình học được nhịp bán bình thường của shop."
-THIEU_DOI_THU = "Cần thêm shop cùng ngành có đơn trên sàn để so sánh có ý nghĩa."
 
 
 def chua_ho_tro_live(ly_do: str) -> str:
@@ -89,18 +88,3 @@ def dem_luot_xem_listing_30ngay(listing_id: str) -> int:
             {"product_id": oid, "event_type": "view", "created_at": {"$gte": cutoff}})
     except Exception:
         return 0
-
-
-def dem_shop_cung_danh_muc(shop_id: str) -> int:
-    """Số shop thật khác có sản phẩm thật chung ít nhất một danh mục (F33/F34/F36)."""
-    try:
-        oid = ObjectId(shop_id)
-    except Exception:
-        return 0
-
-    live = db_live()
-    danh_muc = [c for c in live["products"].distinct("categories", {"shop_id": oid, **LOC_SP_THAT}) if c]
-    if not danh_muc:
-        return 0
-    return len(live["products"].distinct(
-        "shop_id", {"categories": {"$in": danh_muc}, "shop_id": {"$ne": oid}, **LOC_SP_THAT}))

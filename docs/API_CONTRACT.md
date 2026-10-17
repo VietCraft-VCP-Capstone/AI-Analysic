@@ -428,6 +428,27 @@ collection `banned_keywords` trên sàn live. Chưa lọc thì không được b
 `BR-215` **tối đa 5 khuyến nghị**.
 Shop mới chưa có lịch sử → trả khuyến nghị chung toàn sàn, `scope: "platform"`.
 
+### Shop thật ở F32 · F33 · F34 · F36 — thêm 17/10/2026
+
+Shop id là ObjectId của sàn thì 4 endpoint **tính tại chỗ từ DB sàn** (`app/api/v1/_competitor_live.py`),
+không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ so với shop thật. Hình dạng `data` giữ nguyên, khác biệt:
+
+- `meta.source.mode = "live"`, `attributed_to_live_shop = true`, `quality.identity_linked = true`.
+- `category_id` là slug danh mục **cấp 1** của sàn; kèm tên: `category_names` (F32, F34), `segment_name` (F33).
+- F32: mỗi đối thủ kèm `shop_id` để theo dõi ngay trên bảng. `est_sales_90d` = số sản phẩm của đơn
+  `DELIVERED` trong 90 ngày, không tính đơn mô phỏng hay dữ liệu mồi (`seed_ref`).
+- F32, F34: không truyền `categoryId` thì mở **danh mục chính** (danh mục shop có nhiều sản phẩm nhất), áp dụng cả hai miền.
+- `listing_id` của shop thật chính là `product_id` (mở thẳng được trang sức khoẻ sản phẩm F27–F29).
+- F33: trục thiếu dữ liệu là `null`, đứng ngoài min–max; `axes_missing` liệt kê trục thiếu của shop mình.
+  Mỗi đối thủ kèm `raw` (số thật từng trục, cùng đơn vị `me_raw`) để FE so "bạn vs nhóm" bằng số thật.
+- F34: thêm `tag_names` (mã tag -> tên, gồm cả tag của shop mình) và `leader_tags`
+  (`[{tag_id, used_by, mine}]`, tối đa 12 tag nhóm dẫn đầu hay dùng).
+- F36: danh sách theo dõi **là follow của sàn** (`shop_followers`), tối đa 10. POST/DELETE của shop thật
+  do BE ghi; gọi thẳng module AI thì `400`. Cảnh báo = sản phẩm đối thủ đăng trong 7 ngày, trùng tag hoặc
+  danh mục, có `listed_at`, `tag_names`, `alerts_computed_at`. `added_at` luôn `null`. Bỏ theo dõi thì
+  cảnh báo của shop đó không còn hiện (chưa giữ được BR-204 vì không lưu cảnh báo).
+- F35 giữ chế độ `derived` so với catalog tham chiếu.
+
 ---
 
 ## 5. Ba việc FE làm được NGAY, không cần chờ BE
