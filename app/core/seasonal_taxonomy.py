@@ -27,8 +27,14 @@ def get_seasonal_suggestions(
     # Tầng 2: Suy luận gợi ý sản phẩm cụ thể qua AI
     recommendations = LLMSeasonalService.generate_recommendations(keyword, category_slug, mined_data)
 
-    # Chỉ cache nếu đã sinh từ AI thành công
-    if recommendations.get("ai_model"):
+    # Chỉ cache nếu đã sinh từ AI thực thụ thành công (không cache fallback)
+    ai_model = recommendations.get("ai_model", "")
+    if ai_model and not ai_model.startswith("VietCraft Market Mining"):
         _CACHE[cache_key] = recommendations
 
     return recommendations
+
+
+def clear_seasonal_cache() -> None:
+    """Xóa bộ nhớ đệm gợi ý mùa vụ."""
+    _CACHE.clear()
