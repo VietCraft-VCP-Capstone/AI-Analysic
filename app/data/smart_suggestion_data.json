@@ -1,0 +1,316 @@
+{
+  "product_benchmarks": {
+    "sticker": {
+      "niche": "Sticker & Decal dán",
+      "noun": "Bộ Sticker",
+      "pt_default": "sticker",
+      "low": 15000,
+      "med": 29000,
+      "high": 49000,
+      "prem": 79000
+    },
+    "keychain": {
+      "niche": "Móc khóa & Phụ kiện nhỏ",
+      "noun": "Móc Khóa",
+      "pt_default": "keychain_acrylic",
+      "low": 29000,
+      "med": 49000,
+      "high": 79000,
+      "prem": 119000
+    },
+    "drinkware": {
+      "niche": "Ly tách & Cốc sứ",
+      "noun": "Cốc Sứ",
+      "pt_default": "mug_11oz",
+      "low": 69000,
+      "med": 99000,
+      "high": 149000,
+      "prem": 219000
+    },
+    "tea_set": {
+      "niche": "Bộ ấm chén & Trà cụ gốm sứ",
+      "noun": "Bộ Ấm Trà",
+      "pt_default": "mug_11oz",
+      "low": 220000,
+      "med": 350000,
+      "high": 550000,
+      "prem": 890000
+    },
+    "pottery": {
+      "niche": "Gốm sứ Bát Tràng & Mỹ nghệ decor",
+      "noun": "Bình Gốm Sứ",
+      "pt_default": "mug_11oz",
+      "low": 189000,
+      "med": 320000,
+      "high": 520000,
+      "prem": 850000
+    },
+    "bamboo": {
+      "niche": "Mây tre đan & Sản phẩm cói lục bình",
+      "noun": "Mây Tre Đan",
+      "pt_default": "tote",
+      "low": 139000,
+      "med": 229000,
+      "high": 369000,
+      "prem": 550000
+    },
+    "woodcraft": {
+      "niche": "Đồ gỗ mỹ nghệ thủ công",
+      "noun": "Đồ Gỗ Mỹ Nghệ",
+      "pt_default": "wood_print",
+      "low": 199000,
+      "med": 349000,
+      "high": 550000,
+      "prem": 890000
+    },
+    "tote": {
+      "niche": "Túi Tote Canvas & Túi vải",
+      "noun": "Túi Tote",
+      "pt_default": "tote",
+      "low": 89000,
+      "med": 139000,
+      "high": 189000,
+      "prem": 259000
+    },
+    "bag": {
+      "niche": "Túi xách & Balo thời trang",
+      "noun": "Túi Xách",
+      "pt_default": "backpack",
+      "low": 129000,
+      "med": 199000,
+      "high": 299000,
+      "prem": 420000
+    },
+    "leather": {
+      "niche": "Đồ da thật thủ công cao cấp",
+      "noun": "Đồ Da Thủ Công",
+      "pt_default": "wallet",
+      "low": 250000,
+      "med": 390000,
+      "high": 590000,
+      "prem": 890000
+    },
+    "tshirt": {
+      "niche": "Áo thun & Thời trang trẻ",
+      "noun": "Áo Thun",
+      "pt_default": "tshirt_unisex",
+      "low": 139000,
+      "med": 189000,
+      "high": 259000,
+      "prem": 320000
+    },
+    "polo": {
+      "niche": "Áo Polo lịch sự cao cấp",
+      "noun": "Áo Polo",
+      "pt_default": "polo",
+      "low": 179000,
+      "med": 249000,
+      "high": 329000,
+      "prem": 399000
+    },
+    "sportswear": {
+      "niche": "Áo đấu & Đồ thể thao bóng đá",
+      "noun": "Áo Đấu Thể Thao",
+      "pt_default": "tshirt_unisex",
+      "low": 169000,
+      "med": 229000,
+      "high": 299000,
+      "prem": 389000
+    },
+    "hoodie": {
+      "niche": "Áo Hoodie & Sweater mùa thu đông",
+      "noun": "Áo Hoodie",
+      "pt_default": "hoodie",
+      "low": 249000,
+      "med": 349000,
+      "high": 459000,
+      "prem": 580000
+    },
+    "jacket": {
+      "niche": "Áo khoác & Outerwear",
+      "noun": "Áo Khoác",
+      "pt_default": "jacket_bomber",
+      "low": 279000,
+      "med": 389000,
+      "high": 520000,
+      "prem": 690000
+    },
+    "pants": {
+      "niche": "Quần thời trang & Quần jeans",
+      "noun": "Quần",
+      "pt_default": "jogger",
+      "low": 199000,
+      "med": 289000,
+      "high": 399000,
+      "prem": 490000
+    },
+    "dress": {
+      "niche": "Váy đầm & Set thời trang nữ",
+      "noun": "Váy Đầm",
+      "pt_default": "dress",
+      "low": 279000,
+      "med": 389000,
+      "high": 520000,
+      "prem": 690000
+    },
+    "aodai": {
+      "niche": "Áo dài truyền thống & Cách tân",
+      "noun": "Áo Dài",
+      "pt_default": "dress",
+      "low": 390000,
+      "med": 590000,
+      "high": 850000,
+      "prem": 1350000
+    },
+    "shoes": {
+      "niche": "Giày dép & Sneaker thời trang",
+      "noun": "Giày Thể Thao",
+      "pt_default": "shoes",
+      "low": 189000,
+      "med": 299000,
+      "high": 480000,
+      "prem": 750000
+    },
+    "jewelry": {
+      "niche": "Trang sức bạc & Phong thủy",
+      "noun": "Trang Sức Thủ Công",
+      "pt_default": "bracelet",
+      "low": 169000,
+      "med": 289000,
+      "high": 469000,
+      "prem": 750000
+    },
+    "wallart": {
+      "niche": "Tranh treo tường & Nghệ thuật decor",
+      "noun": "Tranh Canvas",
+      "pt_default": "canvas",
+      "low": 179000,
+      "med": 299000,
+      "high": 480000,
+      "prem": 780000
+    },
+    "embroidery": {
+      "niche": "Tranh thêu tay & Sơn mài nghệ nhân",
+      "noun": "Tranh Thêu Tay",
+      "pt_default": "canvas",
+      "low": 290000,
+      "med": 490000,
+      "high": 850000,
+      "prem": 1500000
+    },
+    "home": {
+      "niche": "Nội thất decor & Đồ trang trí nhà cửa",
+      "noun": "Gối Tựa Trang Trí",
+      "pt_default": "pillow_full",
+      "low": 129000,
+      "med": 189000,
+      "high": 279000,
+      "prem": 390000
+    },
+    "wool": {
+      "niche": "Đồ đan len handmade & Thổ cẩm",
+      "noun": "Sản Phẩm Đan Len",
+      "pt_default": "scarf",
+      "low": 99000,
+      "med": 179000,
+      "high": 279000,
+      "prem": 420000
+    },
+    "general": {
+      "niche": "Sản phẩm thủ công mỹ nghệ",
+      "noun": "Sản Phẩm",
+      "pt_default": "tshirt_unisex",
+      "low": 139000,
+      "med": 199000,
+      "high": 289000,
+      "prem": 390000
+    }
+  },
+  "conflict_keywords_by_type": {
+    "apparel": [
+      "túi", "tui", "tote", "balo", "bag", "ly", "cốc", "coc", "mug", "tách", "tach", "bình", "binh",
+      "tranh", "canvas", "poster", "móc khóa", "moc khoa", "keychain", "gối", "goi", "pillow",
+      "sticker", "ốp lưng", "op lung", "phonecase", "lì xì", "li xi", "khuyên tai", "khuyen tai",
+      "giày", "giay", "dép", "dep", "guốc", "guoc", "sneaker", "sandal"
+    ],
+    "shoes": [
+      "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "sweater", "jacket",
+      "áo khoác", "ao khoac", "váy", "vay", "đầm", "dam", "áo dài", "ao dai", "đồng phục", "dong phuc",
+      "áo bóng đá", "ao bong da", "áo thun", "ao thun", "áo phông", "ao phong", "áo đấu", "ao dau",
+      "túi", "tui", "tote", "balo", "ly", "cốc", "coc", "mug", "tranh", "canvas", "poster",
+      "móc khóa", "moc khoa", "gối", "goi", "sticker", "ốp lưng", "op lung", "bình", "binh",
+      "khuyên tai", "vòng tay", "dây chuyền", "lì xì", "li xi"
+    ],
+    "leather": [
+      "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "váy", "vay", "đầm", "dam",
+      "ly", "cốc", "coc", "tranh", "gối", "móc khóa", "sticker"
+    ],
+    "pottery": [
+      "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "váy", "vay", "đầm", "dam",
+      "túi", "tui", "balo", "móc khóa", "sticker", "ốp lưng", "giày", "giay", "dép", "dep"
+    ],
+    "jewelry": [
+      "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "váy", "vay", "đầm", "dam",
+      "túi", "tui", "ly", "cốc", "coc", "tranh", "gối", "giày", "giay", "dép", "dep"
+    ],
+    "drinkware": [
+      "áo", "ao", "quần", "quan", "hoodie", "tshirt", "túi", "tui", "tote", "balo", "tranh", "canvas",
+      "poster", "móc khóa", "moc khoa", "gối", "goi", "sticker", "ốp lưng", "op lung", "váy", "vay", "đầm", "dam",
+      "giày", "giay", "dép", "dep"
+    ],
+    "bag": [
+      "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "mug", "tranh", "canvas", "poster",
+      "móc khóa", "moc khoa", "gối", "goi", "sticker", "ốp lưng", "op lung", "bình", "binh",
+      "giày", "giay", "dép", "dep"
+    ],
+    "wallart": [
+      "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "tote", "móc khóa", "moc khoa", "gối", "goi",
+      "sticker", "ốp lưng", "op lung", "bình", "binh", "giày", "giay", "dép", "dep"
+    ],
+    "accessory": [
+      "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "tote", "tranh", "gối", "goi", "poster",
+      "giày", "giay", "dép", "dep"
+    ],
+    "home": [
+      "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "móc khóa", "moc khoa", "sticker",
+      "giày", "giay", "dép", "dep"
+    ],
+    "tech": [
+      "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "móc khóa", "moc khoa", "tranh", "gối", "goi",
+      "giày", "giay", "dép", "dep"
+    ]
+  },
+  "category_default_niches": {
+    "shoes_soccer": [
+      {"keyword": "Giày Đá Bóng Sân Cỏ Nhân Tạo", "growth_pct": 28.5, "demand_index": 82.4, "gap_score": 79.1, "tag_id": "giay-da-bong-san-co"},
+      {"keyword": "Giày Đá Bóng Bám Sân Êm Chân", "growth_pct": 22.1, "demand_index": 76.5, "gap_score": 75.3, "tag_id": "giay-da-bong-bam-san"},
+      {"keyword": "Giày Đá Banh Khâu Đế Bền Chắc", "growth_pct": 18.4, "demand_index": 71.0, "gap_score": 72.0, "tag_id": "giay-khau-de"},
+      {"keyword": "Giày Thể Thao Nam Bứt Tốc", "growth_pct": 15.6, "demand_index": 68.2, "gap_score": 69.4, "tag_id": "giay-the-thao-nam"},
+      {"keyword": "Phụ Kiện Giày Đá Bóng", "growth_pct": 12.0, "demand_index": 62.0, "gap_score": 64.2, "tag_id": "phu-kien-giay"},
+      {"keyword": "Giày Bóng Đá Cổ Thun Co Giãn", "growth_pct": 9.8, "demand_index": 58.5, "gap_score": 61.0, "tag_id": "giay-co-thun"}
+    ],
+    "shoes_general": [
+      {"keyword": "Giày Thể Thao Nam Nữ Đa Năng", "growth_pct": 24.0, "demand_index": 78.5, "gap_score": 76.2, "tag_id": "giay-the-thao-unisex"},
+      {"keyword": "Giày Sneaker Đi Học Đi Chơi", "growth_pct": 19.5, "demand_index": 73.0, "gap_score": 72.8, "tag_id": "giay-sneaker"},
+      {"keyword": "Giày Chạy Bộ Thoáng Khí Êm Ái", "growth_pct": 16.2, "demand_index": 69.5, "gap_score": 68.4, "tag_id": "giay-chay-bo"},
+      {"keyword": "Giày Lười Loafer Thanh Lịch", "growth_pct": 14.0, "demand_index": 65.2, "gap_score": 65.0, "tag_id": "giay-luoi"},
+      {"keyword": "Dép Quai Ngang Êm Chân", "growth_pct": 11.2, "demand_index": 60.0, "gap_score": 61.2, "tag_id": "dep-quai-ngang"},
+      {"keyword": "Guốc Mộc Thủ Công Truyền Thống", "growth_pct": 8.5, "demand_index": 54.0, "gap_score": 58.0, "tag_id": "guoc-moc"}
+    ],
+    "pottery": [
+      {"keyword": "Gốm Sứ Bát Tràng Men Rạn", "growth_pct": 21.0, "demand_index": 75.0, "gap_score": 73.0, "tag_id": "gom-bat-trang"},
+      {"keyword": "Bình Hoa Gốm Trang Trí", "growth_pct": 17.5, "demand_index": 70.2, "gap_score": 69.5, "tag_id": "binh-hoa-gom"},
+      {"keyword": "Bộ Ấm Chén Trà Nghệ Nhân", "growth_pct": 14.2, "demand_index": 66.0, "gap_score": 65.8, "tag_id": "am-chen-tra"}
+    ],
+    "leather": [
+      {"keyword": "Ví Da Bò Thủ Công Cao Cấp", "growth_pct": 25.0, "demand_index": 80.0, "gap_score": 77.0, "tag_id": "vi-da-bo"},
+      {"keyword": "Thắt Lưng Da Thật Khắc Tên", "growth_pct": 19.2, "demand_index": 72.5, "gap_score": 71.0, "tag_id": "that-lung-da"},
+      {"keyword": "Phụ Kiện Đồ Da Handmade", "growth_pct": 15.0, "demand_index": 67.0, "gap_score": 66.0, "tag_id": "do-da-handmade"}
+    ],
+    "jewelry": [
+      {"keyword": "Vòng Tay Trầm Hương Phong Thủy", "growth_pct": 26.5, "demand_index": 81.0, "gap_score": 78.5, "tag_id": "tram-huong"},
+      {"keyword": "Nhẫn Bạc 925 Thiết Kế Tinh Xảo", "growth_pct": 20.0, "demand_index": 74.0, "gap_score": 72.0, "tag_id": "nhan-bac-925"},
+      {"keyword": "Dây Chuyền Bạc Thủ Công", "growth_pct": 16.5, "demand_index": 68.0, "gap_score": 67.0, "tag_id": "day-chuyen-bac"}
+    ]
+  }
+}

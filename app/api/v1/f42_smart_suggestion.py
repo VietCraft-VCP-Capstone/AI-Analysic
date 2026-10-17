@@ -1,23 +1,22 @@
 """
 F42 · Smart Product Suggestion for Sellers.
-Gợi ý thông minh Tên sản phẩm chuẩn SEO, Từ khóa hot trending và Định giá bán tối ưu
-dựa trên cơ sở dữ liệu thị trường thực tế (Google Trends, mart_competitor, niche_score).
+Gợi ý tên sản phẩm SEO, từ khóa trending và định giá bán tối ưu.
 """
 
-import sys
+import json
 import re
+import sys
 import unicodedata
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
 from bson import ObjectId
+from fastapi import APIRouter, Body
+from pydantic import BaseModel
+from pymongo import MongoClient
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
-
-from fastapi import APIRouter, Body
-from pymongo import MongoClient
 
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, ok
@@ -28,7 +27,26 @@ router = APIRouter()
 MART_COMPETITOR = "mart_competitor"
 MART_NICHE = "niche_score"
 
+DATA_FILE = Path(__file__).resolve().parents[2] / "data" / "smart_suggestion_data.json"
+
+
+def _load_suggestion_data() -> Dict[str, Any]:
+    if DATA_FILE.exists():
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+_DATA = _load_suggestion_data()
+PRODUCT_BENCHMARKS: Dict[str, Dict[str, Any]] = _DATA.get("product_benchmarks", {})
+CONFLICT_KEYWORDS_BY_TYPE: Dict[str, List[str]] = _DATA.get("conflict_keywords_by_type", {})
+CATEGORY_DEFAULT_NICHES: Dict[str, List[Dict[str, Any]]] = _DATA.get("category_default_niches", {})
+
 _client_live = None
+
 
 def _get_live_client():
     global _client_live
@@ -36,16 +54,19 @@ def _get_live_client():
         _client_live = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=4000, maxPoolSize=5)
     return _client_live
 
+
 def _tu_khoa_cam() -> set:
     try:
         client = _get_live_client()
-        return {str(x.get("keyword", "")).lower().strip()
-                for x in client[settings.MONGO_DB_LIVE]["banned_keywords"].find({}, {"keyword": 1})}
+        return {
+            str(x.get("keyword", "")).lower().strip()
+            for x in client[settings.MONGO_DB_LIVE]["banned_keywords"].find({}, {"keyword": 1})
+        }
     except Exception:
         return set()
 
+
 def _resolve_category_name(cat_id: Optional[str], cat_name: Optional[str]) -> str:
-    """Chuyển đổi category_id (ObjectId) sang tên danh mục tiếng Việt thân thiện."""
     if cat_name and not re.match(r"^[0-9a-fA-F]{24}$", cat_name.strip()):
         return cat_name.strip()
     target_id = (cat_id or cat_name or "").strip()
@@ -59,11 +80,13 @@ def _resolve_category_name(cat_id: Optional[str], cat_name: Optional[str]) -> st
             pass
     return target_id
 
+
 def _remove_accents(s: str) -> str:
     if not s:
         return ""
-    nfkd = unicodedata.normalize('NFKD', s)
-    return "".join(c for c in nfkd if not unicodedata.combining(c)).replace('đ', 'd').replace('Đ', 'D').lower().strip()
+    nfkd = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).replace("đ", "d").replace("Đ", "D").lower().strip()
+
 
 def _phan_vi(numbers: List[int], q: float) -> int:
     if not numbers:
@@ -72,8 +95,8 @@ def _phan_vi(numbers: List[int], q: float) -> int:
     lo, hi = int(k), min(int(k) + 1, len(numbers) - 1)
     return int(round(numbers[lo] + (numbers[hi] - numbers[lo]) * (k - lo)))
 
+
 def _round_psychological_price(price: float) -> int:
-    """Làm tròn số đẹp cho giá bán lẻ TMĐT (đuôi 9.000, 5.000 hoặc số tròn chục nghìn)."""
     p = int(round(price))
     if p <= 25000:
         return max(15000, round(p / 5000) * 5000)
@@ -96,262 +119,13 @@ def _round_psychological_price(price: float) -> int:
         else:
             return round(p / 10000) * 10000
     else:
-        # Sản phẩm cao cấp > 500k: làm tròn bước 10k hoặc 50k
         return max(500000, round(p / 10000) * 10000)
 
-# ==============================================================================
-# BẢNG THAM CHIẾU GIÁ THỊ TRƯỜNG THEO NGÀNH HÀNG THỦ CÔNG & THỜI TRANG VIỆTCRAFT
-# ==============================================================================
-PRODUCT_BENCHMARKS: Dict[str, Dict[str, Any]] = {
-    "sticker": {
-        "niche": "Sticker & Decal dán",
-        "noun": "Bộ Sticker",
-        "pt_default": "sticker",
-        "low": 15000, "med": 29000, "high": 49000, "prem": 79000
-    },
-    "keychain": {
-        "niche": "Móc khóa & Phụ kiện nhỏ",
-        "noun": "Móc Khóa",
-        "pt_default": "keychain_acrylic",
-        "low": 29000, "med": 49000, "high": 79000, "prem": 119000
-    },
-    "drinkware": {
-        "niche": "Ly tách & Cốc sứ",
-        "noun": "Cốc Sứ",
-        "pt_default": "mug_11oz",
-        "low": 69000, "med": 99000, "high": 149000, "prem": 219000
-    },
-    "tea_set": {
-        "niche": "Bộ ấm chén & Trà cụ gốm sứ",
-        "noun": "Bộ Ấm Trà",
-        "pt_default": "mug_11oz",
-        "low": 220000, "med": 350000, "high": 550000, "prem": 890000
-    },
-    "pottery": {
-        "niche": "Gốm sứ Bát Tràng & Mỹ nghệ decor",
-        "noun": "Bình Gốm Sứ",
-        "pt_default": "mug_11oz",
-        "low": 189000, "med": 320000, "high": 520000, "prem": 850000
-    },
-    "bamboo": {
-        "niche": "Mây tre đan & Sản phẩm cói lục bình",
-        "noun": "Mây Tre Đan",
-        "pt_default": "tote",
-        "low": 139000, "med": 229000, "high": 369000, "prem": 550000
-    },
-    "woodcraft": {
-        "niche": "Đồ gỗ mỹ nghệ thủ công",
-        "noun": "Đồ Gỗ Mỹ Nghệ",
-        "pt_default": "wood_print",
-        "low": 199000, "med": 349000, "high": 550000, "prem": 890000
-    },
-    "tote": {
-        "niche": "Túi Tote Canvas & Túi vải",
-        "noun": "Túi Tote",
-        "pt_default": "tote",
-        "low": 89000, "med": 139000, "high": 189000, "prem": 259000
-    },
-    "bag": {
-        "niche": "Túi xách & Balo thời trang",
-        "noun": "Túi Xách",
-        "pt_default": "backpack",
-        "low": 129000, "med": 199000, "high": 299000, "prem": 420000
-    },
-    "leather": {
-        "niche": "Đồ da thật thủ công cao cấp",
-        "noun": "Đồ Da Thủ Công",
-        "pt_default": "wallet",
-        "low": 250000, "med": 390000, "high": 590000, "prem": 890000
-    },
-    "tshirt": {
-        "niche": "Áo thun & Thời trang trẻ",
-        "noun": "Áo Thun",
-        "pt_default": "tshirt_unisex",
-        "low": 139000, "med": 189000, "high": 259000, "prem": 320000
-    },
-    "polo": {
-        "niche": "Áo Polo lịch sự cao cấp",
-        "noun": "Áo Polo",
-        "pt_default": "polo",
-        "low": 179000, "med": 249000, "high": 329000, "prem": 399000
-    },
-    "sportswear": {
-        "niche": "Áo đấu & Đồ thể thao bóng đá",
-        "noun": "Áo Đấu Thể Thao",
-        "pt_default": "tshirt_unisex",
-        "low": 169000, "med": 229000, "high": 299000, "prem": 389000
-    },
-    "hoodie": {
-        "niche": "Áo Hoodie & Sweater mùa thu đông",
-        "noun": "Áo Hoodie",
-        "pt_default": "hoodie",
-        "low": 249000, "med": 349000, "high": 459000, "prem": 580000
-    },
-    "jacket": {
-        "niche": "Áo khoác & Outerwear",
-        "noun": "Áo Khoác",
-        "pt_default": "jacket_bomber",
-        "low": 279000, "med": 389000, "high": 520000, "prem": 690000
-    },
-    "pants": {
-        "niche": "Quần thời trang & Quần jeans",
-        "noun": "Quần",
-        "pt_default": "jogger",
-        "low": 199000, "med": 289000, "high": 399000, "prem": 490000
-    },
-    "dress": {
-        "niche": "Váy đầm & Set thời trang nữ",
-        "noun": "Váy Đầm",
-        "pt_default": "dress",
-        "low": 279000, "med": 389000, "high": 520000, "prem": 690000
-    },
-    "aodai": {
-        "niche": "Áo dài truyền thống & Cách tân",
-        "noun": "Áo Dài",
-        "pt_default": "dress",
-        "low": 390000, "med": 590000, "high": 850000, "prem": 1350000
-    },
-    "shoes": {
-        "niche": "Giày dép & Sneaker thời trang",
-        "noun": "Giày Thể Thao",
-        "pt_default": "shoes",
-        "low": 189000, "med": 299000, "high": 480000, "prem": 750000
-    },
-    "jewelry": {
-        "niche": "Trang sức bạc & Phong thủy",
-        "noun": "Trang Sức Thủ Công",
-        "pt_default": "bracelet",
-        "low": 169000, "med": 289000, "high": 469000, "prem": 750000
-    },
-    "wallart": {
-        "niche": "Tranh treo tường & Nghệ thuật decor",
-        "noun": "Tranh Canvas",
-        "pt_default": "canvas",
-        "low": 179000, "med": 299000, "high": 480000, "prem": 780000
-    },
-    "embroidery": {
-        "niche": "Tranh thêu tay & Sơn mài nghệ nhân",
-        "noun": "Tranh Thêu Tay",
-        "pt_default": "canvas",
-        "low": 290000, "med": 490000, "high": 850000, "prem": 1500000
-    },
-    "home": {
-        "niche": "Nội thất decor & Đồ trang trí nhà cửa",
-        "noun": "Gối Tựa Trang Trí",
-        "pt_default": "pillow_full",
-        "low": 129000, "med": 189000, "high": 279000, "prem": 390000
-    },
-    "wool": {
-        "niche": "Đồ đan len handmade & Thổ cẩm",
-        "noun": "Sản Phẩm Đan Len",
-        "pt_default": "scarf",
-        "low": 99000, "med": 179000, "high": 279000, "prem": 420000
-    },
-    "general": {
-        "niche": "Sản phẩm thủ công mỹ nghệ",
-        "noun": "Sản Phẩm",
-        "pt_default": "tshirt_unisex",
-        "low": 139000, "med": 199000, "high": 289000, "prem": 390000
-    }
-}
-
-# Danh mục từ khóa xung đột giữa các nhóm sản phẩm (loại trừ chéo triệt để)
-CONFLICT_KEYWORDS_BY_TYPE = {
-    "apparel": [
-        "túi", "tui", "tote", "balo", "bag", "ly", "cốc", "coc", "mug", "tách", "tach", "bình", "binh", 
-        "tranh", "canvas", "poster", "móc khóa", "moc khoa", "keychain", "gối", "goi", "pillow", 
-        "sticker", "ốp lưng", "op lung", "phonecase", "lì xì", "li xi", "khuyên tai", "khuyen tai",
-        "giày", "giay", "dép", "dep", "guốc", "guoc", "sneaker", "sandal"
-    ],
-    "shoes": [
-        "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "sweater", "jacket", 
-        "áo khoác", "ao khoac", "váy", "vay", "đầm", "dam", "áo dài", "ao dai", "đồng phục", "dong phuc",
-        "áo bóng đá", "ao bong da", "áo thun", "ao thun", "áo phông", "ao phong", "áo đấu", "ao dau",
-        "túi", "tui", "tote", "balo", "ly", "cốc", "coc", "mug", "tranh", "canvas", "poster", 
-        "móc khóa", "moc khoa", "gối", "goi", "sticker", "ốp lưng", "op lung", "bình", "binh",
-        "khuyên tai", "vòng tay", "dây chuyền", "lì xì", "li xi"
-    ],
-    "leather": [
-        "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "váy", "vay", "đầm", "dam",
-        "ly", "cốc", "coc", "tranh", "gối", "móc khóa", "sticker"
-    ],
-    "pottery": [
-        "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "váy", "vay", "đầm", "dam",
-        "túi", "tui", "balo", "móc khóa", "sticker", "ốp lưng", "giày", "giay", "dép", "dep"
-    ],
-    "jewelry": [
-        "áo", "ao", "quần", "quan", "hoodie", "tshirt", "t-shirt", "polo", "váy", "vay", "đầm", "dam",
-        "túi", "tui", "ly", "cốc", "coc", "tranh", "gối", "giày", "giay", "dép", "dep"
-    ],
-    "drinkware": [
-        "áo", "ao", "quần", "quan", "hoodie", "tshirt", "túi", "tui", "tote", "balo", "tranh", "canvas", 
-        "poster", "móc khóa", "moc khoa", "gối", "goi", "sticker", "ốp lưng", "op lung", "váy", "vay", "đầm", "dam",
-        "giày", "giay", "dép", "dep"
-    ],
-    "bag": [
-        "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "mug", "tranh", "canvas", "poster", 
-        "móc khóa", "moc khoa", "gối", "goi", "sticker", "ốp lưng", "op lung", "bình", "binh",
-        "giày", "giay", "dép", "dep"
-    ],
-    "wallart": [
-        "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "tote", "móc khóa", "moc khoa", "gối", "goi", 
-        "sticker", "ốp lưng", "op lung", "bình", "binh", "giày", "giay", "dép", "dep"
-    ],
-    "accessory": [
-        "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "tote", "tranh", "gối", "goi", "poster",
-        "giày", "giay", "dép", "dep"
-    ],
-    "home": [
-        "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "móc khóa", "moc khoa", "sticker",
-        "giày", "giay", "dép", "dep"
-    ],
-    "tech": [
-        "áo", "ao", "quần", "quan", "hoodie", "ly", "cốc", "coc", "túi", "tui", "móc khóa", "moc khoa", "tranh", "gối", "goi",
-        "giày", "giay", "dép", "dep"
-    ],
-}
-
-# Dữ liệu ngách chuẩn theo từng ngành hàng đặc thù (khi database niche_score chưa phủ hết)
-CATEGORY_DEFAULT_NICHES = {
-    "shoes_soccer": [
-        {"keyword": "Giày Đá Bóng Sân Cỏ Nhân Tạo", "growth_pct": 28.5, "demand_index": 82.4, "gap_score": 79.1, "tag_id": "giay-da-bong-san-co"},
-        {"keyword": "Giày Đá Bóng Bám Sân Êm Chân", "growth_pct": 22.1, "demand_index": 76.5, "gap_score": 75.3, "tag_id": "giay-da-bong-bam-san"},
-        {"keyword": "Giày Đá Banh Khâu Đế Bền Chắc", "growth_pct": 18.4, "demand_index": 71.0, "gap_score": 72.0, "tag_id": "giay-khau-de"},
-        {"keyword": "Giày Thể Thao Nam Bứt Tốc", "growth_pct": 15.6, "demand_index": 68.2, "gap_score": 69.4, "tag_id": "giay-the-thao-nam"},
-        {"keyword": "Phụ Kiện Giày Đá Bóng", "growth_pct": 12.0, "demand_index": 62.0, "gap_score": 64.2, "tag_id": "phu-kien-giay"},
-        {"keyword": "Giày Bóng Đá Cổ Thun Co Giãn", "growth_pct": 9.8, "demand_index": 58.5, "gap_score": 61.0, "tag_id": "giay-co-thun"},
-    ],
-    "shoes_general": [
-        {"keyword": "Giày Thể Thao Nam Nữ Đa Năng", "growth_pct": 24.0, "demand_index": 78.5, "gap_score": 76.2, "tag_id": "giay-the-thao-unisex"},
-        {"keyword": "Giày Sneaker Đi Học Đi Chơi", "growth_pct": 19.5, "demand_index": 73.0, "gap_score": 72.8, "tag_id": "giay-sneaker"},
-        {"keyword": "Giày Chạy Bộ Thoáng Khí Êm Ái", "growth_pct": 16.2, "demand_index": 69.5, "gap_score": 68.4, "tag_id": "giay-chay-bo"},
-        {"keyword": "Giày Lười Loafer Thanh Lịch", "growth_pct": 14.0, "demand_index": 65.2, "gap_score": 65.0, "tag_id": "giay-luoi"},
-        {"keyword": "Dép Quai Ngang Êm Chân", "growth_pct": 11.2, "demand_index": 60.0, "gap_score": 61.2, "tag_id": "dep-quai-ngang"},
-        {"keyword": "Guốc Mộc Thủ Công Truyền Thống", "growth_pct": 8.5, "demand_index": 54.0, "gap_score": 58.0, "tag_id": "guoc-moc"},
-    ],
-    "pottery": [
-        {"keyword": "Gốm Sứ Bát Tràng Men Rạn", "growth_pct": 21.0, "demand_index": 75.0, "gap_score": 73.0, "tag_id": "gom-bat-trang"},
-        {"keyword": "Bình Hoa Gốm Trang Trí", "growth_pct": 17.5, "demand_index": 70.2, "gap_score": 69.5, "tag_id": "binh-hoa-gom"},
-        {"keyword": "Bộ Ấm Chén Trà Nghệ Nhân", "growth_pct": 14.2, "demand_index": 66.0, "gap_score": 65.8, "tag_id": "am-chen-tra"},
-    ],
-    "leather": [
-        {"keyword": "Ví Da Bò Thủ Công Cao Cấp", "growth_pct": 25.0, "demand_index": 80.0, "gap_score": 77.0, "tag_id": "vi-da-bo"},
-        {"keyword": "Thắt Lưng Da Thật Khắc Tên", "growth_pct": 19.2, "demand_index": 72.5, "gap_score": 71.0, "tag_id": "that-lung-da"},
-        {"keyword": "Phụ Kiện Đồ Da Handmade", "growth_pct": 15.0, "demand_index": 67.0, "gap_score": 66.0, "tag_id": "do-da-handmade"},
-    ],
-    "jewelry": [
-        {"keyword": "Vòng Tay Trầm Hương Phong Thủy", "growth_pct": 26.5, "demand_index": 81.0, "gap_score": 78.5, "tag_id": "tram-huong"},
-        {"keyword": "Nhẫn Bạc 925 Thiết Kế Tinh Xảo", "growth_pct": 20.0, "demand_index": 74.0, "gap_score": 72.0, "tag_id": "nhan-bac-925"},
-        {"keyword": "Dây Chuyền Bạc Thủ Công", "growth_pct": 16.5, "demand_index": 68.0, "gap_score": 67.0, "tag_id": "day-chuyen-bac"},
-    ]
-}
 
 def _detect_benchmark_key(cat_name: str, kw_input: str, pt_input: str) -> str:
-    """Phân loại chính xác ngành hàng sản phẩm vào bảng benchmark giá."""
     comb = f"{cat_name} {pt_input} {kw_input}".lower()
     norm = _remove_accents(comb)
 
-    # 0. Giày dép & Sneaker & Giày đá bóng (Kiểm tra đầu tiên để không bị 'bong da' hay 'da bo' đè)
     shoe_patterns = [
         r"\bgiay\b", r"\bdep\b", r"\bguoc\b", r"\bsneaker\b", r"\bsneakers\b",
         r"\bsandal\b", r"\bsandals\b", r"\bboots?\b", r"\bloafer\b", r"\bgiay the thao\b",
@@ -360,7 +134,6 @@ def _detect_benchmark_key(cat_name: str, kw_input: str, pt_input: str) -> str:
     if any(re.search(pat, norm) for pat in shoe_patterns) or any(w in norm.split() for w in ["giay", "dep", "guoc", "sneaker", "sandal"]):
         return "shoes"
 
-    # 1. Các sản phẩm đặc thù giá trị cao / độc đáo
     if any(w in norm for w in ["ao dai", "to tam", "cach tan"]):
         return "aodai"
     if any(w in norm for w in ["tranh theu", "theu tay", "son mai", "tranh gao"]):
@@ -381,14 +154,12 @@ def _detect_benchmark_key(cat_name: str, kw_input: str, pt_input: str) -> str:
         return "jewelry"
     if any(w in norm for w in ["dan len", "tho cam", "vai len", "khan len"]):
         return "wool"
-    
-    # 2. Quà nhỏ & Phụ kiện giá hạt dẻ
+
     if any(w in norm for w in ["sticker", "decal", "li xi", "bookmark", "tem dan"]):
         return "sticker"
     if any(w in norm for w in ["moc khoa", "keychain", "huy hieu", "pin cai"]):
         return "keychain"
 
-    # 3. Đồ uống, túi xách
     if any(w in norm for w in ["tui tote", "canvas", "tote bag"]):
         return "tote"
     if any(w in norm for w in ["tui", "balo", "bag"]):
@@ -396,7 +167,6 @@ def _detect_benchmark_key(cat_name: str, kw_input: str, pt_input: str) -> str:
     if any(w in norm for w in ["tranh", "poster", "canvas"]):
         return "wallart"
 
-    # 4. Thời trang may mặc (Đồ thể thao ưu tiên trước quần)
     if any(w in norm for w in ["bong da", "the thao", "ao dau", "clb", "football", "jersey", "sport"]):
         return "sportswear"
     if any(w in norm for w in ["hoodie", "sweater", "ao khoac", "jacket", "bomber", "ao long", "cardigan"]):
@@ -414,6 +184,7 @@ def _detect_benchmark_key(cat_name: str, kw_input: str, pt_input: str) -> str:
 
     return "general"
 
+
 class SuggestionPayload(BaseModel):
     category_id: Optional[str] = None
     categoryId: Optional[str] = None
@@ -424,6 +195,7 @@ class SuggestionPayload(BaseModel):
     keywords: Optional[str] = None
     blank_cost: Optional[float] = None
     blankCost: Optional[float] = None
+
 
 def _execute_suggestion(
     cat_input: str,
@@ -440,11 +212,14 @@ def _execute_suggestion(
     combined_context = f"{cat_lower} {pt_lower} {kw_lower}".strip()
     norm_context = _remove_accents(combined_context)
 
-    # 1. Nhận diện chuẩn xác phân khúc ngành hàng
     bench_key = _detect_benchmark_key(cat_input, kw_input, pt_input)
-    bench = PRODUCT_BENCHMARKS.get(bench_key, PRODUCT_BENCHMARKS["general"])
+    bench = PRODUCT_BENCHMARKS.get(bench_key, PRODUCT_BENCHMARKS.get("general", {
+        "niche": "Sản phẩm thủ công mỹ nghệ",
+        "noun": "Sản Phẩm",
+        "pt_default": "tshirt_unisex",
+        "low": 139000, "med": 199000, "high": 289000, "prem": 390000
+    }))
 
-    # Xử lý phân loại chi tiết cho giày dép / thể thao
     is_soccer = bench_key == "shoes" and any(w in norm_context for w in ["da bong", "bong da", "da banh", "san co", "football"])
     if bench_key == "shoes":
         if is_soccer:
@@ -463,9 +238,8 @@ def _execute_suggestion(
         effective_noun = bench["noun"]
         category_detected_name = bench["niche"]
 
-    effective_pt = pt_lower or bench["pt_default"]
+    effective_pt = pt_lower or bench.get("pt_default", "tshirt_unisex")
 
-    # Xác định category type cho conflict filter
     if bench_key in ["tshirt", "polo", "sportswear", "hoodie", "jacket", "pants", "dress", "aodai"]:
         cat_type = "apparel"
     elif bench_key == "shoes":
@@ -491,7 +265,6 @@ def _execute_suggestion(
 
     conflicts = CONFLICT_KEYWORDS_BY_TYPE.get(cat_type, [])
 
-    # 2. Truy vấn Từ khóa hot & Niche Opportunities từ database (niche_score + tags)
     niche_coll = db()[MART_NICHE]
     hot_niches = list(niche_coll.find({}, {"_id": 0}).sort("gap_score", -1).limit(60))
     hot_niches = [n for n in hot_niches if n.get("keyword", "").lower() not in banned]
@@ -503,12 +276,10 @@ def _execute_suggestion(
         if any(c in kw or c in kw_norm for c in conflicts):
             continue
         if cat_type != "apparel":
-            # Loại trừ hoàn toàn từ khóa thời trang may mặc nếu sản phẩm không thuộc apparel
             if re.search(r"\b(ao|quan|vay|dam|dong phuc|tshirt|hoodie|polo)\b", kw_norm):
                 continue
         filtered_niches.append(n)
 
-    # Bổ sung các ngách chất lượng cao nếu database chưa có nhiều dữ liệu cho ngành này
     if cat_type == "shoes":
         seed_shoe_niches = CATEGORY_DEFAULT_NICHES.get("shoes_soccer" if is_soccer else "shoes_general", [])
         filtered_niches = seed_shoe_niches + [n for n in filtered_niches if not any(s["keyword"].lower() == n.get("keyword", "").lower() for s in seed_shoe_niches)]
@@ -577,15 +348,11 @@ def _execute_suggestion(
             "tag_id": item.get("tag_id")
         })
 
-    # ==============================================================================
-    # 3. ĐỊNH GIÁ BÁN TỐI ƯU & THỰC TẾ DỰA TRÊN NGÀNH HÀNG & MODIFIERS
-    # ==============================================================================
     base_low = bench["low"]
     base_med = bench["med"]
     base_high = bench["high"]
     base_prem = bench["prem"]
 
-    # Phân tích các từ khóa bổ nghĩa chất lượng / số lượng (Quality & Tier Modifiers)
     is_premium_tier = any(w in norm_context for w in [
         "cao cap", "men ran", "to tam", "da bo", "da that", "bac 925", "tram huong",
         "ban player", "limited", "gioi han", "nghe nhan", "tinh xao", "chinh hang"
@@ -608,7 +375,6 @@ def _execute_suggestion(
         base_med = int(base_med * 0.85)
         base_high = int(base_high * 0.90)
 
-    # Thử tìm dữ liệu từ đối thủ trong mart_competitor nếu khớp đúng product_type_id
     comp_coll = db()[MART_COMPETITOR]
     comp_rows = list(comp_coll.find({"product_type_id": effective_pt}, {"price_vnd": 1}).limit(60))
     if comp_rows:
@@ -620,7 +386,6 @@ def _execute_suggestion(
                 base_low = min(base_low, int(_phan_vi(comp_prices, 0.25)))
                 base_high = max(base_high, int(_phan_vi(comp_prices, 0.75)))
 
-    # Xử lý theo chế độ POD (có blank_cost) hoặc Thủ công (blank_cost == 0)
     if blank_cost > 0:
         cost = int(blank_cost)
         if cost <= 50000:
@@ -663,9 +428,6 @@ def _execute_suggestion(
         ).replace(",", ".")
     }
 
-    # ==============================================================================
-    # 4. SINH TIÊU ĐỀ GỢI Ý (AI TITLE SUGGESTIONS)
-    # ==============================================================================
     raw_hint = kw_input.strip() if kw_input else ""
     for sep in [" - ", " – ", " — ", " | ", " / "]:
         if sep in raw_hint:
@@ -676,7 +438,6 @@ def _execute_suggestion(
     if user_hint:
         hint_norm = _remove_accents(user_hint).lower()
         noun_norm = _remove_accents(effective_noun).lower()
-        # Tránh lặp: nếu user_hint đã chứa từ chỉ loại sản phẩm (ví dụ "Giày Đá Bóng" hoặc "Áo") thì giữ nguyên
         if (
             hint_norm.startswith(noun_norm)
             or noun_norm in ["san pham", ""]
@@ -767,9 +528,6 @@ def _execute_suggestion(
         titles.append(f"{effective_noun} {mod_4} Hot Trend 2026 - Chất Liệu Chuẩn Form")
         titles.append(f"{effective_noun} Thiết Kế Tối Giản {mod_2} - VietCraft Artist Edition")
 
-    # ==============================================================================
-    # 5. SINH THẺ TAGS PHÙ HỢP DANH MỤC
-    # ==============================================================================
     suggested_tags = []
     if user_hint:
         clean_hint_tag = user_hint.lower().replace(" ", "-")
@@ -802,7 +560,6 @@ def _execute_suggestion(
         if tag_slug not in suggested_tags:
             suggested_tags.append(tag_slug)
 
-    # Lọc lần cuối đảm bảo tuyệt đối không có từ áo / quần nếu không phải ngành thời trang may mặc
     final_tags = []
     for tag in suggested_tags:
         t_norm = _remove_accents(tag)
@@ -814,9 +571,6 @@ def _execute_suggestion(
         final_tags.append(tag)
     suggested_tags = final_tags
 
-    # ==============================================================================
-    # 6. SINH MÔ TẢ SEO (ĐẶC THÙ HÓA CHO TỪNG NHÓM SẢN PHẨM)
-    # ==============================================================================
     if cat_type == "shoes":
         if is_soccer:
             highlights = (
