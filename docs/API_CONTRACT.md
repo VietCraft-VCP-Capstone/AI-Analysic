@@ -447,7 +447,21 @@ không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ s
   do BE ghi; gọi thẳng module AI thì `400`. Cảnh báo = sản phẩm đối thủ đăng trong 7 ngày, trùng tag hoặc
   danh mục, có `listed_at`, `tag_names`, `alerts_computed_at`. `added_at` luôn `null`. Bỏ theo dõi thì
   cảnh báo của shop đó không còn hiện (chưa giữ được BR-204 vì không lưu cảnh báo).
-- F35 giữ chế độ `derived` so với catalog tham chiếu.
+- F35 giữ chế độ `derived` so với catalog tham chiếu. Catalog trống thì so giá thật cùng danh mục trên sàn.
+
+### AI đối thủ (độ giống sản phẩm) — thêm 18/10/2026, chỉ shop thật
+
+Bộ máy `app/api/v1/_doi_thu_ai.py`: TF-IDF (tên + từ khoá có dấu, mô tả nhẹ hơn, cụm ký tự của tên) và độ giống
+cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải có ít nhất một từ hiếm chung hoặc giống ≥ 0,35.
+Đo chất lượng: `scripts/danh_gia_doi_thu_ai.py`.
+
+- F32 `my_listings[].direct_rivals`: `[{product_id, shop_id, shop_name, title, price_vnd, est_sales_90d,
+  similarity (0–1), reasons[]}]`, tối đa 5. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity}]`,
+  tối đa 3 shop trùng nhiều sản phẩm của mình nhất.
+- F35 (khi đã chọn `productId`) `ai_price`: `{suggested_vnd, low_vnd, high_vnd, confidence: high|medium|low,
+  rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
+  `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 8 sản phẩm giống nhất, pha với mặt
+  bằng cùng loại theo `rival_weight`.
 
 ---
 

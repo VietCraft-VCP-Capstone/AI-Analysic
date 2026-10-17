@@ -8,7 +8,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
-from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, nguon_doi_thu
+from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, mo_ta_live, nguon_doi_thu, ten_tag_live
+from app.api.v1._doi_thu_ai import may_giong, shop_canh_tranh_nhat
 from app.api.v1._mart import tien
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, ok
 
@@ -67,6 +68,8 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
     sao_toi = [r["rating_shrunk"] for r in cua_minh if r["rating_shrunk"] is not None]
     gia_tb = sum(gia_toi) / len(gia_toi) if gia_toi else None
     sao_tb = sum(sao_toi) / len(sao_toi) if sao_toi else None
+    # Đối thủ trực tiếp theo nội dung sản phẩm (AI), chỉ có ở shop thật.
+    may = may_giong(coll, mo_ta_live, ten_tag_live) if ng["live"] else None
 
     return ok({
         "category_id": cat,
@@ -81,7 +84,9 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             "rating_shrunk": r["rating_shrunk"],
             "rank_in_cat": r.get("rank_in_cat"),
             "n_in_cat": r.get("n_in_cat"),
+            **({"direct_rivals": may.doi_thu_truc_tiep(r["listing_id"])} if may else {}),
         } for r in sorted(cua_minh, key=lambda r: r.get("rank_in_cat") or 10**9)],
+        **({"direct_rival_shops": shop_canh_tranh_nhat(may, [r["listing_id"] for r in cua_minh])} if may else {}),
         "competitors": [{
             "rank": i,
             "listing_id": r["listing_id"],

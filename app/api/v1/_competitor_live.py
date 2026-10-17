@@ -274,6 +274,11 @@ def _doc_nguon(live, now: datetime) -> Dict[str, List[dict]]:
     }
 
 
+def mo_ta_live(ids: Iterable[str]) -> Dict[str, str]:
+    oid = [ObjectId(i) for i in ids if ObjectId.is_valid(i)]
+    return {str(p["_id"]): p.get("description") or "" for p in db_live()["products"].find({"_id": {"$in": oid}}, {"description": 1})}
+
+
 def dong_live(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     # shortcut: tính lại mỗi request từ cả sàn; sàn lớn thì cần cache hoặc job đêm.
     now = now or _bay_gio()
