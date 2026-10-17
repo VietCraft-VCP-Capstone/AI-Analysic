@@ -117,10 +117,10 @@ def _pricing_live(shop_id: str, productType: Optional[str],
 
     loai_cua_toi = sorted({p["product_type_id"] for p in sp if p["product_type_id"]})
 
-    if pt:
-        coll = db()[MART]
-        if coll.estimated_document_count() == 0:
-            mart_not_ready(MART)
+    coll = db()[MART]
+    co_catalog = coll.estimated_document_count() > 0
+    # Catalog tham chiếu trống (DB mồi đã dọn) thì so với giá thật cùng danh mục ở dưới, không báo 503.
+    if pt and co_catalog:
         rows = list(coll.find({"product_type_id": pt},
                               {"_id": 0, "price_vnd": 1, "est_sales_90d": 1,
                                "computed_at": 1, "model_version": 1}))
@@ -192,8 +192,9 @@ def _pricing_live(shop_id: str, productType: Optional[str],
             "band": dai,
             "suggested_range": _khoang_de_xuat(pb, "các sản phẩm cùng danh mục trên sàn"),
             "limitation": (
-                "Sản phẩm này không ánh xạ được sang loại phôi in theo yêu cầu nào, nên mặt "
-                "bằng lấy theo DANH MỤC trên sàn. Cùng danh mục không có nghĩa là cùng loại "
+                ("Sản phẩm này không ánh xạ được sang loại phôi in theo yêu cầu nào" if co_catalog or not pt
+                 else "Catalog tham chiếu chưa có dữ liệu")
+                + ", nên mặt bằng lấy theo DANH MỤC trên sàn. Cùng danh mục không có nghĩa là cùng loại "
                 "hàng, nên hãy đọc đây là khoảng giá của ngành, không phải của đúng sản phẩm "
                 "như bạn."
             ),

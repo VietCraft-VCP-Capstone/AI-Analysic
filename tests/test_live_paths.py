@@ -20,7 +20,7 @@ NOW = datetime.now(timezone.utc)
 
 def _san_pham(shop, n, cat="Áo thun", tags=("áo",)):
     return [{"_id": ObjectId(), "shop_id": shop, "title": f"Áo {i}", "categories": [cat],
-             "tags": list(tags), "average_rating": 4.5, "rating_count": 3} for i in range(n)]
+             "tags": list(tags), "average_rating": 4.5, "rating_count": 3, "status": "PUBLISHED"} for i in range(n)]
 
 
 def _don(shop, pid, ngay_truoc, gia=100000.0):
