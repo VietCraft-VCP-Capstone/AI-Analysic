@@ -1,5 +1,3 @@
-"""Cảnh báo ưu tiên 0 và việc cần sửa (§4.3)."""
-
 from bson import ObjectId
 import pytest
 
@@ -10,7 +8,6 @@ from tests.f29.samples import PRODUCT_ID, base_product, with_id
 
 
 class TestWarningsPriority0:
-    """§4.3: cảnh báo ưu tiên 0 — không ảnh hưởng điểm."""
 
     def test_zero_images(self):
         calc = make_calculator()
@@ -36,7 +33,6 @@ class TestWarningsPriority0:
         assert "Ảnh mờ" in msg["message"]
 
     def test_default_weight_is_not_a_warning(self):
-        # Phí vận chuyển không dùng cân nặng sản phẩm và form không có ô này.
         calc = make_calculator()
         product = base_product(weight_g=500, dimensions_cm={"length": 10, "width": 10, "height": 10})
         assert not any(w["field"] == "weight_g" for w in calc._get_warnings(product, []))
@@ -76,18 +72,16 @@ class TestApprovedTags:
 
 
 class TestTodosWithCategoryMedian:
-    """Mốc = max(trung vị danh mục, mức sàn); gain là điểm chấm lại thật."""
 
     def _build_scene(self):
         main = with_id(base_product(
-            images=["i1.jpg", "i2.jpg"],  # 2 ảnh — dưới cả mốc sàn (5) lẫn mốc danh mục
-            description="x" * 160,         # >= 150 -> đã tối đa, không sinh todo mô tả
-            tags=["a", "b", "c"],          # 3 tag đã duyệt -> đã đạt mốc sàn (3)
+            images=["i1.jpg", "i2.jpg"],
+            description="x" * 160,
+            tags=["a", "b", "c"],
             category_ids=["cat_giay"],
             product_type="READY_TO_SHIP",
         ))
         peers = []
-        # Trung vị ảnh cùng danh mục = 6 > mức sàn 5 nên mốc lấy trung vị.
         for i, n_anh in enumerate([8, 8, 8, 6, 6, 6, 5, 5, 5, 4]):
             peers.append({
                 "_id": ObjectId(), "category_ids": ["cat_giay"],
@@ -103,22 +97,21 @@ class TestTodosWithCategoryMedian:
              "retail_price": "150000", "base_cost": "80000"},
             {"product_id": main["_id"], "is_active": True, "stock_quantity": 1,
              "retail_price": "150000", "base_cost": "80000"},
-        ]  # 4/4 còn hàng -> tồn kho 100%, không sinh todo tồn kho
+        ]
         return make_calculator(products=[main] + peers, product_variants=variants)
 
     def test_moc_anh_uses_category_median_not_floor(self):
         calc = self._build_scene()
         result = calc.calculate(PRODUCT_ID)
         todos = [t for t in result["todos"] if t["type"] == "todo"]
-        assert len(todos) == 1  # chỉ ảnh: mô tả/tag đã đạt mốc, tồn kho 100%
+        assert len(todos) == 1
         todo = todos[0]
         assert todo["field"] == "images"
         assert todo["current_value"] == 2
-        assert todo["target"] == 6  # trung vị danh mục (6) > mức sàn (5)
+        assert todo["target"] == 6
         assert todo["message"] == "Thêm 4 ảnh (đang có 2)"
 
     def test_expected_gain_is_real_recomputed_score_delta(self):
-        """Hiện tại 91,1; đủ 6 ảnh thì content = 100, tổng = 100, gain = 8,9."""
         calc = self._build_scene()
         result = calc.calculate(PRODUCT_ID)
         assert result["axes"]["content"] == 80.0
@@ -139,9 +132,8 @@ class TestTodosWithCategoryMedian:
         assert ratios == sorted(ratios, reverse=True)
 
     def test_small_category_falls_back_to_market_median(self):
-        """Danh mục quá ít listing thì lấy trung vị toàn sàn, mốc về mức sàn."""
         main = with_id(base_product(images=["i1.jpg"], category_ids=["cat_hiem"]))
         calc = make_calculator(products=[main])
         result = calc.calculate(PRODUCT_ID)
         todo = next(t for t in result["todos"] if t["type"] == "todo" and t["field"] == "images")
-        assert todo["target"] == MIN_IMAGES  # không đủ 8 listing cùng danh mục -> mốc sàn
+        assert todo["target"] == MIN_IMAGES

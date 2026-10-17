@@ -1,5 +1,3 @@
-"""Engine F29: chấm 5 trục trên dữ liệu thật, gộp điểm 0-100, lưu listing_health_scores."""
-
 from datetime import datetime, timezone
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
@@ -11,7 +9,7 @@ from app.config import settings
 from app.core.f29 import scoring
 from app.core.f29.constants import MODEL_VERSION
 from app.core.f29.conversion import conversion_score, conversion_stats
-from app.core.f29.todos import build_todos, build_warnings
+from app.core.f29.todos import build_sales_warnings, build_todos, build_warnings
 
 
 def _parse_iso(value: str) -> datetime:
@@ -20,7 +18,6 @@ def _parse_iso(value: str) -> datetime:
 
 class HealthScoreCalculator:
     def __init__(self, db_client: Optional[MongoClient] = None):
-        # Dùng kết nối chung để không chạm trần kết nối M0; test truyền db_client riêng.
         if db_client is not None:
             self.client = db_client
             self.live_db = db_client[settings.MONGO_DB_LIVE]
@@ -73,7 +70,6 @@ class HealthScoreCalculator:
                            self.pending_tag_ids())
 
     def _conversion_stats(self) -> Dict[str, Any]:
-        # Một lần mỗi instance — scheduler dùng một instance cho cả lượt quét.
         if self._conv_cache is None:
             self._conv_cache = conversion_stats(self.live_db)
         return self._conv_cache
@@ -85,7 +81,6 @@ class HealthScoreCalculator:
         return self._get_conversion(product_id)[0]
 
     def _get_rating_score(self, product_id: str) -> Tuple[Optional[float], Optional[int]]:
-        """Co ngót Bayes trên đơn thật; trả (điểm 0-100, số review)."""
         try:
             product_oid = ObjectId(product_id)
         except Exception:
@@ -115,7 +110,6 @@ class HealthScoreCalculator:
 
     def _content_changed_at(self, product_oid: ObjectId, product: Dict[str, Any],
                             content_hash: str, now: datetime) -> Any:
-        """Mốc sửa nội dung: đổi hash thì về bây giờ, lần đầu dùng updated_at."""
         prev = self.live_db["listing_health_scores"].find_one(
             {"product_id": product_oid}, sort=[("date", -1)]
         )
@@ -172,8 +166,8 @@ class HealthScoreCalculator:
         conversion, conversion_detail = self._get_conversion(product_id)
         set_axis("conversion", conversion, ndigits=None)
 
-        warnings = self._get_warnings(product, variants)
-        # Cảnh báo phụ của trục nội dung: không có mốc/gain, xếp sau todo thật.
+        warnings = self._get_warnings(product, variants) + build_sales_warnings(
+            product, conversion_detail, conversion, now)
         content_infos = [
             {"type": "info", "field": h["field"], "message": h["message"], "current_value": None,
              "target": None, "impact": 0}
@@ -204,7 +198,6 @@ class HealthScoreCalculator:
         }
 
     def save(self, result: Optional[Dict[str, Any]]) -> Optional[str]:
-        """Upsert theo {product_id, date}: mỗi ngày một bản ghi."""
         if not result or result.get("product_id") is None:
             return None
 

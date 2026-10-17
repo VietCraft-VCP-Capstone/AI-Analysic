@@ -1,10 +1,11 @@
-"""Cảnh báo ưu tiên 0 và việc cần sửa (§4.3)."""
-
+from datetime import datetime, timezone
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from app.api.v1._live import LOC_SP_THAT
 from app.core.f29.constants import (
     EFFORT,
+    LOW_CONVERSION_SCORE,
+    LOW_TRAFFIC_MIN_AGE_DAYS,
     MIN_CATEGORY_SAMPLE,
     MIN_DESCRIPTION_LENGTH,
     MIN_IMAGES,
@@ -23,8 +24,48 @@ from app.core.f29.scoring import (
 )
 
 
+def build_sales_warnings(product: Dict[str, Any], detail: Dict[str, Any], conversion: Optional[float],
+                         now: datetime) -> List[Dict[str, Any]]:
+    ra: List[Dict[str, Any]] = []
+    tao = product.get("created_at")
+    if isinstance(tao, datetime) and tao.tzinfo is None:
+        tao = tao.replace(tzinfo=timezone.utc)
+    xem, gio, don = detail.get("views_30d", 0), detail.get("carts_30d", 0), detail.get("orders_30d", 0)
+    can = detail.get("min_views", 0)
+
+    if isinstance(tao, datetime) and (now - tao).days >= LOW_TRAFFIC_MIN_AGE_DAYS and xem < can:
+        ra.append({
+            "type": "warning",
+            "field": "title",
+            "message": (f"30 ngày qua chỉ có {xem} lượt xem, ít người tìm thấy sản phẩm. Nên đưa từ khoá khách "
+                        "hay tìm vào tên, đặt ảnh rõ nhất lên đầu và gắn đủ tag đúng sản phẩm."),
+            "current_value": xem,
+            "target": can,
+            "impact": 0,
+        })
+
+    if conversion is not None and conversion <= LOW_CONVERSION_SCORE and xem:
+        v2c, c2o = gio / xem, (don / gio if gio else None)
+        if c2o is None or v2c < c2o / 4:
+            field, message = "variants.retail_price", (
+                f"Nhiều người xem nhưng chỉ {v2c * 100:.1f}% thêm vào giỏ, tỉ lệ mua thấp hơn mức chung. "
+                "Nên xem lại giá, ảnh đầu tiên và mô tả kích thước, chất liệu.")
+        else:
+            field, message = "shipping", (
+                f"Khách thêm giỏ nhưng chỉ {c2o * 100:.1f}% đặt mua, tỉ lệ mua thấp hơn mức chung. "
+                "Nên kiểm tra phí vận chuyển, thời gian giao và tồn kho từng phân loại.")
+        ra.append({
+            "type": "warning",
+            "field": field,
+            "message": message,
+            "current_value": round((detail.get("conversion_rate") or 0) * 100, 2),
+            "target": round((detail.get("baseline_rate") or 0) * 100, 2),
+            "impact": 0,
+        })
+    return ra
+
+
 def build_warnings(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Cảnh báo không đổi điểm: 0 ảnh, dưới giá vốn, bị từ chối, cân nặng/kích thước mặc định."""
     warnings: List[Dict[str, Any]] = []
 
     if len(product.get("images") or []) == 0:
@@ -76,7 +117,6 @@ def tag_message(n_approved: int, n_pending: int, target: int) -> str:
 
 
 def content_peer_stats(live_db, cat_key: Optional[Any], pending_tag_ids: FrozenSet = frozenset()) -> Tuple[List[int], List[int], List[int], bool]:
-    """Trung vị ảnh/mô tả/tag cùng danh mục, ít listing thì lấy toàn sàn."""
     products_coll = live_db["products"]
     fields = {"images": 1, "description": 1, "tags": 1, "tag_ids": 1}
 
@@ -106,7 +146,6 @@ def build_todos(
     inventory_ratio_pct: Optional[float],
     pending_tag_ids: FrozenSet = frozenset(),
 ) -> List[Dict[str, Any]]:
-    """Việc seller tự sửa được; mốc = max(trung vị, mức sàn), sắp theo impact / effort."""
     current_total = total_score(axes)
     if current_total is None:
         return []

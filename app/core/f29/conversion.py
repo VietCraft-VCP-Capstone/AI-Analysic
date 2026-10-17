@@ -1,5 +1,3 @@
-"""Trục chuyển đổi (plan §4.1, §8 S1): tỉ lệ mua 30 ngày so với mặt bằng."""
-
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -14,7 +12,6 @@ from app.core.f29.scoring import category_key
 
 
 def conversion_stats(live_db) -> Dict[str, Any]:
-    """Lượt xem từ product_events; mỗi đơn thật không huỷ tính một lần mua mỗi sản phẩm."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=CONVERSION_WINDOW_DAYS)
 
     products = {
@@ -23,12 +20,15 @@ def conversion_stats(live_db) -> Dict[str, Any]:
     }
 
     views: Dict[str, int] = {}
+    carts: Dict[str, int] = {}
     for ev in live_db["product_events"].find(
-        {"event_type": "view", "created_at": {"$gte": cutoff}}, {"product_id": 1}
+        {"event_type": {"$in": ["view", "add_to_cart"]}, "created_at": {"$gte": cutoff}},
+        {"product_id": 1, "event_type": 1},
     ):
         pid = str(ev.get("product_id"))
         if pid in products:
-            views[pid] = views.get(pid, 0) + 1
+            dem = views if ev.get("event_type") == "view" else carts
+            dem[pid] = dem.get(pid, 0) + 1
 
     orders: Dict[str, int] = {}
     for o in live_db["orders"].find(
@@ -51,6 +51,7 @@ def conversion_stats(live_db) -> Dict[str, Any]:
 
     return {
         "views": views,
+        "carts": carts,
         "orders": orders,
         "category_of": products,
         "category_baseline": {
@@ -63,12 +64,12 @@ def conversion_stats(live_db) -> Dict[str, Any]:
 
 
 def conversion_score(stats: Dict[str, Any], product_id: str) -> Tuple[Optional[float], Dict[str, Any]]:
-    """Tỉ lệ mua ÷ mặt bằng, trần 2,0, quy về 0-100 (bằng mặt bằng = 50)."""
     pid = str(product_id)
     n_views = stats["views"].get(pid, 0)
     n_orders = stats["orders"].get(pid, 0)
     detail: Dict[str, Any] = {
         "views_30d": n_views,
+        "carts_30d": stats.get("carts", {}).get(pid, 0),
         "orders_30d": n_orders,
         "min_views": MIN_VIEWS_CONVERSION,
         "conversion_rate": None,
@@ -93,7 +94,6 @@ def conversion_score(stats: Dict[str, Any], product_id: str) -> Tuple[Optional[f
         detail["reason"] = "not_enough_peers"
         return None, detail
     if baseline <= 0:
-        # Cả mặt bằng chưa ai mua: chấm 0 hay 100 đều không công bằng.
         detail["reason"] = "no_orders_in_baseline"
         return None, detail
 

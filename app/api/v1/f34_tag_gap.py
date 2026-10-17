@@ -10,7 +10,7 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 
 from app.api.v1._live import la_shop_live
-from app.api.v1._live_guard import THIEU_DOI_THU, chan_shop_live, dem_shop_cung_danh_muc
+from app.api.v1._live_competitor import tag_live
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -23,18 +23,19 @@ TOI_THIEU_DUNG = 2          # tag phải xuất hiện ít nhất 2 lần trong 
 NGUONG_VUOT_TROI = 1.3      # nhóm dẫn đầu phải dùng tag này nhiều hơn mặt bằng >= 30%
 TRAN_UOC_LUONG = 25         # trần % traffic dám ước lượng — trên mức này là hứa hão
 NGUONG_DEM_TIN_CAY = 5      # dưới 5/20 lần thì không phân biệt được với may rủi
-NGUONG_SHOP_CUNG_DM = 5     # §9.2: ≥5 shop cùng danh mục
 
 
 @router.get("/api/analytics/tag-gap", tags=["F34 · Đạt"])
 def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
-    unlock = None
     if la_shop_live(shop_id):
-        unlock = {"requirement": "shop cùng danh mục", "unit": "shop",
-                  "current": dem_shop_cung_danh_muc(shop_id), "target": NGUONG_SHOP_CUNG_DM}
-    chan = chan_shop_live(shop_id, THIEU_DOI_THU, "products", unlock=unlock)
-    if chan is not None:
-        return chan
+        cua_toi, hang, meta = tag_live(shop_id, TOI_THIEU_DOI_THU)
+        if not cua_toi:
+            return insufficient("Shop chưa có sản phẩm nào nên chưa tìm được tag thiếu", meta)
+        cat = categoryId or cua_toi[0]
+        if cat not in cua_toi:
+            invalid_param("categoryId", " | ".join(cua_toi))
+        return _phan_tich(shop_id, cat, cua_toi, [h for h in hang if h["category_id"] == cat],
+                          meta, {}, False)
 
     coll = db()[MART]
     if coll.estimated_document_count() == 0:
@@ -51,12 +52,18 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
     chieu = {"_id": 0, "shop_id": 1, "tags": 1, "est_sales_90d": 1,
              "computed_at": 1, "model_version": 1}
     trong_cat = list(coll.find({"category_id": cat}, chieu))
-    doi_thu = sorted((r for r in trong_cat if r["shop_id"] != shop_id),
-                     key=lambda r: -r["est_sales_90d"])
-
     meta = meta_from_record(trong_cat[0], scope="category", scope_id=cat, collection=MART,
                             mode="seed_demo", sample_size=len(trong_cat))
+    ten_tag = {c["category_id"]: c.get("name_vi") for c in
+               db()["categories"].find({}, {"category_id": 1, "name_vi": 1})}
+    return _phan_tich(shop_id, cat, cua_toi, trong_cat, meta, ten_tag, True)
 
+
+def _phan_tich(shop_id, cat, cua_toi, trong_cat, meta, ten_tag, du_lieu_moi):
+    doi_thu = sorted((r for r in trong_cat if r["shop_id"] != shop_id),
+                     key=lambda r: -r["est_sales_90d"])
+    if "unlock" in meta:
+        meta["unlock"]["current"] = len(doi_thu)
     if len(doi_thu) < TOI_THIEU_DOI_THU:
         return insufficient(
             f"Danh mục `{cat}` chỉ có {len(doi_thu)} listing cạnh tranh, "
@@ -67,8 +74,6 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
 
     dem_dau = Counter(t for r in dan_dau for t in set(r.get("tags") or []))
     dem_ca = Counter(t for r in doi_thu for t in set(r.get("tags") or []))
-    ten_tag = {c["category_id"]: c.get("name_vi") for c in
-               db()["categories"].find({}, {"category_id": 1, "name_vi": 1})}
 
     thieu = []
     for tag, n in dem_dau.items():
@@ -118,10 +123,9 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
                      if co_tin_hieu else
                      f"KHÔNG có tín hiệu đủ mạnh. Đã thử {so_tag_thu} tag trên "
                      f"{len(dan_dau)} đối thủ; mọi tag tìm được đều xuất hiện dưới "
-                     f"{NGUONG_DEM_TIN_CAY} lần, tức nằm trong mức dao động ngẫu nhiên. "
-                     f"Tag trong dữ liệu mồi được gán ngẫu nhiên nên điều này là DỰ KIẾN — "
-                     f"đừng dùng danh sách dưới đây để ra quyết định. Endpoint chỉ có ý "
-                     f"nghĩa trên dữ liệu sàn thật."),
+                     f"{NGUONG_DEM_TIN_CAY} lần, tức nằm trong mức dao động ngẫu nhiên"
+                     + (". Tag trong dữ liệu mồi được gán ngẫu nhiên nên đừng dùng danh sách "
+                        "dưới đây để ra quyết định." if du_lieu_moi else ".")),
         },
         "note": ("Ước lượng là TƯƠNG QUAN, không phải nhân quả. Thêm tag không đảm bảo "
                  "tăng truy cập — con số chỉ nói nhóm bán chạy dùng tag này vượt mặt bằng bao nhiêu."),

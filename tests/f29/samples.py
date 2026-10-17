@@ -1,5 +1,3 @@
-"""Dữ liệu mẫu dùng chung cho test F29."""
-
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
@@ -13,7 +11,7 @@ PRODUCT_ID = "507f1f77bcf86cd799439011"
 
 def base_product(**overrides) -> Dict[str, Any]:
     p = {
-        "_id_str": PRODUCT_ID,  # tiện cho test, không phải field Mongo thật
+        "_id_str": PRODUCT_ID,
         "title": "Áo thun cotton local brand unisex form rộng",
         "description": "Áo thun chất liệu cotton 100% thoáng mát, form unisex form rộng, "
                         "in hoạ tiết độc quyền, phù hợp mặc hàng ngày lẫn đi chơi, dễ phối đồ, "
@@ -41,7 +39,6 @@ def with_id(doc: Dict[str, Any], oid_str: str = PRODUCT_ID) -> Dict[str, Any]:
 
 def conv_world(n_peers: int, views_each: int, orders_each: int, *, target_views: int,
                target_orders: int, category: str = "cat_a", extra_orders=None):
-    """Sàn giả: sản phẩm đích + n_peers sản phẩm cùng danh mục, có sẵn lượt xem và đơn."""
     products, events, orders = [], [], []
 
     def add(oid, n_views, n_orders):

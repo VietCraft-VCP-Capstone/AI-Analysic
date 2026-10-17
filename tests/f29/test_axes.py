@@ -1,5 +1,3 @@
-"""Chấm từng trục và gộp điểm tổng."""
-
 from datetime import timedelta
 
 import pytest
@@ -31,17 +29,15 @@ class TestStatus:
 
 class TestContentScore:
     def test_no_images_not_full_marks_but_not_zero(self):
-        """0 ảnh kéo điểm xuống nhưng mô tả và tag vẫn đóng góp."""
         product = base_product(images=[])
         calc = make_calculator()
         score, warnings = calc._get_content_score(product)
         assert all("ảnh" not in h["message"].lower() for h in warnings)
-        # ảnh=0, mô tả (>=150 ký tự)=100, tag (3 tag)=100 -> trung bình (0+100+100)/3
         assert score == pytest.approx(66.7, abs=0.1)
         assert score < 100.0
 
     def test_good_product_full_marks(self):
-        product = base_product()  # 5 ảnh, mô tả >=150 ký tự, 3 tag
+        product = base_product()
         calc = make_calculator()
         score, warnings = calc._get_content_score(product)
         assert score == 100.0
@@ -52,7 +48,6 @@ class TestContentScore:
         assert [h["field"] for h in hints] == ["title"]
 
     def test_component_formula_matches_todo_recompute(self):
-        """Điểm thành phần trong todos phải khớp công thức chấm thật."""
         calc = make_calculator()
         comps = calc._content_component_scores(n_images=2, desc_len=0, n_tags=0)
         assert comps["images"] == pytest.approx((2 / MIN_IMAGES) * 100.0)
@@ -61,7 +56,6 @@ class TestContentScore:
 
 
     def test_unavailable_component_is_skipped(self):
-        """Nguồn không có tag (Olist) chấm trên 2 thành phần còn lại, không cho tag 0 điểm."""
         comps = content_component_scores(n_images=5, desc_len=75, n_tags=None)
         assert set(comps) == {"images", "description"}
         assert content_axis_score(comps) == pytest.approx(75.0)
@@ -74,7 +68,6 @@ class TestRatingScale:
 
     def test_bayes_shrinkage(self):
         assert bayes_shrunk_rating(0, 0, 4.0) is None
-        # 10 review 1★, C=4, m=50 -> (10 + 200)/60 = 3.5 -> 62.5 điểm
         assert rating_axis_score(bayes_shrunk_rating(10, 10, 4.0)) == pytest.approx(62.5)
 
 
@@ -91,16 +84,15 @@ class TestFreshnessScore:
         assert calc._get_freshness_score(product) == 0.0
 
     def test_naive_datetime_from_mongo_does_not_crash(self):
-        """Datetime naive từ Mongo không được làm lỗi phép trừ ngày."""
         calc = make_calculator()
         naive_recent = (NOW - timedelta(days=10)).replace(tzinfo=None)
         product = {"updated_at": naive_recent, "content_changed_at": naive_recent}
-        score = calc._get_freshness_score(product)  # không được raise TypeError
+        score = calc._get_freshness_score(product)
         assert score == 100.0
 
     def test_linear_decay_between_90_and_365_days(self):
         calc = make_calculator()
-        mid = NOW - timedelta(days=227)  # giữa 90 và 365
+        mid = NOW - timedelta(days=227)
         product = {"content_changed_at": mid}
         score = calc._get_freshness_score(product)
         assert 0.0 < score < 100.0
@@ -128,18 +120,16 @@ class TestInventoryScore:
             {"is_active": True, "stock_quantity": 0},
         ]
         score = calc._get_inventory_score(product, variants)
-        assert score == 50.0  # 2/4 còn hàng
+        assert score == 50.0
 
 
 class TestTotalScoreReweighting:
-    """Trục n/a bị loại, trọng số còn lại chia lại về tổng 1."""
 
     def test_two_axes_missing_reweights_correctly(self):
         calc = make_calculator()
         axes = {"rating": None, "content": 80.0, "inventory": None,
                 "freshness": 100.0, "conversion": None}
         total = calc._total_score(axes)
-        # chỉ còn content(.20) + freshness(.10), tổng trọng số .30
         expected = round((80.0 * 0.20 + 100.0 * 0.10) / 0.30, 1)
         assert total == expected == 86.7
 

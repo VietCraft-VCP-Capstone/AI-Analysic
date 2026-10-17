@@ -14,12 +14,10 @@ STATE_COLLECTION = "scheduler_state"
 STATE_ID_MINUTE_SCAN = "f29_minute_scan"
 STATE_ID_NIGHTLY = "f29_nightly_rescan"
 
-# Lần đầu chạy thì quét lùi ngần này phút, không quét lại toàn sàn.
 DEFAULT_LOOKBACK_MINUTES = 24 * 60
 
 
 def _get_last_scan_time(job_id: str, default_lookback_minutes: int = DEFAULT_LOOKBACK_MINUTES) -> datetime:
-    """Mốc lần quét trước của một job, hoặc mốc lùi mặc định nếu chưa từng chạy."""
     db = db_live()
     doc = db[STATE_COLLECTION].find_one({"_id": job_id})
     if doc and doc.get("last_scan_time"):
@@ -42,7 +40,6 @@ def _set_last_scan_time(job_id: str, ts: datetime) -> None:
 def _recalculate_and_save(
     product_ids: Iterable, calculator: Optional[HealthScoreCalculator] = None
 ) -> int:
-    """Chấm và lưu từng sản phẩm; lỗi một cái thì log và đi tiếp. Trả số đã lưu."""
     calc = calculator or HealthScoreCalculator()
     n_ok = 0
     for pid in product_ids:
@@ -58,7 +55,6 @@ def _recalculate_and_save(
 
 
 def scan_changed_products() -> int:
-    """BR-181: chấm lại sản phẩm/biến thể có updated_at mới hơn lần quét trước."""
     db = db_live()
     scan_started_at = datetime.now(timezone.utc)
     last_scan_time = _get_last_scan_time(STATE_ID_MINUTE_SCAN)
@@ -74,7 +70,6 @@ def scan_changed_products() -> int:
             {"updated_at": {"$gt": last_scan_time}}, {"product_id": 1}
         )
     })
-    # Lượt xem và đơn mới không đổi updated_at nhưng làm đổi trục chuyển đổi.
     activity_product_ids = {
         e["product_id"] for e in db["product_events"].find(
             {"event_type": "view", "created_at": {"$gt": last_scan_time}}, {"product_id": 1}
@@ -97,7 +92,6 @@ def scan_changed_products() -> int:
 
 
 def nightly_full_rescan() -> int:
-    """Quét toàn bộ sản phẩm lúc 0h UTC để bù các thay đổi không chạm updated_at."""
     db = db_live()
     scan_started_at = datetime.now(timezone.utc)
 
@@ -109,13 +103,10 @@ def nightly_full_rescan() -> int:
     return n_ok
 
 
-# Đăng ký vào APScheduler (gọi từ app/main.py::lifespan)
-
 _scheduler = None
 
 
 def start_scheduler():
-    """Đăng ký job 60 giây và job 0h UTC; gọi lại nhiều lần vẫn an toàn."""
     global _scheduler
     if _scheduler is not None:
         return _scheduler
@@ -131,7 +122,7 @@ def start_scheduler():
         id="f29_scan_changed",
         max_instances=1,
         coalesce=True,
-        next_run_time=datetime.now(timezone.utc),  # chạy ngay lần đầu, không đợi 60s
+        next_run_time=datetime.now(timezone.utc),
     )
     scheduler.add_job(
         nightly_full_rescan,
@@ -146,7 +137,6 @@ def start_scheduler():
 
 
 def stop_scheduler() -> None:
-    """Tắt scheduler lúc service dừng (lifespan shutdown)."""
     global _scheduler
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)

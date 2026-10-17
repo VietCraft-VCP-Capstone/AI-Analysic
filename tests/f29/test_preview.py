@@ -1,5 +1,3 @@
-"""Xem điểm nếu sửa (§4.3): chấm lại với giá trị giả định, chỉ đọc."""
-
 from datetime import timedelta
 
 import pytest

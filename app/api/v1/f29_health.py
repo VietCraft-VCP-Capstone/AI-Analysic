@@ -21,7 +21,6 @@ router = APIRouter()
 
 
 def _kiem_quyen_listing(id: str, shop_id: str) -> None:
-    """404 nếu listing không có, 403 nếu listing thuộc shop khác."""
     try:
         product_id = ObjectId(id)
     except Exception:
@@ -35,7 +34,6 @@ def _kiem_quyen_listing(id: str, shop_id: str) -> None:
 
 @router.get("/api/analytics/listings/{id}/health", tags=["F29 · Hạt"])
 def health(id: str, shop_id: str = CurrentShop):
-    """Đọc điểm sức khoẻ trực tiếp từ listing_health_scores collection."""
 
     if not la_shop_live(shop_id):
         return insufficient(
@@ -106,7 +104,6 @@ class HealthPreviewBody(BaseModel):
 
 @router.post("/api/analytics/listings/{id}/health/preview", tags=["F29 · Hạt"])
 def health_preview(id: str, body: HealthPreviewBody, shop_id: str = CurrentShop):
-    """Xem điểm nếu sửa (§4.3): chấm lại với giá trị giả định. Chỉ đọc, không ghi điểm."""
     meta_args = dict(scope="listing", scope_id=id, database="vietcraft", mode="live")
     if not la_shop_live(shop_id):
         return insufficient("Cần cấu hình gian hàng trước khi xem sức khoẻ listing", build_meta(**meta_args))

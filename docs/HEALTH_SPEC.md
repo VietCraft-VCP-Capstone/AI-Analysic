@@ -96,6 +96,10 @@ conversion = min(CR / mặt_bằng, 2,0) × 50          (bằng mặt bằng = 5
 Đứng đầu danh sách, `impact = 0`, không đổi điểm: 0 ảnh · giá bán < giá vốn ở ít nhất một
 biến thể · bị từ chối kiểm duyệt (kèm lý do).
 
+Cảnh báo bán hàng (`todos.build_sales_warnings`, cũng không đổi điểm): listing đăng từ 14 ngày mà dưới
+100 lượt xem/30 ngày (`field: title`); trục chuyển đổi ≤ 40 (tỉ lệ mua thấp hơn mặt bằng ≥ 20%, BR-179), gợi ý
+theo bước rơi rụng — ít thêm giỏ (`variants.retail_price`) hay thêm giỏ mà ít mua (`shipping`).
+
 ## 6. Version
 
 `health-1.0`: trọng số trên (gán tay, F29b không thay — `docs/F29B_RESULTS.md`), m = 50,
