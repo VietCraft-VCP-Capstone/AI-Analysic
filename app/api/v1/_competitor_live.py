@@ -12,7 +12,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from bson import ObjectId
 
-from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, db_live, la_shop_live
+from app.api.v1 import _live
+from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, la_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import build_meta, mart_not_ready, meta_from_record, not_found, ok
 from app.config import settings
@@ -25,6 +26,10 @@ K_CO_NGOT = 10              # giống build_marts.K_CO_NGOT của dữ liệu m�
 DA_GIAO = "DELIVERED"
 DANG_BAN = {"status": "PUBLISHED", "is_hidden": {"$ne": True}}   # = PUBLIC_QUERY của BE
 SO_CANH_BAO_TOI_DA = 50
+
+
+def db_live():
+    return _live.db_live()      # gọi qua module để test vá `_live.db_live` thì F32–F36 cũng đọc DB giả
 
 
 def _bay_gio() -> datetime:

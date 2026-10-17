@@ -1,5 +1,3 @@
-"""Trục chuyển đổi: ngưỡng lượt xem, mặt bằng danh mục/toàn sàn, lọc đơn."""
-
 from bson import ObjectId
 
 from tests.f29.fake_mongo import make_calculator
@@ -26,7 +24,6 @@ class TestConversionScore:
         assert calc._get_conversion(PRODUCT_ID)[1]["views_30d"] == 0
 
     def test_not_enough_peers_not_counted(self):
-        # Đích + 3 sản phẩm = 4 listing đủ lượt xem < MIN_CONVERSION_PEERS (5).
         calc = conv_world(3, 200, 4, target_views=200, target_orders=4)
         score, detail = calc._get_conversion(PRODUCT_ID)
         assert score is None and detail["reason"] == "not_enough_peers"
@@ -39,7 +36,6 @@ class TestConversionScore:
         assert detail["conversion_rate"] == 0.02
 
     def test_double_baseline_capped_at_100(self):
-        # Đích 12/200 = 6%, mặt bằng gộp (12 + 5*2) / 1200 ≈ 1.83% -> chỉ số > 2 -> chặn trần.
         calc = conv_world(5, 200, 2, target_views=200, target_orders=12)
         assert calc._get_conversion(PRODUCT_ID)[0] == 100.0
 
@@ -60,7 +56,6 @@ class TestConversionScore:
         assert score is None and detail["reason"] == "no_orders_in_baseline"
 
     def test_falls_back_to_platform_baseline(self):
-        # Đích nằm danh mục khác, không có bạn cùng danh mục -> dùng mặt bằng toàn sàn.
         calc = conv_world(5, 200, 4, target_views=200, target_orders=4)
         calc.live_db["products"].docs[0]["category_ids"] = ["cat_khac"]
         score, detail = calc._get_conversion(PRODUCT_ID)

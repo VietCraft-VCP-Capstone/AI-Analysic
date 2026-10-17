@@ -1,5 +1,3 @@
-"""calculate() đầu-cuối và save() idempotent theo {product_id, date}."""
-
 from tests.f29.fake_mongo import make_calculator
 from tests.f29.samples import NOW, PRODUCT_ID, base_product, with_id
 
@@ -10,7 +8,6 @@ class TestCalculateIntegration:
         assert calc.calculate("not-an-object-id") is None
 
     def test_seed_product_excluded(self):
-        """Sản phẩm có seed_ref không được chấm — đúng bộ lọc LOC_SP_THAT."""
         product = with_id(base_product(seed_ref="seed_123"))
         calc = make_calculator(products=[product])
         assert calc.calculate(PRODUCT_ID) is None
@@ -32,19 +29,16 @@ class TestCalculateIntegration:
         assert result["score"] is not None
         assert result["status"] in ("good", "needs_improvement", "poor")
         assert set(result["axes"].keys()) == {"conversion", "rating", "content", "inventory", "freshness"}
-        # S0: chưa có event -> chuyển đổi luôn n/a; chưa có review -> đánh giá n/a
         assert "conversion" in result["axes_missing"]
         assert "rating" in result["axes_missing"]
         assert result["axes"]["conversion"] is None
         assert result["axes"]["rating"] is None
-        assert result["axes"]["inventory"] == 100.0  # 1/1 biến thể còn hàng
+        assert result["axes"]["inventory"] == 100.0
         assert result["content_hash"]
         assert result["inputs_hash"]
         assert result["content_changed_at"] is not None
 
     def test_axis_reweighting_end_to_end(self):
-        """POD_TEMPLATE -> tồn kho n/a; không review -> đánh giá n/a. Điểm tổng
-        phải khớp đúng công thức chia lại trọng số cho content + freshness."""
         product = with_id(base_product(product_type="POD_TEMPLATE"))
         calc = make_calculator(products=[product])
         result = calc.calculate(PRODUCT_ID)
@@ -104,11 +98,9 @@ class TestSaveIdempotency:
         calc.save(self._sample_result(score=90.0))
         docs = calc.live_db["listing_health_scores"].docs
         assert len(docs) == 1
-        assert docs[0]["score"] == 90.0  # bản mới nhất thắng, không insert thêm dòng
+        assert docs[0]["score"] == 90.0
 
     def test_calculate_then_save_twice_is_idempotent(self):
-        """Mô phỏng scan_changed_products() chạy 2 lần liên tiếp cho cùng dữ
-        liệu — phải ra đúng MỘT bản ghi với cùng điểm số."""
         product = with_id(base_product())
         calc = make_calculator(products=[product])
 

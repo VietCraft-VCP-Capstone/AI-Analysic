@@ -54,8 +54,7 @@ def _ngay(d: Any) -> Optional[str]:
 
 
 def _gio_tuan(order_hour_of_week: int):
-    """order_hour_of_week = getDay()*24 + getHours() (BE, Date.getDay() kiểu JS:
-    0 = Chủ Nhật .. 6 = Thứ Bảy). Đổi sang ISO dow 1 = Thứ Hai .. 7 = Chủ Nhật."""
+    """Đổi giờ trong tuần kiểu JS (0 = Chủ Nhật) sang ISO dow 1 = Thứ Hai .. 7 = Chủ Nhật."""
     js_dow = order_hour_of_week // 24
     hour = order_hour_of_week % 24
     iso_dow = 7 if js_dow == 0 else js_dow

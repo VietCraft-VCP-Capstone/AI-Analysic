@@ -101,7 +101,7 @@ def doan_loai_phoi(title: str, tags: Optional[List[str]] = None) -> Dict[str, An
     return {"product_type_id": None, "source": "unknown", "handmade_hint": thu_cong}
 
 
-LOC_SP_THAT = {"seed_ref": {"$exists": False}}
+LOC_SP_THAT = {"seed_ref": {"$exists": False}, "is_hidden": {"$ne": True}}
 LOC_DON_THAT = {"seed_ref": {"$exists": False}, "is_simulated": {"$ne": True}}
 
 

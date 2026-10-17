@@ -1,8 +1,3 @@
-"""Xem điểm nếu sửa (§4.3): chấm lại listing với vài giá trị giả định.
-
-Chỉ đọc. Dùng đúng các hàm thuần của `scoring.py` — không có bản công thức thứ hai.
-"""
-
 from datetime import datetime, timezone
 from typing import Any, Dict, FrozenSet, List, Optional
 
@@ -31,7 +26,6 @@ def apply_overrides(
     overrides: Dict[str, Optional[float]],
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Trả trục mới, input đã dùng và lever bị bỏ qua. Hàm thuần."""
     new_axes = dict(axes)
     used = dict(inputs)
     ignored: List[str] = []
@@ -39,7 +33,6 @@ def apply_overrides(
     given = {k: v for k, v in overrides.items() if k in LEVERS and v is not None}
     for key, value in given.items():
         if key == "in_stock_ratio_pct" and axes.get("inventory") is None:
-            # Listing không phải hàng có sẵn: trục tồn kho n/a, giả định không đổi được gì.
             ignored.append(key)
             continue
         used[key] = value
@@ -52,7 +45,6 @@ def apply_overrides(
             used["n_images"], used["description_length"], used["n_tags"]
         )
         new_axes["content"] = round(scoring.content_axis_score(comps), 1)
-        # Sửa nội dung thì content_hash đổi, mốc độ mới nhảy về hôm nay.
         moment = now or datetime.now(timezone.utc)
         new_axes["freshness"] = round(scoring.freshness_score({"content_changed_at": moment}, now=moment), 1)
 
@@ -65,7 +57,6 @@ def apply_overrides(
 def preview_health(
     calc: HealthScoreCalculator, product_id: str, overrides: Dict[str, Optional[float]]
 ) -> Optional[Dict[str, Any]]:
-    """None khi listing không chấm được (id sai, sản phẩm mồi, không tồn tại)."""
     current = calc.calculate(product_id)
     if current is None:
         return None

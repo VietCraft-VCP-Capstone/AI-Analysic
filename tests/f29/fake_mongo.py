@@ -1,6 +1,3 @@
-"""MongoClient giả in-memory cho test F29: không ghi vào cụm Atlas dùng chung,
-chạy được khi không có mạng / không có .env."""
-
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
@@ -131,7 +128,6 @@ class _FakeDB(dict):
 
 
 class _FakeMongoClient:
-    """`db_client[settings.MONGO_DB_LIVE]` phải trả về CÙNG một FakeDB mỗi lần."""
 
     def __init__(self):
         self._db = _FakeDB()
@@ -141,11 +137,6 @@ class _FakeMongoClient:
 
 
 def make_calculator(**seed) -> HealthScoreCalculator:
-    """Tạo HealthScoreCalculator với DB giả, seed sẵn các collection cần.
-
-    `seed` nhận các key: products, product_variants, reviews, orders,
-    listing_health_scores — mỗi key là list[dict].
-    """
     client = _FakeMongoClient()
     calc = HealthScoreCalculator(db_client=client)
     for coll_name, docs in seed.items():

@@ -46,6 +46,8 @@ def shop_comparison(shop_id: str = CurrentShop):
     meta = meta_doi_thu(ng, cua_toi[0], scope="shop", scope_id=shop_id, sample_size=len(cua_toi))
 
     if len(cua_toi) < TOI_THIEU_LISTING:
+        meta["unlock"] = {"requirement": "sản phẩm của shop", "unit": "sản phẩm",
+                          "current": len(cua_toi), "target": TOI_THIEU_LISTING}
         return insufficient(
             f"Shop mới có {len(cua_toi)} sản phẩm, cần tối thiểu {TOI_THIEU_LISTING} "
             f"mới so sánh được với shop khác", meta)

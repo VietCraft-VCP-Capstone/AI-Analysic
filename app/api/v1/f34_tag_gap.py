@@ -45,6 +45,8 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
     meta = meta_doi_thu(ng, trong_cat[0], scope="category", scope_id=cat, sample_size=len(trong_cat))
 
     if len(doi_thu) < TOI_THIEU_DOI_THU:
+        meta["unlock"] = {"requirement": "sản phẩm đối thủ cùng danh mục", "unit": "sản phẩm",
+                          "current": len(doi_thu), "target": TOI_THIEU_DOI_THU}
         return insufficient(
             f"Danh mục {ten_dm.get(cat) or cat} chỉ có {len(doi_thu)} sản phẩm của shop khác, "
             f"cần tối thiểu {TOI_THIEU_DOI_THU} mới kết luận được", meta)

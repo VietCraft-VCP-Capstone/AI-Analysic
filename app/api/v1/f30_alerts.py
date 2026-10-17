@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-from typing import Optional
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
@@ -9,7 +8,7 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 
 from app.api.v1._live import la_shop_live
-from app.api.v1._live_guard import THIEU_LICH_SU, chan_shop_live, dem_ngay_co_don
+from app.api.v1._live_shop import alerts_live
 from app.api.v1._mart import cua_so, db, ngay_moi_nhat
 from app.api.v1._template import CurrentShop, invalid_param, mart_not_ready, meta_from_record, ok
 
@@ -17,22 +16,19 @@ router = APIRouter()
 
 MART = "anomaly_event"
 KY_HAN = {"7d": 7, "30d": 30, "90d": 90, "all": None}
-NGUONG_TUAN = 8                     # §9.2: ≥8 tuần dữ liệu ngày
-NGUONG_NGAY = NGUONG_TUAN * 7       # quy ra ngày có đơn, đếm được trực tiếp
+NGUONG = {"z": 7.0,
+          "why": ("Đo thực nghiệm: ngưỡng 2.0 của BR-183 cho 7,38% báo động giả, "
+                  "ngưỡng 7.0 còn 0,6%. Code đúng hơn SRS — xem docs/SPEC_CHANGES.md.")}
 
 
 @router.get("/api/notifications/alerts", tags=["F30 · Hiếu"])
 def alerts(shop_id: str = CurrentShop, period: str = "90d"):
-    unlock = None
-    if la_shop_live(shop_id):
-        unlock = {"requirement": "ngày có đơn hàng thật (8 tuần)", "unit": "ngày",
-                  "current": dem_ngay_co_don(shop_id), "target": NGUONG_NGAY}
-    chan = chan_shop_live(shop_id, THIEU_LICH_SU, "orders", unlock=unlock)
-    if chan is not None:
-        return chan
-
     if period not in KY_HAN:
         invalid_param("period", " | ".join(KY_HAN))
+    if la_shop_live(shop_id):
+        rows, duoc_do, ghi_chu, meta = alerts_live(shop_id, KY_HAN[period])
+        return _ket_qua(shop_id, period, [{**r, "date": r["event_date"]} for r in rows],
+                        duoc_do, ghi_chu, meta)
 
     coll = db()[MART]
     if coll.estimated_document_count() == 0:
@@ -53,11 +49,20 @@ def alerts(shop_id: str = CurrentShop, period: str = "90d"):
                             mode="seed_demo", sample_size=len(rows),
                             confidence=(rows[0].get("confidence", "ok") if rows else "medium"))
 
+    return _ket_qua(shop_id, period, [{**r, "date": r["event_date"]} for r in rows], duoc_do,
+                    None if duoc_do else
+                    "Shop này KHÔNG được đưa vào phép dò: chuỗi doanh thu ngày có quá "
+                    "nhiều ngày bằng 0 (dưới 40% số ngày có bán), nền của chuỗi là 0 nên "
+                    "mọi ngày bán được đều bị chấm là đột biến. Không phải shop không có "
+                    "bất thường — là chưa đo được.", meta)
+
+
+def _ket_qua(shop_id, period, rows, duoc_do, ghi_chu, meta):
     return ok({
         "shop_id": shop_id,
         "period": period,
         "alerts": [{
-            "date": r["event_date"],
+            "date": r["date"],
             "direction": r["direction"],
             "z": r["z"],
             "expected_vnd": r.get("expected"),
@@ -68,12 +73,6 @@ def alerts(shop_id: str = CurrentShop, period: str = "90d"):
         } for r in rows],
         "total": len(rows),
         "shop_was_analysed": duoc_do,
-        "threshold": {"z": 7.0,
-                      "why": ("Đo thực nghiệm: ngưỡng 2.0 của BR-183 cho 7,38% báo động giả, "
-                              "ngưỡng 7.0 còn 0,6%. Code đúng hơn SRS — xem docs/SPEC_CHANGES.md.")},
-        "limitation": (None if duoc_do else
-                       "Shop này KHÔNG được đưa vào phép dò: chuỗi doanh thu ngày có quá "
-                       "nhiều ngày bằng 0 (dưới 40% số ngày có bán), nền của chuỗi là 0 nên "
-                       "mọi ngày bán được đều bị chấm là đột biến. Không phải shop không có "
-                       "bất thường — là chưa đo được."),
+        "threshold": NGUONG,
+        "limitation": ghi_chu,
     }, meta)

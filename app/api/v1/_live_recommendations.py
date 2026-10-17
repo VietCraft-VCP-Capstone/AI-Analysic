@@ -75,15 +75,7 @@ def _tag_nong(gioi_han: int = 5) -> List[Dict[str, Any]]:
 
 
 def recommendations_live(shop_id: str):
-    if db_live()["listing_health_scores"].estimated_document_count() == 0:
-        return insufficient(
-            "Chưa có điểm sức khoẻ listing nào (job F29 chưa chạy lần nào trên sàn thật), "
-            "nên chưa dựng được khuyến nghị cá nhân hoá.",
-            build_meta(model_version="live-reco-1.0", scope="shop", scope_id=shop_id,
-                      database=settings.MONGO_DB_LIVE, collection="listing_health_scores",
-                      mode="live", attributed_to_live_shop=True, sample_size=0, confidence="low"))
-
-    yeu = _f29_thap(shop_id)
+    yeu = _f29_thap(shop_id) if db_live()["listing_health_scores"].estimated_document_count() > 0 else []
     mua_vu = _mua_vu_sap_toi()
     nong = _tag_nong()
 
