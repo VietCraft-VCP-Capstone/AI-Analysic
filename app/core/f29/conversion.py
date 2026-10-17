@@ -14,8 +14,7 @@ from app.core.f29.scoring import category_key
 
 
 def conversion_stats(live_db) -> Dict[str, Any]:
-    """Lượt xem đọc thẳng `product_events` (BE đã gộp trùng theo phiên 30 phút).
-    Mỗi đơn thật, không huỷ, tính một lần mua cho mỗi sản phẩm trong đơn."""
+    """Lượt xem từ product_events; mỗi đơn thật không huỷ tính một lần mua mỗi sản phẩm."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=CONVERSION_WINDOW_DAYS)
 
     products = {
@@ -64,8 +63,7 @@ def conversion_stats(live_db) -> Dict[str, Any]:
 
 
 def conversion_score(stats: Dict[str, Any], product_id: str) -> Tuple[Optional[float], Dict[str, Any]]:
-    """Chỉ số = tỉ lệ mua ÷ mặt bằng, chặn trần 2,0, quy về 0-100 (bằng mặt bằng = 50).
-    `detail` cho giao diện giải thích vì sao chưa tính hoặc so trên mặt bằng nào."""
+    """Tỉ lệ mua ÷ mặt bằng, trần 2,0, quy về 0-100 (bằng mặt bằng = 50)."""
     pid = str(product_id)
     n_views = stats["views"].get(pid, 0)
     n_orders = stats["orders"].get(pid, 0)

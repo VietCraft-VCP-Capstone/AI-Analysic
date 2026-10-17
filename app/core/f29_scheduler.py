@@ -14,9 +14,7 @@ STATE_COLLECTION = "scheduler_state"
 STATE_ID_MINUTE_SCAN = "f29_minute_scan"
 STATE_ID_NIGHTLY = "f29_nightly_rescan"
 
-# Chưa từng quét lần nào thì quét lùi ngần này phút cho job phút, để lần chạy
-# đầu tiên của service vẫn bắt được các sản phẩm vừa sửa gần đây — không phải
-# quét lại TOÀN SÀN ngay (đó là việc của nightly_full_rescan).
+# Lần đầu chạy thì quét lùi ngần này phút, không quét lại toàn sàn.
 DEFAULT_LOOKBACK_MINUTES = 24 * 60
 
 
@@ -44,9 +42,7 @@ def _set_last_scan_time(job_id: str, ts: datetime) -> None:
 def _recalculate_and_save(
     product_ids: Iterable, calculator: Optional[HealthScoreCalculator] = None
 ) -> int:
-    """Chấm lại và lưu cho từng product_id. Một sản phẩm lỗi không được chặn cả
-    lượt quét — log rồi đi tiếp. Trả số sản phẩm đã chấm VÀ lưu thành công.
-    """
+    """Chấm và lưu từng sản phẩm; lỗi một cái thì log và đi tiếp. Trả số đã lưu."""
     calc = calculator or HealthScoreCalculator()
     n_ok = 0
     for pid in product_ids:
@@ -62,9 +58,7 @@ def _recalculate_and_save(
 
 
 def scan_changed_products() -> int:
-    """BR-181: quét `products` / `product_variants` có `updated_at` mới hơn lần
-    quét trước, chấm lại điểm và lưu. Trả số sản phẩm đã chấm.
-    """
+    """BR-181: chấm lại sản phẩm/biến thể có updated_at mới hơn lần quét trước."""
     db = db_live()
     scan_started_at = datetime.now(timezone.utc)
     last_scan_time = _get_last_scan_time(STATE_ID_MINUTE_SCAN)
@@ -80,8 +74,7 @@ def scan_changed_products() -> int:
             {"updated_at": {"$gt": last_scan_time}}, {"product_id": 1}
         )
     })
-    # Lượt xem và đơn mới không chạm `products.updated_at`, nhưng làm đổi trục tỉ lệ
-    # mua và tiến độ "đã có X/100 lượt xem" mà seller đang nhìn.
+    # Lượt xem và đơn mới không đổi updated_at nhưng làm đổi trục chuyển đổi.
     activity_product_ids = {
         e["product_id"] for e in db["product_events"].find(
             {"event_type": "view", "created_at": {"$gt": last_scan_time}}, {"product_id": 1}
@@ -104,10 +97,7 @@ def scan_changed_products() -> int:
 
 
 def nightly_full_rescan() -> int:
-    """Quét TOÀN BỘ sản phẩm hợp lệ mỗi 24h (0h UTC), kể cả sản phẩm có
-    `updated_at` không đổi — bù cho các đường ghi không cập nhật
-    `products.updated_at` (duyệt tag, đổi category, …).
-    """
+    """Quét toàn bộ sản phẩm lúc 0h UTC để bù các thay đổi không chạm updated_at."""
     db = db_live()
     scan_started_at = datetime.now(timezone.utc)
 
@@ -119,20 +109,13 @@ def nightly_full_rescan() -> int:
     return n_ok
 
 
-# ---------------------------------------------------------------------------
-# ĐĂNG KÝ VÀO APSCHEDULER (gọi từ `app/main.py::lifespan`)
-# ---------------------------------------------------------------------------
+# Đăng ký vào APScheduler (gọi từ app/main.py::lifespan)
 
 _scheduler = None
 
 
 def start_scheduler():
-    """Đăng ký 2 job: quét thay đổi mỗi 60 giây, quét toàn sàn 0h UTC mỗi ngày.
-
-    Gọi MỘT LẦN trong `lifespan` của `app/main.py`. An toàn gọi nhiều lần (trả
-    lại scheduler đã có, không đăng ký trùng job) — phòng khi lifespan chạy lại
-    trong test với TestClient.
-    """
+    """Đăng ký job 60 giây và job 0h UTC; gọi lại nhiều lần vẫn an toàn."""
     global _scheduler
     if _scheduler is not None:
         return _scheduler

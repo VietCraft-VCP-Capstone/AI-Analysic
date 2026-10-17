@@ -93,8 +93,7 @@ def _ratio_score(value: float, target: float) -> float:
 
 def content_component_scores(n_images: Optional[float], desc_len: Optional[float],
                              n_tags: Optional[float]) -> Dict[str, float]:
-    """Dùng chung cho chấm thật, chấm thử trong todos và kiểm định offline.
-    Thành phần None = nguồn dữ liệu không có cột đó (vd. Olist không có tag), bị bỏ qua."""
+    """Điểm thành phần nội dung; thành phần None (nguồn không có cột) bị bỏ qua."""
     raw = {"images": (n_images, MIN_IMAGES),
            "description": (desc_len, MIN_DESCRIPTION_LENGTH),
            "tags": (n_tags, MIN_TAGS_APPROVED)}
@@ -111,8 +110,7 @@ def content_axis_score(components: Dict[str, float]) -> Optional[float]:
 def content_score(
     product: Dict[str, Any], pending_tag_ids: FrozenSet = frozenset()
 ) -> Tuple[Optional[float], List[Dict[str, str]]]:
-    """Trả (điểm 0-100, gợi ý phụ không đổi điểm). Thiếu ảnh/mô tả/tag đã có việc
-    cần làm riêng nên không lặp lại ở đây."""
+    """Trả (điểm 0-100, gợi ý phụ không đổi điểm)."""
     hints: List[Dict[str, str]] = []
     images = product.get("images") or []
     description = (product.get("description") or "").strip()
@@ -145,8 +143,7 @@ def inventory_score(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> 
 
 
 def freshness_score(product: Dict[str, Any], now: Optional[datetime] = None) -> float:
-    """100 trong 90 ngày từ lần sửa nội dung, giảm tuyến tính về 0 ở ngày 365.
-    `now` chỉ truyền khi cần tái lập ví dụ offline theo một ngày cố định."""
+    """100 trong 90 ngày từ lần sửa nội dung, giảm dần về 0 ở ngày 365."""
     now = now or datetime.now(timezone.utc)
 
     changed_at = product.get("content_changed_at") or product.get("updated_at")

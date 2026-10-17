@@ -76,9 +76,7 @@ def niches(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
         "sparkline_7d": r.get("sparkline_7d"),
     } for i, r in enumerate(sach[:TOP_N], 1)]
 
-    # Shop THẬT: cầu (Google Trends) vẫn là số thật, giữ nguyên. Cung so với CATALOG
-    # SEED thì không có nghĩa với sàn thật — che phần cung, không bịa số, và nói rõ
-    # cần bao nhiêu listing thật cùng tag thì mới tính lại được (§9.2).
+    # Shop thật: giữ số cầu thật, che phần cung cho tới khi đủ listing thật cùng tag.
     if la_shop_live(shop_id):
         so_sp_that = db_live()["products"].count_documents(
             {**LOC_SP_THAT, "tags": {"$exists": True, "$ne": []}})

@@ -1,7 +1,4 @@
-"""Xem điểm nếu sửa (§4.3): chấm lại listing với vài giá trị giả định.
-
-Chỉ đọc. Dùng đúng các hàm thuần của `scoring.py` — không có bản công thức thứ hai.
-"""
+"""Xem điểm nếu sửa: chấm lại với giá trị giả định, chỉ đọc, dùng chung scoring.py."""
 
 from datetime import datetime, timezone
 from typing import Any, Dict, FrozenSet, List, Optional

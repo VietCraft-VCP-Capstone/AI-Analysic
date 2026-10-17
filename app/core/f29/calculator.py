@@ -1,5 +1,4 @@
-"""Engine F29: đọc dữ liệu thật (bộ lọc §12.1 của _live.py), chấm 5 trục,
-gộp điểm sức khoẻ listing 0-100 và lưu vào `listing_health_scores`."""
+"""Engine F29: chấm 5 trục trên dữ liệu thật, gộp điểm 0-100, lưu listing_health_scores."""
 
 from datetime import datetime, timezone
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
@@ -21,8 +20,7 @@ def _parse_iso(value: str) -> datetime:
 
 class HealthScoreCalculator:
     def __init__(self, db_client: Optional[MongoClient] = None):
-        # Mặc định dùng kết nối dùng chung: API tạo calculator mỗi request, tự mở
-        # MongoClient sẽ chạm trần kết nối của cụm M0. `db_client` để test tiêm vào.
+        # Dùng kết nối chung để không chạm trần kết nối M0; test truyền db_client riêng.
         if db_client is not None:
             self.client = db_client
             self.live_db = db_client[settings.MONGO_DB_LIVE]
@@ -87,8 +85,7 @@ class HealthScoreCalculator:
         return self._get_conversion(product_id)[0]
 
     def _get_rating_score(self, product_id: str) -> Tuple[Optional[float], Optional[int]]:
-        """Co ngót Bayes (Σ★ + m·C)/(n + m), C = trung bình toàn sàn trên đơn thật.
-        Trả (điểm 0-100, số review)."""
+        """Co ngót Bayes trên đơn thật; trả (điểm 0-100, số review)."""
         try:
             product_oid = ObjectId(product_id)
         except Exception:
@@ -118,8 +115,7 @@ class HealthScoreCalculator:
 
     def _content_changed_at(self, product_oid: ObjectId, product: Dict[str, Any],
                             content_hash: str, now: datetime) -> Any:
-        """Hash đổi thì mốc nhảy về bây giờ; không đổi thì giữ mốc cũ; lần đầu
-        dùng updated_at của sản phẩm (§4.1)."""
+        """Mốc sửa nội dung: đổi hash thì về bây giờ, lần đầu dùng updated_at."""
         prev = self.live_db["listing_health_scores"].find_one(
             {"product_id": product_oid}, sort=[("date", -1)]
         )
@@ -208,8 +204,7 @@ class HealthScoreCalculator:
         }
 
     def save(self, result: Optional[Dict[str, Any]]) -> Optional[str]:
-        """Upsert theo `{product_id, date}` — gọi lại trong ngày chỉ ghi đè một bản
-        ghi, khớp unique index của `listing-health-score.model.ts`."""
+        """Upsert theo {product_id, date}: mỗi ngày một bản ghi."""
         if not result or result.get("product_id") is None:
             return None
 

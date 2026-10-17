@@ -8,9 +8,7 @@ if str(ROOT_DIR) not in sys.path:
 from app.api.v1._live import LOC_SP_THAT, LOC_DON_THAT
 
 
-# ---------------------------------------------------------------------------
 # TEST 1: Kiểm tra LOC_SP_THAT định nghĩa đúng
-# ---------------------------------------------------------------------------
 
 def test_loc_sp_that_co_seed_ref():
     """LOC_SP_THAT phải lọc seed_ref KHÔNG tồn tại."""
@@ -19,9 +17,7 @@ def test_loc_sp_that_co_seed_ref():
     print("  ✓ LOC_SP_THAT = {seed_ref: {$exists: False}}")
 
 
-# ---------------------------------------------------------------------------
 # TEST 2: Kiểm tra LOC_DON_THAT định nghĩa đúng
-# ---------------------------------------------------------------------------
 
 def test_loc_don_that_co_seed_ref_va_is_simulated():
     """LOC_DON_THAT phải lọc seed_ref KHÔNG tồn tại và is_simulated không phải True."""
@@ -34,9 +30,7 @@ def test_loc_don_that_co_seed_ref_va_is_simulated():
     print("  ✓ LOC_DON_THAT = {seed_ref: {$exists: False}, is_simulated: {$ne: True}}")
 
 
-# ---------------------------------------------------------------------------
 # TEST 3: Kiểm tra LOC_*_THAT được dùng trong code
-# ---------------------------------------------------------------------------
 
 def test_loc_filters_used_in_functions():
     """LOC_SP_THAT và LOC_DON_THAT phải được dùng trong san_pham_live() và gia_cung_danh_muc_live()."""
@@ -71,9 +65,7 @@ def test_loc_filters_used_in_functions():
     print("  ✓ LOC_SP_THAT được dùng trong gia_cung_danh_muc_live()")
 
 
-# ---------------------------------------------------------------------------
 # TEST 4: Kiểm tra comment trong code
-# ---------------------------------------------------------------------------
 
 def test_comment_trong_functions():
     """Các hàm phải có comment giải thích về bộ lọc."""
@@ -100,9 +92,7 @@ def test_comment_trong_functions():
     print("  ✓ gia_cung_danh_muc_live() có giải thích về bộ lọc trong docstring")
 
 
-# ---------------------------------------------------------------------------
 # TEST 5: Kiểm tra bộ lọc section được định nghĩa một chỗ duy nhất
-# ---------------------------------------------------------------------------
 
 def test_single_location_definition():
     """Bộ lọc phải được định nghĩa ở một chỗ duy nhất trong _live.py."""
@@ -123,9 +113,7 @@ def test_single_location_definition():
     print("  ✓ LOC_DON_THAT định nghĩa đúng 1 lần")
 
 
-# ---------------------------------------------------------------------------
 # TEST 6: Kiểm tra section comment về bộ lọc
-# ---------------------------------------------------------------------------
 
 def test_filter_section_comment():
     """Phần định nghĩa bộ lọc phải có section comment rõ ràng."""
@@ -140,9 +128,7 @@ def test_filter_section_comment():
     print("  ✓ Có section comment cho bộ lọc dữ liệu giả")
 
 
-# ---------------------------------------------------------------------------
 # RUN ALL TESTS
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     print("=== KIỂM TRA BỘ LỌC DỮ LIỆU GIẢ (SEED) - PLAN §12 ===\n")

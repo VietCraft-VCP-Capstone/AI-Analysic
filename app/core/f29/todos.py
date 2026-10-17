@@ -24,8 +24,7 @@ from app.core.f29.scoring import (
 
 
 def build_warnings(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Không trừ/cộng điểm: 0 ảnh, bán dưới giá vốn, bị từ chối kiểm duyệt,
-    cân nặng/kích thước còn mặc định (500g, 10×10×10cm)."""
+    """Cảnh báo không đổi điểm: 0 ảnh, dưới giá vốn, bị từ chối, cân nặng/kích thước mặc định."""
     warnings: List[Dict[str, Any]] = []
 
     if len(product.get("images") or []) == 0:
@@ -77,8 +76,7 @@ def tag_message(n_approved: int, n_pending: int, target: int) -> str:
 
 
 def content_peer_stats(live_db, cat_key: Optional[Any], pending_tag_ids: FrozenSet = frozenset()) -> Tuple[List[int], List[int], List[int], bool]:
-    """Số ảnh / độ dài mô tả / số tag của listing cùng danh mục; danh mục quá ít
-    listing thì lấy toàn sàn. Phần tử cuối cho biết mốc lấy từ danh mục hay không."""
+    """Trung vị ảnh/mô tả/tag cùng danh mục, ít listing thì lấy toàn sàn."""
     products_coll = live_db["products"]
     fields = {"images": 1, "description": 1, "tags": 1, "tag_ids": 1}
 
@@ -108,9 +106,7 @@ def build_todos(
     inventory_ratio_pct: Optional[float],
     pending_tag_ids: FrozenSet = frozenset(),
 ) -> List[Dict[str, Any]]:
-    """Chỉ cho thứ seller sửa trực tiếp (ảnh, mô tả, tag, tồn kho). Mốc =
-    max(trung vị, mức sàn); `impact` = điểm tổng chấm lại khi kéo đúng chỉ số
-    đó lên mốc. Sắp theo impact / effort."""
+    """Việc seller tự sửa được; mốc = max(trung vị, mức sàn), sắp theo impact / effort."""
     current_total = total_score(axes)
     if current_total is None:
         return []

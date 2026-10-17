@@ -438,8 +438,7 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
     if not chat_luong:
         return []
 
-    # Đánh giá với co ngót Bayes: (Σ★ + m·C)/(n + m)
-    # Trước tiên tính C = trung bình toàn sàn (category-level)
+    # Đánh giá co ngót Bayes (Σ★ + m·C)/(n + m), C = trung bình toàn sàn.
     danh_gia_raw = {r["_id"]: r for r in db["reviews"].aggregate([
         {"$group": {"_id": "$listing_id", "n": {"$sum": 1},
                     "sao": {"$avg": {"$toDouble": "$star"}},
@@ -519,8 +518,7 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
         ty_le_con_hang = (con_hang / tong_bien_the * 100) if tong_bien_the else 0
         d_ton = round(min(100.0, ty_le_con_hang), 1)
 
-        # Độ mới: tính từ lần sửa nội dung gần nhất (content_changed_at), không dùng created_at
-        # Nếu không có content_changed_at, dùng updated_at; nếu vẫn không có thì dùng created_at
+        # Độ mới tính từ content_changed_at, thiếu thì lùi về updated_at rồi created_at.
         thoi_gian_sua = l.get("content_changed_at") or l.get("updated_at") or l.get("created_at")
         try:
             if thoi_gian_sua:
@@ -562,10 +560,7 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
 
 
 def _viec_can_lam(db, lid, truc, danh_muc_id, n_anh, con_hang_ty_le, tong_bien_the):
-    """Gợi ý việc cần sửa dựa trên mốc so sánh thực tế (trung vị danh mục).
-
-    Mốc = max(trung vị danh mục, mức sàn). Mức sàn được đặt trong config hoặc mặc định.
-    """
+    """Việc cần sửa với mốc = max(trung vị danh mục, mức sàn)."""
     from statistics import median
 
     viec = []
@@ -611,8 +606,7 @@ def _viec_can_lam(db, lid, truc, danh_muc_id, n_anh, con_hang_ty_le, tong_bien_t
                 "field": "stock_qty"
             })
 
-    # Chuyển đổi chỉ hiển thị để tham khảo (seller không sửa trực tiếp được),
-    # nên KHÔNG sinh việc cần sửa với gain giả — chỉ trỏ sang F28 để xem khâu nào hỏng.
+    # Chuyển đổi chỉ để tham khảo nên không sinh việc cần sửa, chỉ trỏ sang F28.
 
     return sorted(viec, key=lambda v: v["priority"])
 

@@ -43,8 +43,7 @@ class TestCalculateIntegration:
         assert result["content_changed_at"] is not None
 
     def test_axis_reweighting_end_to_end(self):
-        """POD_TEMPLATE -> tồn kho n/a; không review -> đánh giá n/a. Điểm tổng
-        phải khớp đúng công thức chia lại trọng số cho content + freshness."""
+        """POD_TEMPLATE và không review: chỉ còn content + freshness được tính."""
         product = with_id(base_product(product_type="POD_TEMPLATE"))
         calc = make_calculator(products=[product])
         result = calc.calculate(PRODUCT_ID)
@@ -107,8 +106,7 @@ class TestSaveIdempotency:
         assert docs[0]["score"] == 90.0  # bản mới nhất thắng, không insert thêm dòng
 
     def test_calculate_then_save_twice_is_idempotent(self):
-        """Mô phỏng scan_changed_products() chạy 2 lần liên tiếp cho cùng dữ
-        liệu — phải ra đúng MỘT bản ghi với cùng điểm số."""
+        """Quét 2 lần cùng dữ liệu chỉ ra một bản ghi, cùng điểm."""
         product = with_id(base_product())
         calc = make_calculator(products=[product])
 

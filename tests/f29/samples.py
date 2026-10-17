@@ -41,8 +41,7 @@ def with_id(doc: Dict[str, Any], oid_str: str = PRODUCT_ID) -> Dict[str, Any]:
 
 def conv_world(n_peers: int, views_each: int, orders_each: int, *, target_views: int,
                target_orders: int, category: str = "cat_a", extra_orders=None):
-    """Sàn giả: sản phẩm đích PRODUCT_ID + n_peers sản phẩm cùng danh mục, mỗi cái
-    `views_each` lượt xem và `orders_each` đơn trong 30 ngày."""
+    """Sàn giả: sản phẩm đích + n_peers sản phẩm cùng danh mục, có sẵn lượt xem và đơn."""
     products, events, orders = [], [], []
 
     def add(oid, n_views, n_orders):

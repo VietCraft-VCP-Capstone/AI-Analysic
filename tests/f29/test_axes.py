@@ -31,8 +31,7 @@ class TestStatus:
 
 class TestContentScore:
     def test_no_images_not_full_marks_but_not_zero(self):
-        """0 ảnh kéo điểm xuống nhưng mô tả + tag tốt vẫn đóng góp — không phải
-        một ngưỡng tuỳ tiện, mà đúng công thức trung bình 3 thành phần."""
+        """0 ảnh kéo điểm xuống nhưng mô tả và tag vẫn đóng góp."""
         product = base_product(images=[])
         calc = make_calculator()
         score, warnings = calc._get_content_score(product)
@@ -53,8 +52,7 @@ class TestContentScore:
         assert [h["field"] for h in hints] == ["title"]
 
     def test_component_formula_matches_todo_recompute(self):
-        """_content_component_scores (dùng trong _get_todos) phải khớp đúng công
-        thức mà _get_content_score dùng để chấm thật — một nguồn sự thật."""
+        """Điểm thành phần trong todos phải khớp công thức chấm thật."""
         calc = make_calculator()
         comps = calc._content_component_scores(n_images=2, desc_len=0, n_tags=0)
         assert comps["images"] == pytest.approx((2 / MIN_IMAGES) * 100.0)
@@ -93,9 +91,7 @@ class TestFreshnessScore:
         assert calc._get_freshness_score(product) == 0.0
 
     def test_naive_datetime_from_mongo_does_not_crash(self):
-        """pymongo trả datetime NAIVE (không tzinfo) khi đọc từ Mongo thật. Trừ
-        một datetime aware (now) cho một datetime naive ném TypeError nếu không
-        chuẩn hoá — đây là bug thật đã có trong engine, test để khoá lại."""
+        """Datetime naive từ Mongo không được làm lỗi phép trừ ngày."""
         calc = make_calculator()
         naive_recent = (NOW - timedelta(days=10)).replace(tzinfo=None)
         product = {"updated_at": naive_recent, "content_changed_at": naive_recent}
@@ -136,8 +132,7 @@ class TestInventoryScore:
 
 
 class TestTotalScoreReweighting:
-    """§4.1: trục n/a bị LOẠI khỏi phép tính, trọng số các trục còn lại chia lại
-    cho tổng về 1 — không cho 0 điểm vì thiếu dữ liệu khác với kém."""
+    """Trục n/a bị loại, trọng số còn lại chia lại về tổng 1."""
 
     def test_two_axes_missing_reweights_correctly(self):
         calc = make_calculator()

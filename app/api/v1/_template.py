@@ -44,12 +44,7 @@ def build_meta(
 ) -> Dict[str, Any]:
     """Dựng khối `meta` đúng hợp đồng. Ba trường cổng ra kiểm là
     computed_at · model_version · scope — không trường nào được để trống.
-
-    `unlock` (§9.2): khi một tính năng bị `insufficient_data`/`partial` vì thiếu dữ liệu
-    sàn thật, đây là con số "đang có bao nhiêu / cần bao nhiêu" để FE vẽ thanh tiến độ
-    thay vì chỉ một câu thông báo chay. Hình dạng cố định:
-        {"requirement": "đơn thật", "current": 12, "target": 20, "unit": "đơn"}
-    Để `None` khi không áp dụng (ví dụ mart dữ liệu mồi chạy bình thường).
+    `unlock`: tiến độ {"requirement", "current", "target", "unit"}, None nếu không áp dụng.
     """
     if mode not in SOURCE_MODES:
         raise ValueError(f"source.mode phải thuộc {SOURCE_MODES}, nhận được {mode!r}")

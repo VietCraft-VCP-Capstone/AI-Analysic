@@ -76,8 +76,7 @@ class TestApprovedTags:
 
 
 class TestTodosWithCategoryMedian:
-    """§4.3: mốc = max(trung vị danh mục, mức sàn); expected_gain = chấm lại
-    điểm THẬT khi kéo chỉ số đó lên mốc — không phải số cố định."""
+    """Mốc = max(trung vị danh mục, mức sàn); gain là điểm chấm lại thật."""
 
     def _build_scene(self):
         main = with_id(base_product(
@@ -88,8 +87,7 @@ class TestTodosWithCategoryMedian:
             product_type="READY_TO_SHIP",
         ))
         peers = []
-        # Trung vị ảnh của 10 listing cùng danh mục (không tính sản phẩm đang
-        # chấm) = 6 — CAO HƠN mức sàn 5, nên mốc phải lấy trung vị danh mục.
+        # Trung vị ảnh cùng danh mục = 6 > mức sàn 5 nên mốc lấy trung vị.
         for i, n_anh in enumerate([8, 8, 8, 6, 6, 6, 5, 5, 5, 4]):
             peers.append({
                 "_id": ObjectId(), "category_ids": ["cat_giay"],
@@ -120,14 +118,7 @@ class TestTodosWithCategoryMedian:
         assert todo["message"] == "Thêm 4 ảnh (đang có 2)"
 
     def test_expected_gain_is_real_recomputed_score_delta(self):
-        """Chấm tay: content hiện tại = (2/5*100 + 100 + 100)/3 = 80.0. Chỉ có
-        content(.20) + inventory(.15) + freshness(.10) hợp lệ (rating n/a,
-        conversion n/a) -> tổng trọng số .45.
-        Điểm hiện tại = (80*.2 + 100*.15 + 100*.10)/.45 = 91.1
-        Điểm nếu ảnh đạt mốc (6 >= MIN_IMAGES -> content=100) =
-          (100*.2 + 100*.15 + 100*.10)/.45 = 100.0
-        -> expected_gain = 100.0 - 91.1 = 8.9
-        """
+        """Hiện tại 91,1; đủ 6 ảnh thì content = 100, tổng = 100, gain = 8,9."""
         calc = self._build_scene()
         result = calc.calculate(PRODUCT_ID)
         assert result["axes"]["content"] == 80.0
@@ -148,9 +139,7 @@ class TestTodosWithCategoryMedian:
         assert ratios == sorted(ratios, reverse=True)
 
     def test_small_category_falls_back_to_market_median(self):
-        """Danh mục có ít hơn MIN_CATEGORY_SAMPLE listing -> dùng trung vị toàn
-        sàn (ở đây chỉ có đúng sản phẩm đang chấm, nên trung vị toàn sàn chính
-        là ảnh của nó -> mốc tụt về mức sàn MIN_IMAGES)."""
+        """Danh mục quá ít listing thì lấy trung vị toàn sàn, mốc về mức sàn."""
         main = with_id(base_product(images=["i1.jpg"], category_ids=["cat_hiem"]))
         calc = make_calculator(products=[main])
         result = calc.calculate(PRODUCT_ID)
