@@ -137,7 +137,9 @@ def start_scheduler():
     if _scheduler is not None:
         return _scheduler
 
+    # pyrefly: ignore[missing-import]
     from apscheduler.schedulers.background import BackgroundScheduler
+    # pyrefly: ignore[missing-import]
     from apscheduler.triggers.cron import CronTrigger
 
     scheduler = BackgroundScheduler(timezone=timezone.utc)
