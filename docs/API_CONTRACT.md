@@ -469,6 +469,12 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3 so với 7 tuần trước (cần ≥ 4 tuần có đơn).
 - F34 `per_product`: `[{product_id, title, suggestions[{tag_id, score, used_by, better_sellers, popular_in_type}]}]`.
   Gợi ý lai: 0,7 theo sản phẩm giống (độ giống × độ bán chạy) + 0,3 theo độ phổ biến cùng loại.
+- F33 `strategic_groups`: `{k, silhouette, clear (≥ 0,25), features[], axes{x, y}, groups[{id, label, size,
+  avg_price_vnd, avg_revenue_90d_vnd}], points[{shop_id, shop_name, x, y, group, me}], my_group, best_group (null
+  khi sàn chưa có đơn), gaps[{feature, name, mine, theirs}], method}` hoặc `null` kèm `strategic_groups_reason`
+  (cần ≥ 6 shop có giá). KMeans trên 5 thông số chuẩn hoá z (giá, điểm sao, thời gian trả lời, số sản phẩm, doanh thu;
+  giá/số sản phẩm/doanh thu lấy log), k = 2–5 theo silhouette; PCA 2 chiều, trục tăng theo thông số chính.
+  `gaps` chỉ nêu điểm đáng học theo nhóm bán tốt (đánh giá cao hơn, trả lời nhanh hơn, nhiều mẫu hơn; giá để tham khảo).
 
 ---
 

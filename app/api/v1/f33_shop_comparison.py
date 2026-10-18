@@ -9,6 +9,7 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 
 from app.api.v1._competitor_live import meta_doi_thu, nguon_doi_thu
+from app.api.v1._doi_thu_ai import nhom_chien_luoc
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, ok
 
@@ -103,6 +104,7 @@ def shop_comparison(shop_id: str = CurrentShop):
 
     top = sorted((sid for sid in tho if sid != shop_id),
                  key=lambda s: -tho[s]["dt"])[:SO_DOI_THU]
+    nhom, nhom_ly_do = nhom_chien_luoc(tho, phan_hoi, shop_id) if ng["live"] else (None, None)
 
     return ok({
         "segment": phan_khuc,
@@ -124,4 +126,5 @@ def shop_comparison(shop_id: str = CurrentShop):
             "est_revenue_90d_vnd": int(tho[sid]["dt"]),
         } for sid in top],
         "shops_in_segment": len(tho),
+        **({"strategic_groups": nhom, "strategic_groups_reason": nhom_ly_do} if ng["live"] else {}),
     }, meta)

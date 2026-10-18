@@ -7,7 +7,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from scipy.sparse import hstack
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
 NGUONG_GIONG = 0.15         # dưới mức này coi là không giống (đo ở scripts/danh_gia_doi_thu_ai.py)
@@ -25,6 +28,8 @@ NGUONG_DE_DOA = (50, 25)    # điểm đe doạ: từ 50 là cao, từ 25 là v�
 Z_TANG_TOC = 3.0            # z-score bền của tuần gần nhất so với các tuần trước
 TUAN_TOI_THIEU = 4
 LANG_GIENG_TAG = 10
+TOI_THIEU_SHOP_NHOM = 6
+SILHOUETTE_RO = 0.25        # dưới mức này các nhóm chồng lên nhau, chỉ nên đọc để tham khảo
 TRON_TAG = 0.7              # đo ở scripts/danh_gia_doi_thu_ai.py: lai 0,7/0,3 gợi ý lại đúng nhiều nhất
 
 # Từ quảng cáo và hư từ: có mặt ở mọi sản phẩm nên chỉ làm nhiễu độ giống.
@@ -313,3 +318,111 @@ def goi_y_tu_khoa(may: MayGiong, listing_id: str, toi_da: int = 5) -> List[Dict[
     ra = [{"tag_id": t, "score": round(v, 3), "used_by": dung[t], "better_sellers": hon[t], "popular_in_type": pho_bien[t]}
           for t, v in diem.items()]
     return sorted(ra, key=lambda x: (-x["score"], x["tag_id"]))[:toi_da]
+
+
+# (khoá, tên, nhãn khi cao hơn mặt bằng, nhãn khi thấp hơn). Đã bỏ "độ rộng giá" và "số loại hàng": hai thứ này
+# chỉ nói shop bán một hay nhiều loại, lấn hết các thông số khác (đo ở scripts/danh_gia_doi_thu_ai.py).
+DAC_DIEM = [
+    ("gia", "Giá trung bình", "Giá cao", "Giá mềm"),
+    ("sao", "Điểm đánh giá", "Đánh giá cao", "Đánh giá thấp"),
+    ("phan_hoi", "Thời gian trả lời (phút)", "Trả lời chậm", "Trả lời nhanh"),
+    ("so_sp", "Số sản phẩm", "Nhiều mẫu", "Ít mẫu"),
+    ("doanh_so", "Doanh thu 90 ngày", "Bán chạy", "Bán chậm"),
+]
+_LOG = {"gia", "so_sp", "doanh_so"}          # lệch phải mạnh, lấy log trước khi chuẩn hoá
+# Chiều nên học theo nhóm bán tốt: +1 nhiều hơn là tốt, -1 ít hơn là tốt, 0 chỉ để biết (giá). Doanh thu là kết quả, không nêu.
+NEN_HOC = {"sao": 1, "phan_hoi": -1, "so_sp": 1, "gia": 0}
+
+
+def nhom_chien_luoc(tho: Dict[str, Dict[str, Any]], phan_hoi: Dict[str, Optional[float]],
+                    shop_toi: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """KMeans trên thông số từng shop (chuẩn hoá z), chọn k theo silhouette, PCA 2 chiều để vẽ.
+    tho[sid] = {n, ten, gia[], sao[], loai{}, dt} như F33 dựng; phan_hoi[sid] = phút hoặc None (chưa đo)."""
+    sids = [sid for sid, t in tho.items() if t["gia"]]
+    if len(sids) < TOI_THIEU_SHOP_NHOM or shop_toi not in sids:
+        return None, f"Danh mục mới có {len(sids)} shop có giá, cần ít nhất {TOI_THIEU_SHOP_NHOM} để AI chia nhóm chiến lược"
+    tho_shop = {sid: {
+        "gia": float(np.mean(tho[sid]["gia"])),
+        "sao": float(np.mean(tho[sid]["sao"])) if tho[sid]["sao"] else np.nan,
+        "phan_hoi": phan_hoi.get(sid) if phan_hoi.get(sid) is not None else np.nan,
+        "so_sp": float(tho[sid]["n"]),
+        "doanh_so": float(tho[sid]["dt"]),
+    } for sid in sids}
+    X = np.array([[tho_shop[sid][k] for k, *_ in DAC_DIEM] for sid in sids])
+    dung = []                                   # thông số có số và khác nhau giữa các shop
+    for c, (k, *_) in enumerate(DAC_DIEM):
+        cot = X[:, c]
+        if np.isnan(cot).all():
+            continue
+        cot = np.where(np.isnan(cot), np.nanmedian(cot), cot)     # chưa đo thì coi như mức giữa
+        X[:, c] = np.log1p(cot) if k in _LOG else cot
+        if X[:, c].std() > 0:
+            dung.append(c)
+    if len(dung) < 2:
+        return None, "Các shop trong danh mục gần như giống hệt nhau về giá, số mẫu và đánh giá, chưa chia nhóm được"
+    Z = (X[:, dung] - X[:, dung].mean(axis=0)) / X[:, dung].std(axis=0)
+    tot = None
+    for k in range(2, min(5, len(sids) - 1) + 1):
+        km = KMeans(n_clusters=k, n_init=10, random_state=0).fit(Z)
+        if len(set(km.labels_)) < 2:
+            continue
+        sc = float(silhouette_score(Z, km.labels_))
+        if tot is None or sc > tot[0]:
+            tot = (sc, km)
+    if tot is None:
+        return None, "Chưa tách được các shop thành nhóm"
+    sil, km = tot
+    nhan_nhom: List[str] = []
+    for tam in km.cluster_centers_:
+        thu_tu = np.argsort(-np.abs(tam))
+        mo_ta = [DAC_DIEM[dung[c]][2] if tam[c] > 0 else DAC_DIEM[dung[c]][3] for c in thu_tu]
+        nhan = " – ".join(mo_ta[:2])
+        if nhan in nhan_nhom:
+            nhan = " – ".join(mo_ta[:3])
+        nhan_nhom.append(nhan)
+    pca = PCA(n_components=min(2, len(dung))).fit(Z)
+    toa_do = pca.transform(Z)
+    # Dấu của trục PCA là tuỳ ý: lật sao cho thông số chính của trục tăng về bên phải/lên trên, để nhãn "nhiều hơn →" đúng.
+    chinh = [int(np.argmax(np.abs(v))) for v in pca.components_]
+    for c, j in enumerate(chinh):
+        if pca.components_[c][j] < 0:
+            toa_do[:, c] *= -1
+    truc = [DAC_DIEM[dung[j]][1] for j in chinh]
+    nhom_cua = {sid: int(km.labels_[i]) for i, sid in enumerate(sids)}
+    co_ban = any(tho_shop[sid]["doanh_so"] > 0 for sid in sids)
+    def _tb(g, k):
+        v = [tho_shop[sid][k] for sid in sids if nhom_cua[sid] == g and not np.isnan(tho_shop[sid][k])]
+        return float(np.mean(v)) if v else None      # cả nhóm chưa có số (vd chưa có đánh giá)
+    tb = {g: {k: _tb(g, k) for k, *_ in DAC_DIEM} for g in range(len(nhan_nhom))}
+    toi_g = nhom_cua[shop_toi]
+    tot_g = max(tb, key=lambda g: tb[g]["doanh_so"]) if co_ban else None
+    khoang_cach = []
+    if tot_g is not None and tot_g != toi_g:
+        lech = km.cluster_centers_[tot_g] - Z[sids.index(shop_toi)]
+        for c in np.argsort(-np.abs(lech)):
+            k, ten = DAC_DIEM[dung[c]][0], DAC_DIEM[dung[c]][1]
+            chieu = NEN_HOC.get(k)
+            if (chieu is None or abs(lech[c]) < 0.5 or np.isnan(tho_shop[shop_toi][k]) or tb[tot_g][k] is None
+                    or (chieu and np.sign(tb[tot_g][k] - tho_shop[shop_toi][k]) != chieu)):
+                continue
+            khoang_cach.append({"feature": k, "name": ten, "mine": round(tho_shop[shop_toi][k], 2),
+                                "theirs": round(tb[tot_g][k], 2)})
+            if len(khoang_cach) == 3:
+                break
+    return {
+        "k": len(nhan_nhom),
+        "silhouette": round(sil, 2),
+        "clear": sil >= SILHOUETTE_RO,
+        "features": [DAC_DIEM[c][1] for c in dung],
+        "axes": {"x": truc[0], "y": truc[1] if len(truc) > 1 else None},
+        "groups": [{"id": g, "label": nhan_nhom[g], "size": sum(1 for sid in sids if nhom_cua[sid] == g),
+                    "avg_price_vnd": int(tb[g]["gia"]), "avg_revenue_90d_vnd": int(tb[g]["doanh_so"])}
+                   for g in range(len(nhan_nhom))],
+        "points": [{"shop_id": sid, "shop_name": tho[sid].get("ten"), "x": round(float(toa_do[i][0]), 3),
+                    "y": round(float(toa_do[i][1]), 3) if toa_do.shape[1] > 1 else 0.0,
+                    "group": nhom_cua[sid], "me": sid == shop_toi} for i, sid in enumerate(sids)],
+        "my_group": toi_g,
+        "best_group": tot_g,
+        "gaps": khoang_cach,
+        "method": "kmeans-pca",
+    }, None
