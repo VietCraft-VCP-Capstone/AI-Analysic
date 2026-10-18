@@ -453,7 +453,7 @@ không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ s
 
 Bộ máy `app/api/v1/_doi_thu_ai.py`: TF-IDF (tên + từ khoá có dấu, mô tả nhẹ hơn, cụm ký tự của tên) và độ giống
 cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải có ít nhất một từ hiếm chung hoặc giống ≥ 0,35.
-Đo chất lượng: `scripts/danh_gia_doi_thu_ai.py`.
+Đo chất lượng bằng script đo riêng, không nằm trong repo.
 
 - F32 `my_listings[].direct_rivals`: `[{product_id, shop_id, shop_name, title, price_vnd, est_sales_90d,
   similarity (0–1), reasons[]}]`, tối đa 5. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity}]`,
@@ -475,6 +475,18 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   (cần ≥ 6 shop có giá). KMeans trên 5 thông số chuẩn hoá z (giá, điểm sao, thời gian trả lời, số sản phẩm, doanh thu;
   giá/số sản phẩm/doanh thu lấy log), k = 2–5 theo silhouette; PCA 2 chiều, trục tăng theo thông số chính.
   `gaps` chỉ nêu điểm đáng học theo nhóm bán tốt (đánh giá cao hơn, trả lời nhanh hơn, nhiều mẫu hơn; giá để tham khảo).
+
+### Kế hoạch tuần này · `/api/analytics/competitor-brief` (GET, ngoài bảng 16 endpoint) — thêm 18/10/2026, chỉ shop thật
+
+BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_doi_thu_ke_hoach.py`
+gom các sự thật đã tính ở F32–F36 (đe doạ cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
+từ khoá ≥ 2 sản phẩm giống dùng, khoảng cách tới nhóm bán tốt, đối thủ trực tiếp chưa theo dõi) rồi lập tối đa 5 việc,
+mỗi loại tối đa 2.
+
+`data`: `{source: rules|llm, provider (vd "anthropic/claude-sonnet-5-5") | null, actions[{action, why, link | null}],
+facts_count, generated_at}`. Có `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` thì mô hình ngôn ngữ viết lại
+câu chữ (`COMPETITOR_BRIEF_MODEL` đổi mô hình Claude); việc nào có con số không nằm trong sự thật bị bỏ, không còn việc
+nào thì dùng kế hoạch theo luật. Lưu đệm 30 phút theo shop, tự làm mới khi sự thật đổi.
 
 ---
 

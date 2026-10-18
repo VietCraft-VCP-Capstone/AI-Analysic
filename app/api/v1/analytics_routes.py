@@ -49,6 +49,7 @@ DA_LAM: Dict[str, str] = {
     "F30": "app.api.v1.f30_alerts",
     "F31": "app.api.v1.f31_category_revenue",
     "F32": "app.api.v1.f32_competitors",
+    "F32-brief": "app.api.v1.f32_competitor_brief",
     "F34": "app.api.v1.f34_tag_gap",
     "F27": "app.api.v1.f27_listing_timeseries",
     "F33": "app.api.v1.f33_shop_comparison",

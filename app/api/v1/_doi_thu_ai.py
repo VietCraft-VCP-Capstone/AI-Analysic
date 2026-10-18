@@ -13,7 +13,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
-NGUONG_GIONG = 0.15         # dưới mức này coi là không giống (đo ở scripts/danh_gia_doi_thu_ai.py)
+NGUONG_GIONG = 0.15         # dưới mức này coi là không giống
 NGUONG_KHONG_LY_DO = 0.35   # không có từ hiếm nào chung thì phải giống tới mức này mới tính
 SO_DOI_THU = 5
 K_GIA = 8
@@ -30,7 +30,7 @@ TUAN_TOI_THIEU = 4
 LANG_GIENG_TAG = 10
 TOI_THIEU_SHOP_NHOM = 6
 SILHOUETTE_RO = 0.25        # dưới mức này các nhóm chồng lên nhau, chỉ nên đọc để tham khảo
-TRON_TAG = 0.7              # đo ở scripts/danh_gia_doi_thu_ai.py: lai 0,7/0,3 gợi ý lại đúng nhiều nhất
+TRON_TAG = 0.7              # lai 0,7/0,3 gợi ý lại đúng nhiều nhất trên dữ liệu thử
 
 # Từ quảng cáo và hư từ: có mặt ở mọi sản phẩm nên chỉ làm nhiễu độ giống.
 TU_BO = set("""
@@ -183,7 +183,7 @@ def gia_de_xuat(may: MayGiong, listing_id: str, k: int = K_GIA) -> Tuple[Optiona
     cung_loai = np.array([float(r["price_vnd"]) for r in may.dong
                           if r.get("product_type_id") == may.dong[i].get("product_type_id")
                           and r["shop_id"] != may.dong[i]["shop_id"] and r.get("price_vnd")])
-    # Đo ở scripts/danh_gia_doi_thu_ai.py: kNN đơn lẻ dao động hơn trung vị cùng loại; pha theo độ tin cậy thì không kém.
+    # Đo trên dữ liệu thử: kNN đơn lẻ dao động hơn trung vị cùng loại; pha theo độ tin cậy thì không kém.
     a = len(lg) / (len(lg) + TRON_GIA) * min(1.0, float(sim.mean()) / 0.5)
     tron = lambda q: int(round((a * _phan_vi_trong_so(gia, sim, q) + (1 - a) * float(np.quantile(cung_loai, q))) / 1000) * 1000)
     giua, thap, cao = tron(0.5), tron(0.25), tron(0.75)
@@ -321,7 +321,7 @@ def goi_y_tu_khoa(may: MayGiong, listing_id: str, toi_da: int = 5) -> List[Dict[
 
 
 # (khoá, tên, nhãn khi cao hơn mặt bằng, nhãn khi thấp hơn). Đã bỏ "độ rộng giá" và "số loại hàng": hai thứ này
-# chỉ nói shop bán một hay nhiều loại, lấn hết các thông số khác (đo ở scripts/danh_gia_doi_thu_ai.py).
+# chỉ nói shop bán một hay nhiều loại, lấn hết các thông số khác (đo trên dữ liệu thử).
 DAC_DIEM = [
     ("gia", "Giá trung bình", "Giá cao", "Giá mềm"),
     ("sao", "Điểm đánh giá", "Đánh giá cao", "Đánh giá thấp"),
