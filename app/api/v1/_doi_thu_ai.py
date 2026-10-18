@@ -1,6 +1,8 @@
+import math
 import re
 import time
 import unicodedata
+from collections import Counter
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -18,6 +20,12 @@ TRONG_SO_KY_TU = 0.6        # cụm ký tự giúp bắt "tshirt"/"t-shirt" như
 TRONG_SO_MO_TA = 0.5        # mô tả hay là văn mẫu của shop nên nhẹ hơn tên
 TAN_SUAT_LY_DO = 0.5        # từ có ở từ nửa số sản phẩm CÙNG LOẠI trở lên là từ chung của loại, không làm lý do
 CACHE_GIAY = 300
+GIONG_TOI_DA = 0.6          # đe doạ: giống từ mức này coi như hàng thay thế được hoàn toàn
+NGUONG_DE_DOA = (50, 25)    # điểm đe doạ: từ 50 là cao, từ 25 là vừa
+Z_TANG_TOC = 3.0            # z-score bền của tuần gần nhất so với các tuần trước
+TUAN_TOI_THIEU = 4
+LANG_GIENG_TAG = 10
+TRON_TAG = 0.7              # đo ở scripts/danh_gia_doi_thu_ai.py: lai 0,7/0,3 gợi ý lại đúng nhiều nhất
 
 # Từ quảng cáo và hư từ: có mặt ở mọi sản phẩm nên chỉ làm nhiễu độ giống.
 TU_BO = set("""
@@ -125,6 +133,17 @@ class MayGiong:
         # Đối thủ trực tiếp phải có điểm chung có nghĩa, không chỉ giống nhau ở văn mẫu mô tả.
         return [(j, s) for s, j in ung if s >= NGUONG_KHONG_LY_DO or self._ly_do(i, j, 1)][:k]
 
+    def khop_nhat(self, listing_id: str, shop_id: str) -> Tuple[Optional[int], float]:
+        """Sản phẩm cùng loại của shop_id giống listing_id nhất."""
+        i = self.vi_tri.get(listing_id)
+        if i is None or self.x is None:
+            return None, 0.0
+        loai = self.dong[i].get("product_type_id")
+        sim = (self.x @ self.x[i].T).toarray().ravel()
+        s, j = max(((float(sim[j]), j) for j, r in enumerate(self.dong)
+                    if r["shop_id"] == shop_id and r.get("product_type_id") == loai), default=(0.0, None))
+        return j, s
+
     def doi_thu_truc_tiep(self, listing_id: str, k: int = SO_DOI_THU) -> List[Dict[str, Any]]:
         i = self.vi_tri.get(listing_id)
         return [{
@@ -212,3 +231,85 @@ def may_giong(dong: Sequence[Dict[str, Any]], doc_mo_ta, doc_ten_tag) -> MayGion
         _CACHE.update(khoa=khoa, luc=time.time(), may=MayGiong(
             dong, doc_mo_ta([r["listing_id"] for r in dong]), doc_ten_tag({t for r in dong for t in r.get("tags") or []})))
     return _CACHE["may"]
+
+
+def suc_manh_shop(dong: Sequence[Dict[str, Any]]) -> Dict[str, float]:
+    """0–1: số đã bán 90 ngày so với shop bán nhiều nhất; sàn chưa có đơn thì dùng số sản phẩm."""
+    ban: Counter = Counter()
+    so: Counter = Counter()
+    for r in dong:
+        ban[r["shop_id"]] += r.get("est_sales_90d") or 0
+        so[r["shop_id"]] += 1
+    goc = ban if any(ban.values()) else so
+    m = max(goc.values(), default=0)
+    return {sid: (v / m if m else 0.0) for sid, v in goc.items()}
+
+
+def diem_de_doa(may: MayGiong, listing_id: str, shop_toi: str, manh: Dict[str, float]) -> Optional[Dict[str, Any]]:
+    """Điểm 0–100 = độ giống với hàng của tôi × sức mạnh shop đối thủ × áp lực giá (họ rẻ hơn)."""
+    i = may.vi_tri.get(listing_id)
+    if i is None:
+        return None
+    j, s = may.khop_nhat(listing_id, shop_toi)
+    gia_ho = may.dong[i].get("price_vnd")
+    gia_toi = may.dong[j].get("price_vnd") if j is not None else None
+    lech = (gia_toi - gia_ho) / gia_toi if gia_ho and gia_toi else None      # > 0: họ rẻ hơn
+    m = manh.get(may.dong[i]["shop_id"], 0.0)
+    diem = round(100 * min(1.0, s / GIONG_TOI_DA) * (0.6 + 0.4 * m) * (1 + min(0.5, max(0.0, lech or 0))) / 1.5)
+    return {
+        "score": diem,
+        "level": "high" if diem >= NGUONG_DE_DOA[0] else "medium" if diem >= NGUONG_DE_DOA[1] else "low",
+        "similarity": round(s, 3),
+        "matched_product_id": may.dong[j]["listing_id"] if j is not None else None,
+        "matched_title": may.dong[j].get("title") if j is not None else None,
+        "price_gap_pct": round(lech * 100) if lech is not None else None,
+        "shop_strength": round(m, 2),
+    }
+
+
+def tang_dot_bien(tuan: Dict[str, List[float]]) -> List[Dict[str, Any]]:
+    """Shop có tuần gần nhất bán vượt hẳn các tuần trước: z-score bền (trung vị, MAD), tối thiểu TUAN_TOI_THIEU tuần có đơn."""
+    ra = []
+    for sid, xs in tuan.items():
+        truoc, cuoi = np.array(xs[:-1], dtype=float), float(xs[-1])
+        if (truoc > 0).sum() < TUAN_TOI_THIEU:
+            continue
+        giua = float(np.median(truoc))
+        do_lech = 1.4826 * float(np.median(np.abs(truoc - giua))) or max(1.0, 0.5 * giua)
+        z = (cuoi - giua) / do_lech
+        if z >= Z_TANG_TOC and cuoi >= giua + 3:
+            ra.append({"shop_id": sid, "last_week": int(cuoi), "baseline": round(giua, 1),
+                       "ratio": round(cuoi / giua, 1) if giua else None, "z": round(z, 1)})
+    return sorted(ra, key=lambda x: -x["z"])
+
+
+def tron_diem_tag(knn: Dict[str, float], pho_bien: Dict[str, float]) -> Dict[str, float]:
+    """Gợi ý lai: TRON_TAG phần theo sản phẩm giống + phần còn lại theo độ phổ biến cùng loại (mỗi phần chuẩn về 0–1)."""
+    mk, mp = max(knn.values(), default=0), max(pho_bien.values(), default=0)
+    return {t: TRON_TAG * (knn.get(t, 0) / mk if mk else 0) + (1 - TRON_TAG) * (pho_bien.get(t, 0) / mp if mp else 0)
+            for t in set(knn) | set(pho_bien)}
+
+
+def goi_y_tu_khoa(may: MayGiong, listing_id: str, toi_da: int = 5) -> List[Dict[str, Any]]:
+    """Từ khoá sản phẩm chưa có: ưu tiên từ khoá của sản phẩm giống (và bán được), bù bằng độ phổ biến cùng loại."""
+    i = may.vi_tri.get(listing_id)
+    if i is None:
+        return []
+    r0 = may.dong[i]
+    toi = set(r0.get("tags") or [])
+    ban_toi = r0.get("est_sales_90d") or 0
+    knn: Counter = Counter()
+    dung: Counter = Counter()
+    hon: Counter = Counter()
+    for j, s in may.lang_gieng(listing_id, LANG_GIENG_TAG):
+        ban = may.dong[j].get("est_sales_90d") or 0
+        for t in set(may.dong[j].get("tags") or []) - toi:
+            knn[t] += s * (1 + math.log1p(ban))
+            dung[t] += 1
+            hon[t] += ban > ban_toi
+    pho_bien = Counter(t for r in may.dong if r.get("product_type_id") == r0.get("product_type_id")
+                       and r["shop_id"] != r0["shop_id"] for t in set(r.get("tags") or []) - toi)
+    diem = tron_diem_tag(knn, pho_bien)
+    ra = [{"tag_id": t, "score": round(v, 3), "used_by": dung[t], "better_sellers": hon[t], "popular_in_type": pho_bien[t]}
+          for t, v in diem.items()]
+    return sorted(ra, key=lambda x: (-x["score"], x["tag_id"]))[:toi_da]

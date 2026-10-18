@@ -462,6 +462,13 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
   `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 8 sản phẩm giống nhất, pha với mặt
   bằng cùng loại theo `rival_weight`.
+- F36 `alerts[].threat`: `{score 0–100, level high|medium|low, similarity, matched_product_id, matched_title,
+  price_gap_pct (> 0 là đối thủ rẻ hơn), shop_strength}`. Điểm = độ giống với sản phẩm khớp nhất của mình (đủ 0,6 là
+  tối đa) × sức mạnh shop đối thủ (doanh số 90 ngày so với shop lớn nhất) × áp lực giá (rẻ hơn, tối đa +50%).
+  Cảnh báo xếp theo `threat.score` giảm dần. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z}]` —
+  shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3 so với 7 tuần trước (cần ≥ 4 tuần có đơn).
+- F34 `per_product`: `[{product_id, title, suggestions[{tag_id, score, used_by, better_sellers, popular_in_type}]}]`.
+  Gợi ý lai: 0,7 theo sản phẩm giống (độ giống × độ bán chạy) + 0,3 theo độ phổ biến cùng loại.
 
 ---
 

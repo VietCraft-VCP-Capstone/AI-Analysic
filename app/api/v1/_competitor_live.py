@@ -13,6 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 from bson import ObjectId
 
 from app.api.v1 import _live
+from app.api.v1._doi_thu_ai import diem_de_doa, may_giong, suc_manh_shop, tang_dot_bien
 from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, la_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import build_meta, mart_not_ready, meta_from_record, not_found, ok
@@ -332,6 +333,22 @@ def ten_tag_live(slugs: Iterable[str]) -> Dict[str, str]:
             for t in db_live()["tags"].find({"slug": {"$in": slugs}}, {"_id": 0, "slug": 1, "name": 1})}
 
 
+def tuan_ban_theo_shop(shop_ids: List[Any], now: datetime, so_tuan: int = 8) -> Dict[str, List[int]]:
+    """Số sản phẩm đã giao theo tuần (cũ -> mới) của từng shop, dùng để phát hiện đối thủ tăng tốc."""
+    tuan = {str(s): [0] * so_tuan for s in shop_ids}
+    if not tuan:
+        return tuan
+    for o in db_live()["orders"].find(
+            {**LOC_DON_THAT, "shop_id": {"$in": list(shop_ids)}, "order_status": DA_GIAO,
+             "created_at": {"$gte": now - timedelta(weeks=so_tuan)}},
+            {"shop_id": 1, "created_at": 1, "items.quantity": 1}):
+        tao = _utc(o.get("created_at"))
+        k = so_tuan - 1 - (now - tao).days // 7 if tao else -1
+        if 0 <= k < so_tuan and str(o.get("shop_id")) in tuan:
+            tuan[str(o["shop_id"])][k] += sum(int(it.get("quantity") or 0) for it in o.get("items") or [])
+    return tuan
+
+
 def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
     """F36 · GET cho shop thật. Danh sách theo dõi là follow của sàn (BE ghi); cảnh báo tính tại chỗ."""
     live = db_live()
@@ -352,7 +369,14 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
     so_sp = Counter(r["shop_id"] for r in dong)
     tag_toi = sorted({t for r in dong if r["shop_id"] == shop_id for t in r["tags"]})
     canh_bao = tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now)
+    # AI: chấm mức đe doạ, đe doạ cao lên đầu; cùng điểm thì mới đăng trước.
+    may, manh = may_giong(dong, mo_ta_live, ten_tag_live), suc_manh_shop(dong)
+    for a in canh_bao:
+        a["threat"] = diem_de_doa(may, a["listing_id"], shop_id, manh)
     canh_bao.sort(key=lambda a: a["listed_at"] or "", reverse=True)
+    canh_bao.sort(key=lambda a: -((a["threat"] or {}).get("score") or 0))
+    tang_toc = [{**x, "shop_name": ten.get(x["shop_id"])}
+                for x in tang_dot_bien(tuan_ban_theo_shop([f["shop_id"] for f in followers], now))]
 
     return ok({
         "tracked": [{
@@ -365,6 +389,7 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
         "slots_limit": gioi_han,
         "alerts": canh_bao[:SO_CANH_BAO_TOI_DA],
         "alerts_total": len(canh_bao),
+        "surging": tang_toc,
         "my_niche_tags": tag_toi,
         "tag_names": ten_tag_live(tag_toi + [t for a in canh_bao for t in a["matched_tags"]]),
         "alerts_computed_at": _iso(now),
