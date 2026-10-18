@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 # Thêm thư mục gốc vào sys.path để cho phép chạy trực tiếp `python app/main.py`
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -166,7 +167,7 @@ def read_ready():
     if not co_mart:
         return JSONResponse(status_code=503, content={"status": "not_ready", "reason": "mart_empty"})
 
-    body = {"status": "ok"}
+    body: dict[str, Any] = {"status": "ok"}
 
     try:
         mart_db = db()

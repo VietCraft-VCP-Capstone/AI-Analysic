@@ -32,19 +32,21 @@ class LLMSeasonalService:
             gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         openai_key = os.getenv("OPENAI_API_KEY")
 
-        # 1. Thử gọi LLM nếu có API Key
-        if gemini_key:
+        # 1. Thử gọi LLM nếu có API Key hợp lệ
+        if gemini_key and len(gemini_key) > 10:
             res = cls._call_gemini(keyword, mined, gemini_key)
             if res and res.get("ready_to_ship_ideas"):
                 return res
 
-        if openai_key:
+        if openai_key and openai_key.startswith("sk-"):
             res = cls._call_openai(keyword, mined, openai_key)
             if res and res.get("ready_to_ship_ideas"):
                 return res
 
         # 2. Fallback: Bộ tổng hợp thông minh trực tiếp từ dữ liệu Data-Mining sàn thật
-        return cls._synthesize_from_mined_data(keyword, mined)
+        res = cls._synthesize_from_mined_data(keyword, mined)
+        res["ai_model"] = "VietCraft Market Mining v1.0"
+        return res
 
     @classmethod
     def _call_gemini(cls, keyword: str, mined: Dict[str, Any], api_key: str) -> Optional[Dict[str, Any]]:
@@ -93,15 +95,19 @@ class LLMSeasonalService:
         headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.35, "maxOutputTokens": 2048}
+            "generationConfig": {
+                "temperature": 0.4,
+                "maxOutputTokens": 4096,
+                "responseMimeType": "application/json"
+            }
         }
 
-        # Ưu tiên gemini-3.5-flash-lite cực nhanh (~5s), kế tiếp gemini-3.5-flash và gemini-3.7-flash
-        for model in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash"]:
+        # Các model Gemini đang hoạt động tốt nhất hiện tại (ưu tiên bản phản hồi nhanh 3.1-flash-lite, tiếp theo 3.5-flash)
+        for model in ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-                with urllib.request.urlopen(req, timeout=15) as response:
+                with urllib.request.urlopen(req, timeout=25) as response:
                     body = json.loads(response.read().decode("utf-8"))
                     text = body["candidates"][0]["content"]["parts"][0]["text"]
                     
@@ -112,8 +118,10 @@ class LLMSeasonalService:
                     if match:
                         parsed = json.loads(match.group(0))
                         parsed["ai_model"] = model
+                        print(f"[Gemini] Successfully generated seasonal ideas using {model}")
                         return parsed
-            except Exception:
+            except Exception as e:
+                print(f"[Gemini] Model {model} request failed: {e}")
                 continue
         return None
 
@@ -169,17 +177,53 @@ class LLMSeasonalService:
                     "target_buyer": "Khách hàng trẻ 18 - 32 tuổi, chuộng phong cách hợp mốt, sẵn sàng chi mạnh tay đón lễ."
                 })
 
-        # Bổ sung ý tưởng bám theo nhóm hàng đã phân cụm
-        if len(ready_ideas) < 3:
-            ready_ideas.append({
+        # Bổ sung ý tưởng fallback cho đủ 4 gợi ý khi không có sample từ DB
+        FALLBACK_SLOTS = [
+            {
                 "title": f"Mặt hàng {cluster_name} phiên bản nâng cấp mùa {keyword}",
-                "category": cluster_name,
-                "market_price_range": price_range,
                 "why_it_sells": f"Tâm lý người mua thích sự mới mẻ, độc bản và tính ứng dụng cao trong mùa {keyword}.",
                 "expected_profit_margin": "48% - 60%",
                 "upsell_bundle_tip": "Gợi ý mua làm quà tặng người thân hoặc đồng nghiệp với hộp quà cao cấp.",
                 "sourcing_tip": f"Tập trung vào các thuộc tính hot: {', '.join(mined.get('top_attributes', [])[:3]) or 'tiện lợi, bao bì sang trọng'}.",
-                "target_buyer": "Nhân viên văn phòng, học sinh sinh viên tìm kiếm trang phục và quà tặng ý nghĩa."
+                "target_buyer": "Nhân viên văn phòng, học sinh sinh viên tìm kiếm trang phục và quà tặng ý nghĩa.",
+            },
+            {
+                "title": f"Set combo {cluster_name} đóng hộp quà tặng dịp {keyword}",
+                "why_it_sells": f"Người mua sẵn sàng chi thêm 30–50% cho sản phẩm được đóng gói sẵn làm quà dịp {keyword}.",
+                "expected_profit_margin": "50% - 65%",
+                "upsell_bundle_tip": "Đóng set 2–3 món cùng nhóm hàng, kèm thiệp in tên người nhận để tăng giá trị cảm nhận.",
+                "sourcing_tip": "Nhập sỉ phôi hộp kraft hoặc hộp cứng có cửa sổ trong, in logo shop để tăng nhận diện thương hiệu.",
+                "target_buyer": "Người mua quà cho bạn bè, đồng nghiệp, đối tác dịp lễ; ngân sách 200.000–500.000đ/set.",
+            },
+            {
+                "title": f"{cluster_name} phong cách giới hạn (Limited Edition) chủ đề {keyword}",
+                "why_it_sells": f"Sản phẩm giới hạn tạo cảm giác khan hiếm, thúc đẩy quyết định mua nhanh trước khi hết mùa {keyword}.",
+                "expected_profit_margin": "55% - 70%",
+                "upsell_bundle_tip": "Dán tem 'Limited', đánh số thứ tự từng sản phẩm và kèm card cảm ơn viết tay để tăng giá trị cảm nhận.",
+                "sourcing_tip": "Đặt số lượng nhỏ (50–100 chiếc) lần đầu để test thị trường; tăng đơn nếu bán chạy trong tuần đầu.",
+                "target_buyer": "Khách hàng trẻ 18–28 tuổi thích sưu tầm, chuộng phong cách độc đáo không đại trà.",
+            },
+            {
+                "title": f"{cluster_name} phiên bản cá nhân hóa theo tên / thông điệp riêng dịp {keyword}",
+                "why_it_sells": f"Sản phẩm in tên hoặc câu chúc riêng tạo cảm xúc cá nhân hóa mạnh, tỉ lệ chốt đơn quà tặng dịp {keyword} cao hơn 40% so với hàng đại trà.",
+                "expected_profit_margin": "52% - 68%",
+                "upsell_bundle_tip": "Cho khách tự nhập tên / câu chúc khi đặt hàng; thêm option thiệp in kèm để nâng giá trị đơn thêm 30–50k.",
+                "sourcing_tip": "Kết hợp máy in nhiệt hoặc khắc laser tại xưởng POD; in theo đơn, không cần tồn kho.",
+                "target_buyer": "Người tặng quà cho người thân, bạn thân, người yêu; sẵn sàng trả thêm 20–30% cho sản phẩm có tên riêng.",
+            },
+        ]
+        for slot in FALLBACK_SLOTS:
+            if len(ready_ideas) >= 4:
+                break
+            ready_ideas.append({
+                "title": slot["title"],
+                "category": cluster_name,
+                "market_price_range": price_range,
+                "why_it_sells": slot["why_it_sells"],
+                "expected_profit_margin": slot["expected_profit_margin"],
+                "upsell_bundle_tip": slot["upsell_bundle_tip"],
+                "sourcing_tip": slot["sourcing_tip"],
+                "target_buyer": slot["target_buyer"],
             })
 
         # 2. Sinh gợi ý phôi POD phù hợp với ngành hàng
