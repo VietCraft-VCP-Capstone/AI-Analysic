@@ -53,7 +53,7 @@ Task bảo "viết X" nhưng X **đã tồn tại dưới tên khác và đã ch
 | `domain/forecast.py` | `app/models/seasonal_forecast.py` | 291 | bóc hiệu ứng Tết theo trục âm lịch |
 | `domain/anomaly.py` | `app/services/zscore_service.py` | 423 | phần dư STL + MAD, ngưỡng 7,0 |
 | `domain/health.py` | `app/api/v1/health_score.py` | 162 | đã sửa trọng số 20/09 |
-| `domain/gap.py` | `app/core/build_mvp_export.py` | 757 | gồm cả ma trận cung–cầu |
+| `domain/gap.py` | `app/core/build_mvp_export.py` (đã xoá 21/10) | 757 | gồm cả ma trận cung–cầu |
 | `domain/baseline.py` | `app/core/compute_baselines.py` | 163 | sinh `baselines.json` |
 | `io/writers.py` | `app/core/writer.py` | 160 | `save_model_output()`, đã sửa 20/09 |
 | `io/readers.py` | `app/core/loader.py` | 246 | đọc CSV, fallback Mongo |

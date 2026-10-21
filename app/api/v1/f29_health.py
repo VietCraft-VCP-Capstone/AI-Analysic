@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from app.api.v1._live import db_live, la_shop_live
 from app.api.v1._template import CurrentShop, forbidden, insufficient, meta_from_record, not_found, ok, build_meta
 from app.core.f29.calculator import HealthScoreCalculator
+from app.core.f29.ml.scorer import load_model, score_listing
 from app.core.f29.preview import preview_health
 
 router = APIRouter()
@@ -116,4 +117,23 @@ def health_preview(id: str, body: HealthPreviewBody, shop_id: str = CurrentShop)
 
     meta = build_meta(model_version=result.get("model_version") or "health-1.0",
                       collection="products", attributed_to_live_shop=True, **meta_args)
+    return ok(result, meta)
+
+
+@router.get("/api/analytics/listings/{id}/health/ml", tags=["F29 · Hạt"])
+def health_ml(id: str, shop_id: str = CurrentShop):
+    meta_args = dict(scope="listing", scope_id=id, database="vietcraft", mode="live")
+    if not la_shop_live(shop_id):
+        return insufficient("Cần cấu hình gian hàng trước khi xem sức khoẻ listing", build_meta(**meta_args))
+
+    _kiem_quyen_listing(id, shop_id)
+
+    result = score_listing(id)
+    version = load_model()[1]["model_version"]
+    if isinstance(result, str):
+        return insufficient(result, build_meta(model_version=version, collection="orders", **meta_args))
+
+    meta = build_meta(model_version=version, collection="orders", attributed_to_live_shop=True,
+                      sample_size=result["peer_group"]["size"],
+                      confidence="medium" if result["peer_group"]["type"] == "category" else "low", **meta_args)
     return ok(result, meta)

@@ -1,0 +1,2259 @@
+{
+ "model_version": "li-1.6",
+ "sklearn": "1.9.1",
+ "onnx_model": {
+  "repo": "onnx-community/siglip2-base-patch16-224-ONNX",
+  "files": [
+   "onnx/vision_model_int8.onnx",
+   "onnx/text_model_int8.onnx",
+   "tokenizer.json"
+  ]
+ },
+ "features": [
+  "log_price",
+  "price_rel",
+  "n_images",
+  "title_len",
+  "title_words",
+  "title_upper_ratio",
+  "title_repeat_ratio",
+  "title_banned",
+  "desc_len",
+  "desc_words",
+  "attr_material",
+  "attr_color",
+  "attr_size",
+  "attr_occasion",
+  "attr_use",
+  "kw_lift_sum",
+  "kw_lift_max",
+  "kw_lift_terms",
+  "img_w",
+  "img_h",
+  "img_aspect",
+  "img_sharpness",
+  "img_brightness",
+  "img_contrast",
+  "img_border_uniform",
+  "img_center_edges",
+  "img_text_ratio",
+  "sim_title",
+  "sim_category",
+  "style_white_bg",
+  "style_lifestyle",
+  "style_flatlay",
+  "style_closeup",
+  "emb_pca_0",
+  "emb_pca_1",
+  "emb_pca_2",
+  "emb_pca_3",
+  "emb_pca_4",
+  "emb_pca_5",
+  "emb_pca_6",
+  "emb_pca_7",
+  "emb_pca_8",
+  "emb_pca_9",
+  "emb_pca_10",
+  "emb_pca_11",
+  "emb_pca_12",
+  "emb_pca_13",
+  "emb_pca_14",
+  "emb_pca_15",
+  "knn_price_pct",
+  "knn_dup_count",
+  "top_centroid_margin",
+  "trend_factor",
+  "trend_matches",
+  "trend_momentum_max",
+  "group"
+ ],
+ "axis_features": {
+  "image": [
+   "img_w",
+   "img_h",
+   "img_aspect",
+   "img_sharpness",
+   "img_brightness",
+   "img_contrast",
+   "img_border_uniform",
+   "img_center_edges",
+   "img_text_ratio",
+   "sim_title",
+   "sim_category",
+   "style_white_bg",
+   "style_lifestyle",
+   "style_flatlay",
+   "style_closeup",
+   "emb_pca_0",
+   "emb_pca_1",
+   "emb_pca_2",
+   "emb_pca_3",
+   "emb_pca_4",
+   "emb_pca_5",
+   "emb_pca_6",
+   "emb_pca_7",
+   "emb_pca_8",
+   "emb_pca_9",
+   "emb_pca_10",
+   "emb_pca_11",
+   "emb_pca_12",
+   "emb_pca_13",
+   "emb_pca_14",
+   "emb_pca_15",
+   "group"
+  ],
+  "text": [
+   "title_len",
+   "title_words",
+   "title_upper_ratio",
+   "title_repeat_ratio",
+   "title_banned",
+   "desc_len",
+   "desc_words",
+   "attr_material",
+   "attr_color",
+   "attr_size",
+   "attr_occasion",
+   "attr_use",
+   "kw_lift_sum",
+   "kw_lift_max",
+   "kw_lift_terms",
+   "group"
+  ],
+  "market": [
+   "knn_price_pct",
+   "knn_dup_count",
+   "top_centroid_margin",
+   "group"
+  ]
+ },
+ "groups": [
+  "accessories",
+  "bags",
+  "fashion",
+  "home",
+  "shoes",
+  "sport"
+ ],
+ "group_categories": [
+  "fashion",
+  "bags",
+  "shoes",
+  "accessories",
+  "home",
+  "sport"
+ ],
+ "thresholds": {
+  "dup_cos": 0.92,
+  "trend_match_cos": null
+ },
+ "trend_keywords": [
+  "áo thun",
+  "áo phông nam",
+  "áo phông nữ",
+  "in áo thun",
+  "áo đôi",
+  "áo nhóm",
+  "áo lớp",
+  "áo đồng phục",
+  "áo gia đình",
+  "cốc in hình",
+  "cốc quà tặng",
+  "túi tote",
+  "tranh treo tường",
+  "tranh canvas",
+  "poster trang trí",
+  "móc khóa",
+  "áo tết",
+  "quà tết",
+  "lì xì tết",
+  "trang trí tết",
+  "quà 8/3",
+  "quà tặng mẹ",
+  "quà 20/10",
+  "quà 20/11",
+  "quà tặng thầy cô",
+  "quà giáng sinh",
+  "trang trí noel",
+  "áo giáng sinh",
+  "quà valentine",
+  "quà tặng người yêu",
+  "quà tặng",
+  "quà cưới",
+  "quà tân gia",
+  "quà tặng bạn thân",
+  "quà handmade",
+  "quà lưu niệm",
+  "áo anime",
+  "áo kpop",
+  "áo oversize",
+  "áo local brand",
+  "áo vintage",
+  "áo hoodie",
+  "áo bóng đá việt nam",
+  "áo thun thể thao",
+  "quà sinh nhật"
+ ],
+ "trend_backtest": {
+  "n": 45,
+  "n_keywords": 45,
+  "horizon_weeks": 8,
+  "share_mase_lt_1": 0.689,
+  "share_naive_mase_lt_1": 0.711,
+  "share_stl_beats_naive": 0.267,
+  "share_selected_lt_1": 0.667,
+  "share_selected_beats_naive": 0.089,
+  "n_selected": 45,
+  "share_oracle_lt_1": 0.8,
+  "median_mase_stl": 0.809,
+  "median_mase_naive": 0.547,
+  "rolling": {
+   "origins": 6,
+   "weeks_covered": 48,
+   "pairs": 270,
+   "share_pairs_stl_lt_1": 0.622,
+   "share_pairs_naive_lt_1": 0.622,
+   "share_pairs_selected_lt_1": 0.63,
+   "share_kw_mean_stl_lt_1": 0.467,
+   "share_kw_mean_naive_lt_1": 0.467,
+   "share_kw_mean_selected_lt_1": 0.489,
+   "share_pairs_stl_beats_naive": 0.378,
+   "share_pairs_selected_beats_naive": 0.178,
+   "median_mase_stl": 0.742,
+   "median_mase_naive": 0.74
+  },
+  "missing_keywords": [
+   "áo khoác",
+   "đầm len",
+   "váy",
+   "túi da",
+   "giày sneaker",
+   "gốm sứ",
+   "mây tre",
+   "thổ cẩm",
+   "lụa",
+   "quà trung thu",
+   "quà 11/11",
+   "black friday",
+   "quà khai giảng",
+   "halloween",
+   "trang trí trung thu"
+  ],
+  "per_keyword": [
+   {
+    "keyword": "cốc in hình",
+    "mase_stl": 1.855,
+    "mase_naive": 1.578,
+    "winner": "naive",
+    "mase_selected": 1.578
+   },
+   {
+    "keyword": "cốc quà tặng",
+    "mase_stl": 1.371,
+    "mase_naive": 1.295,
+    "winner": "naive",
+    "mase_selected": 1.295
+   },
+   {
+    "keyword": "in áo thun",
+    "mase_stl": 3.926,
+    "mase_naive": 0.412,
+    "winner": "naive",
+    "mase_selected": 3.926
+   },
+   {
+    "keyword": "lì xì tết",
+    "mase_stl": 0.139,
+    "mase_naive": 0.067,
+    "winner": "naive",
+    "mase_selected": 0.067
+   },
+   {
+    "keyword": "móc khóa",
+    "mase_stl": 1.565,
+    "mase_naive": 1.433,
+    "winner": "naive",
+    "mase_selected": 1.565
+   },
+   {
+    "keyword": "poster trang trí",
+    "mase_stl": 0.001,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "quà 20/10",
+    "mase_stl": 0.16,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "quà 20/11",
+    "mase_stl": 0.097,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "quà 8/3",
+    "mase_stl": 0.713,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "quà cưới",
+    "mase_stl": 0.891,
+    "mase_naive": 0.611,
+    "winner": "naive",
+    "mase_selected": 0.611
+   },
+   {
+    "keyword": "quà giáng sinh",
+    "mase_stl": 0.008,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "quà handmade",
+    "mase_stl": 0.27,
+    "mase_naive": 0.294,
+    "winner": "stl",
+    "mase_selected": 0.294
+   },
+   {
+    "keyword": "quà lưu niệm",
+    "mase_stl": 0.864,
+    "mase_naive": 0.871,
+    "winner": "stl",
+    "mase_selected": 0.871
+   },
+   {
+    "keyword": "quà sinh nhật",
+    "mase_stl": 0.935,
+    "mase_naive": 0.538,
+    "winner": "naive",
+    "mase_selected": 0.935
+   },
+   {
+    "keyword": "quà tân gia",
+    "mase_stl": 1.812,
+    "mase_naive": 1.803,
+    "winner": "naive",
+    "mase_selected": 1.812
+   },
+   {
+    "keyword": "quà tặng",
+    "mase_stl": 0.509,
+    "mase_naive": 0.457,
+    "winner": "naive",
+    "mase_selected": 0.509
+   },
+   {
+    "keyword": "quà tặng bạn thân",
+    "mase_stl": 2.955,
+    "mase_naive": 2.754,
+    "winner": "naive",
+    "mase_selected": 2.955
+   },
+   {
+    "keyword": "quà tặng mẹ",
+    "mase_stl": 0.817,
+    "mase_naive": 0.815,
+    "winner": "naive",
+    "mase_selected": 0.817
+   },
+   {
+    "keyword": "quà tặng người yêu",
+    "mase_stl": 3.361,
+    "mase_naive": 1.122,
+    "winner": "naive",
+    "mase_selected": 3.361
+   },
+   {
+    "keyword": "quà tặng thầy cô",
+    "mase_stl": 0.043,
+    "mase_naive": 1.01,
+    "winner": "stl",
+    "mase_selected": 0.043
+   },
+   {
+    "keyword": "quà tết",
+    "mase_stl": 0.349,
+    "mase_naive": 0.018,
+    "winner": "naive",
+    "mase_selected": 0.018
+   },
+   {
+    "keyword": "quà valentine",
+    "mase_stl": 0.027,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "trang trí noel",
+    "mase_stl": 0.765,
+    "mase_naive": 0.695,
+    "winner": "naive",
+    "mase_selected": 0.695
+   },
+   {
+    "keyword": "trang trí tết",
+    "mase_stl": 0.096,
+    "mase_naive": 0.082,
+    "winner": "naive",
+    "mase_selected": 0.082
+   },
+   {
+    "keyword": "tranh canvas",
+    "mase_stl": 1.485,
+    "mase_naive": 1.485,
+    "winner": "naive",
+    "mase_selected": 1.485
+   },
+   {
+    "keyword": "tranh treo tường",
+    "mase_stl": 0.835,
+    "mase_naive": 1.517,
+    "winner": "stl",
+    "mase_selected": 0.835
+   },
+   {
+    "keyword": "túi tote",
+    "mase_stl": 1.137,
+    "mase_naive": 0.863,
+    "winner": "naive",
+    "mase_selected": 1.137
+   },
+   {
+    "keyword": "áo anime",
+    "mase_stl": 0.76,
+    "mase_naive": 0.536,
+    "winner": "naive",
+    "mase_selected": 0.76
+   },
+   {
+    "keyword": "áo bóng đá việt nam",
+    "mase_stl": 0.809,
+    "mase_naive": 1.093,
+    "winner": "stl",
+    "mase_selected": 1.093
+   },
+   {
+    "keyword": "áo gia đình",
+    "mase_stl": 0.844,
+    "mase_naive": 0.547,
+    "winner": "naive",
+    "mase_selected": 0.844
+   },
+   {
+    "keyword": "áo giáng sinh",
+    "mase_stl": 0.16,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "áo hoodie",
+    "mase_stl": 0.112,
+    "mase_naive": 0.225,
+    "winner": "stl",
+    "mase_selected": 0.225
+   },
+   {
+    "keyword": "áo kpop",
+    "mase_stl": 0.059,
+    "mase_naive": 0.0,
+    "winner": "naive",
+    "mase_selected": 0.0
+   },
+   {
+    "keyword": "áo local brand",
+    "mase_stl": 0.176,
+    "mase_naive": 0.363,
+    "winner": "stl",
+    "mase_selected": 0.363
+   },
+   {
+    "keyword": "áo lớp",
+    "mase_stl": 0.171,
+    "mase_naive": 0.156,
+    "winner": "naive",
+    "mase_selected": 0.156
+   },
+   {
+    "keyword": "áo nhóm",
+    "mase_stl": 2.355,
+    "mase_naive": 0.423,
+    "winner": "naive",
+    "mase_selected": 2.355
+   },
+   {
+    "keyword": "áo oversize",
+    "mase_stl": 0.422,
+    "mase_naive": 0.758,
+    "winner": "stl",
+    "mase_selected": 0.758
+   },
+   {
+    "keyword": "áo phông nam",
+    "mase_stl": 1.111,
+    "mase_naive": 0.85,
+    "winner": "naive",
+    "mase_selected": 0.85
+   },
+   {
+    "keyword": "áo phông nữ",
+    "mase_stl": 0.869,
+    "mase_naive": 1.08,
+    "winner": "stl",
+    "mase_selected": 1.08
+   },
+   {
+    "keyword": "áo thun",
+    "mase_stl": 1.526,
+    "mase_naive": 0.388,
+    "winner": "naive",
+    "mase_selected": 1.526
+   },
+   {
+    "keyword": "áo thun thể thao",
+    "mase_stl": 1.409,
+    "mase_naive": 1.302,
+    "winner": "naive",
+    "mase_selected": 1.409
+   },
+   {
+    "keyword": "áo tết",
+    "mase_stl": 0.097,
+    "mase_naive": 0.134,
+    "winner": "stl",
+    "mase_selected": 0.134
+   },
+   {
+    "keyword": "áo vintage",
+    "mase_stl": 0.983,
+    "mase_naive": 0.943,
+    "winner": "naive",
+    "mase_selected": 0.943
+   },
+   {
+    "keyword": "áo đôi",
+    "mase_stl": 0.561,
+    "mase_naive": 0.565,
+    "winner": "stl",
+    "mase_selected": 0.561
+   },
+   {
+    "keyword": "áo đồng phục",
+    "mase_stl": 2.248,
+    "mase_naive": 3.343,
+    "winner": "stl",
+    "mase_selected": 2.248
+   }
+  ]
+ },
+ "formulas": {
+  "image": {
+   "sharpness_rel": 0.3,
+   "exposure_ok": 0.05,
+   "contrast_ok": 0.05,
+   "border": 0.3,
+   "no_text": 0.15,
+   "resolution": 0.05,
+   "sim_title": 0.05,
+   "sim_category": 0.05
+  },
+  "text": {
+   "attributes": 0.35,
+   "title_length": 0.2,
+   "keyword_lift": 0.25,
+   "clean": 0.2
+  },
+  "market": {
+   "price_centre": 0.6,
+   "uniqueness": 0.4
+  },
+  "ranges": {
+   "img_sharpness": [
+    3.0,
+    5.5
+   ],
+   "sharpness_rel": [
+    -5.2,
+    -2.4
+   ],
+   "sim_title": [
+    0.05,
+    0.2
+   ],
+   "sim_category": [
+    0.03,
+    0.14
+   ],
+   "img_text_ratio": [
+    0.08,
+    0.16
+   ],
+   "short_side": [
+    128.0,
+    256.0
+   ],
+   "kw_lift_scale": 2.0
+  },
+  "title_band": [
+   20.0,
+   120.0
+  ],
+  "max_repeat": 0.3,
+  "brightness_range": [
+   0.25,
+   0.9
+  ],
+  "contrast_floor": 0.1,
+  "missing_penalty": 0.15,
+  "required": {
+   "material": [
+    "accessories",
+    "bags",
+    "fashion",
+    "shoes"
+   ],
+   "color": [
+    "fashion",
+    "shoes"
+   ],
+   "size": [
+    "fashion",
+    "shoes"
+   ]
+  }
+ },
+ "axis_params": {
+  "image": {
+   "max_depth": 4,
+   "min_samples_leaf": 40,
+   "l2_regularization": 1.0,
+   "max_iter": 10,
+   "early_stopping": false
+  }
+ },
+ "trained_on": "30.402 sản phẩm Tiki (27.693 năm 2023 và 2.709 năm 2026); chia theo người bán: 70% để học, 15% để kiểm định, 15% để kiểm tra; huấn luyện ngày 21/10/2026",
+ "train_data": {
+  "rows": 30402,
+  "by_source": {
+   "tiki23": {
+    "rows": 27693,
+    "top25_rate": 0.255
+   },
+   "tiki26": {
+    "rows": 2709,
+    "top25_rate": 0.244
+   }
+  },
+  "split": "GroupShuffleSplit theo seller 70/15/15, random_state=42; model học trên split=train",
+  "date": "2026-10-21"
+ },
+ "feature_availability": {
+  "accessories": {
+   "log_price": 1.0,
+   "price_rel": 1.0,
+   "n_images": 1.0,
+   "title_len": 1.0,
+   "title_words": 1.0,
+   "title_upper_ratio": 1.0,
+   "title_repeat_ratio": 1.0,
+   "title_banned": 1.0,
+   "desc_len": 1.0,
+   "desc_words": 1.0,
+   "attr_material": 1.0,
+   "attr_color": 1.0,
+   "attr_size": 1.0,
+   "attr_occasion": 1.0,
+   "attr_use": 1.0,
+   "kw_lift_sum": 1.0,
+   "kw_lift_max": 1.0,
+   "kw_lift_terms": 1.0,
+   "img_w": 0.0,
+   "img_h": 0.0,
+   "img_aspect": 0.0,
+   "img_sharpness": 0.0,
+   "img_brightness": 0.0,
+   "img_contrast": 0.0,
+   "img_border_uniform": 0.0,
+   "img_center_edges": 0.0,
+   "img_text_ratio": 0.0,
+   "sim_title": 0.0,
+   "sim_category": 0.0,
+   "style_white_bg": 0.0,
+   "style_lifestyle": 0.0,
+   "style_flatlay": 0.0,
+   "style_closeup": 0.0,
+   "emb_pca_0": 0.0,
+   "emb_pca_1": 0.0,
+   "emb_pca_2": 0.0,
+   "emb_pca_3": 0.0,
+   "emb_pca_4": 0.0,
+   "emb_pca_5": 0.0,
+   "emb_pca_6": 0.0,
+   "emb_pca_7": 0.0,
+   "emb_pca_8": 0.0,
+   "emb_pca_9": 0.0,
+   "emb_pca_10": 0.0,
+   "emb_pca_11": 0.0,
+   "emb_pca_12": 0.0,
+   "emb_pca_13": 0.0,
+   "emb_pca_14": 0.0,
+   "emb_pca_15": 0.0,
+   "knn_price_pct": 0.0,
+   "knn_dup_count": 0.0,
+   "top_centroid_margin": 0.0,
+   "trend_factor": 1.0,
+   "trend_matches": 1.0,
+   "trend_momentum_max": 1.0
+  },
+  "bags": {
+   "log_price": 1.0,
+   "price_rel": 1.0,
+   "n_images": 1.0,
+   "title_len": 1.0,
+   "title_words": 1.0,
+   "title_upper_ratio": 1.0,
+   "title_repeat_ratio": 1.0,
+   "title_banned": 1.0,
+   "desc_len": 1.0,
+   "desc_words": 1.0,
+   "attr_material": 1.0,
+   "attr_color": 1.0,
+   "attr_size": 1.0,
+   "attr_occasion": 1.0,
+   "attr_use": 1.0,
+   "kw_lift_sum": 1.0,
+   "kw_lift_max": 1.0,
+   "kw_lift_terms": 1.0,
+   "img_w": 0.0,
+   "img_h": 0.0,
+   "img_aspect": 0.0,
+   "img_sharpness": 0.0,
+   "img_brightness": 0.0,
+   "img_contrast": 0.0,
+   "img_border_uniform": 0.0,
+   "img_center_edges": 0.0,
+   "img_text_ratio": 0.0,
+   "sim_title": 0.0,
+   "sim_category": 0.0,
+   "style_white_bg": 0.0,
+   "style_lifestyle": 0.0,
+   "style_flatlay": 0.0,
+   "style_closeup": 0.0,
+   "emb_pca_0": 0.0,
+   "emb_pca_1": 0.0,
+   "emb_pca_2": 0.0,
+   "emb_pca_3": 0.0,
+   "emb_pca_4": 0.0,
+   "emb_pca_5": 0.0,
+   "emb_pca_6": 0.0,
+   "emb_pca_7": 0.0,
+   "emb_pca_8": 0.0,
+   "emb_pca_9": 0.0,
+   "emb_pca_10": 0.0,
+   "emb_pca_11": 0.0,
+   "emb_pca_12": 0.0,
+   "emb_pca_13": 0.0,
+   "emb_pca_14": 0.0,
+   "emb_pca_15": 0.0,
+   "knn_price_pct": 0.0,
+   "knn_dup_count": 0.0,
+   "top_centroid_margin": 0.0,
+   "trend_factor": 1.0,
+   "trend_matches": 1.0,
+   "trend_momentum_max": 1.0
+  },
+  "fashion": {
+   "log_price": 1.0,
+   "price_rel": 1.0,
+   "n_images": 0.0,
+   "title_len": 1.0,
+   "title_words": 1.0,
+   "title_upper_ratio": 1.0,
+   "title_repeat_ratio": 1.0,
+   "title_banned": 1.0,
+   "desc_len": 1.0,
+   "desc_words": 1.0,
+   "attr_material": 1.0,
+   "attr_color": 1.0,
+   "attr_size": 1.0,
+   "attr_occasion": 1.0,
+   "attr_use": 1.0,
+   "kw_lift_sum": 1.0,
+   "kw_lift_max": 1.0,
+   "kw_lift_terms": 1.0,
+   "img_w": 1.0,
+   "img_h": 1.0,
+   "img_aspect": 1.0,
+   "img_sharpness": 1.0,
+   "img_brightness": 1.0,
+   "img_contrast": 1.0,
+   "img_border_uniform": 1.0,
+   "img_center_edges": 1.0,
+   "img_text_ratio": 1.0,
+   "sim_title": 1.0,
+   "sim_category": 1.0,
+   "style_white_bg": 1.0,
+   "style_lifestyle": 1.0,
+   "style_flatlay": 1.0,
+   "style_closeup": 1.0,
+   "emb_pca_0": 1.0,
+   "emb_pca_1": 1.0,
+   "emb_pca_2": 1.0,
+   "emb_pca_3": 1.0,
+   "emb_pca_4": 1.0,
+   "emb_pca_5": 1.0,
+   "emb_pca_6": 1.0,
+   "emb_pca_7": 1.0,
+   "emb_pca_8": 1.0,
+   "emb_pca_9": 1.0,
+   "emb_pca_10": 1.0,
+   "emb_pca_11": 1.0,
+   "emb_pca_12": 1.0,
+   "emb_pca_13": 1.0,
+   "emb_pca_14": 1.0,
+   "emb_pca_15": 1.0,
+   "knn_price_pct": 1.0,
+   "knn_dup_count": 1.0,
+   "top_centroid_margin": 1.0,
+   "trend_factor": 1.0,
+   "trend_matches": 1.0,
+   "trend_momentum_max": 1.0
+  },
+  "home": {
+   "log_price": 1.0,
+   "price_rel": 1.0,
+   "n_images": 0.0,
+   "title_len": 1.0,
+   "title_words": 1.0,
+   "title_upper_ratio": 1.0,
+   "title_repeat_ratio": 1.0,
+   "title_banned": 1.0,
+   "desc_len": 1.0,
+   "desc_words": 1.0,
+   "attr_material": 1.0,
+   "attr_color": 1.0,
+   "attr_size": 1.0,
+   "attr_occasion": 1.0,
+   "attr_use": 1.0,
+   "kw_lift_sum": 1.0,
+   "kw_lift_max": 1.0,
+   "kw_lift_terms": 1.0,
+   "img_w": 1.0,
+   "img_h": 1.0,
+   "img_aspect": 1.0,
+   "img_sharpness": 1.0,
+   "img_brightness": 1.0,
+   "img_contrast": 1.0,
+   "img_border_uniform": 1.0,
+   "img_center_edges": 1.0,
+   "img_text_ratio": 1.0,
+   "sim_title": 1.0,
+   "sim_category": 1.0,
+   "style_white_bg": 1.0,
+   "style_lifestyle": 1.0,
+   "style_flatlay": 1.0,
+   "style_closeup": 1.0,
+   "emb_pca_0": 1.0,
+   "emb_pca_1": 1.0,
+   "emb_pca_2": 1.0,
+   "emb_pca_3": 1.0,
+   "emb_pca_4": 1.0,
+   "emb_pca_5": 1.0,
+   "emb_pca_6": 1.0,
+   "emb_pca_7": 1.0,
+   "emb_pca_8": 1.0,
+   "emb_pca_9": 1.0,
+   "emb_pca_10": 1.0,
+   "emb_pca_11": 1.0,
+   "emb_pca_12": 1.0,
+   "emb_pca_13": 1.0,
+   "emb_pca_14": 1.0,
+   "emb_pca_15": 1.0,
+   "knn_price_pct": 1.0,
+   "knn_dup_count": 1.0,
+   "top_centroid_margin": 1.0,
+   "trend_factor": 1.0,
+   "trend_matches": 1.0,
+   "trend_momentum_max": 1.0
+  },
+  "shoes": {
+   "log_price": 1.0,
+   "price_rel": 1.0,
+   "n_images": 1.0,
+   "title_len": 1.0,
+   "title_words": 1.0,
+   "title_upper_ratio": 1.0,
+   "title_repeat_ratio": 1.0,
+   "title_banned": 1.0,
+   "desc_len": 1.0,
+   "desc_words": 1.0,
+   "attr_material": 1.0,
+   "attr_color": 1.0,
+   "attr_size": 1.0,
+   "attr_occasion": 1.0,
+   "attr_use": 1.0,
+   "kw_lift_sum": 1.0,
+   "kw_lift_max": 1.0,
+   "kw_lift_terms": 1.0,
+   "img_w": 0.0,
+   "img_h": 0.0,
+   "img_aspect": 0.0,
+   "img_sharpness": 0.0,
+   "img_brightness": 0.0,
+   "img_contrast": 0.0,
+   "img_border_uniform": 0.0,
+   "img_center_edges": 0.0,
+   "img_text_ratio": 0.0,
+   "sim_title": 0.0,
+   "sim_category": 0.0,
+   "style_white_bg": 0.0,
+   "style_lifestyle": 0.0,
+   "style_flatlay": 0.0,
+   "style_closeup": 0.0,
+   "emb_pca_0": 0.0,
+   "emb_pca_1": 0.0,
+   "emb_pca_2": 0.0,
+   "emb_pca_3": 0.0,
+   "emb_pca_4": 0.0,
+   "emb_pca_5": 0.0,
+   "emb_pca_6": 0.0,
+   "emb_pca_7": 0.0,
+   "emb_pca_8": 0.0,
+   "emb_pca_9": 0.0,
+   "emb_pca_10": 0.0,
+   "emb_pca_11": 0.0,
+   "emb_pca_12": 0.0,
+   "emb_pca_13": 0.0,
+   "emb_pca_14": 0.0,
+   "emb_pca_15": 0.0,
+   "knn_price_pct": 0.0,
+   "knn_dup_count": 0.0,
+   "top_centroid_margin": 0.0,
+   "trend_factor": 1.0,
+   "trend_matches": 1.0,
+   "trend_momentum_max": 1.0
+  },
+  "sport": {
+   "log_price": 1.0,
+   "price_rel": 1.0,
+   "n_images": 0.0,
+   "title_len": 1.0,
+   "title_words": 1.0,
+   "title_upper_ratio": 1.0,
+   "title_repeat_ratio": 1.0,
+   "title_banned": 1.0,
+   "desc_len": 1.0,
+   "desc_words": 1.0,
+   "attr_material": 1.0,
+   "attr_color": 1.0,
+   "attr_size": 1.0,
+   "attr_occasion": 1.0,
+   "attr_use": 1.0,
+   "kw_lift_sum": 1.0,
+   "kw_lift_max": 1.0,
+   "kw_lift_terms": 1.0,
+   "img_w": 0.9982,
+   "img_h": 0.9982,
+   "img_aspect": 0.9982,
+   "img_sharpness": 0.9982,
+   "img_brightness": 0.9982,
+   "img_contrast": 0.9982,
+   "img_border_uniform": 0.9982,
+   "img_center_edges": 0.9982,
+   "img_text_ratio": 0.9982,
+   "sim_title": 0.9982,
+   "sim_category": 0.9982,
+   "style_white_bg": 0.9982,
+   "style_lifestyle": 0.9982,
+   "style_flatlay": 0.9982,
+   "style_closeup": 0.9982,
+   "emb_pca_0": 0.9982,
+   "emb_pca_1": 0.9982,
+   "emb_pca_2": 0.9982,
+   "emb_pca_3": 0.9982,
+   "emb_pca_4": 0.9982,
+   "emb_pca_5": 0.9982,
+   "emb_pca_6": 0.9982,
+   "emb_pca_7": 0.9982,
+   "emb_pca_8": 0.9982,
+   "emb_pca_9": 0.9982,
+   "emb_pca_10": 0.9982,
+   "emb_pca_11": 0.9982,
+   "emb_pca_12": 0.9982,
+   "emb_pca_13": 0.9982,
+   "emb_pca_14": 0.9982,
+   "emb_pca_15": 0.9982,
+   "knn_price_pct": 0.9982,
+   "knn_dup_count": 0.9982,
+   "top_centroid_margin": 0.9982,
+   "trend_factor": 1.0,
+   "trend_matches": 1.0,
+   "trend_momentum_max": 1.0
+  }
+ },
+ "image_impute": {
+  "fashion": {
+   "img_w": 256.0,
+   "img_h": 256.0,
+   "img_aspect": 1.0,
+   "img_sharpness": 4.93063,
+   "img_brightness": 0.554139,
+   "img_contrast": 0.27104,
+   "img_border_uniform": 0.124887,
+   "img_center_edges": 0.049794,
+   "img_text_ratio": 0.111992,
+   "sim_title": 0.090711,
+   "sim_category": 0.098315,
+   "style_white_bg": 0.025933,
+   "style_lifestyle": 0.396382,
+   "style_flatlay": 0.301599,
+   "style_closeup": 0.276086,
+   "emb_pca_0": -0.048534,
+   "emb_pca_1": 0.034979,
+   "emb_pca_2": 0.025832,
+   "emb_pca_3": 0.231576,
+   "emb_pca_4": -0.027402,
+   "emb_pca_5": -0.050444,
+   "emb_pca_6": 0.090375,
+   "emb_pca_7": -0.167182,
+   "emb_pca_8": 0.024814,
+   "emb_pca_9": 0.061121,
+   "emb_pca_10": 0.055424,
+   "emb_pca_11": 0.158297,
+   "emb_pca_12": 0.004255,
+   "emb_pca_13": -0.038405,
+   "emb_pca_14": -0.108726,
+   "emb_pca_15": -0.01735
+  },
+  "home": {
+   "img_w": 256.0,
+   "img_h": 256.0,
+   "img_aspect": 1.0,
+   "img_sharpness": 5.174371,
+   "img_brightness": 0.739196,
+   "img_contrast": 0.182618,
+   "img_border_uniform": 0.714025,
+   "img_center_edges": 0.071343,
+   "img_text_ratio": 0.035118,
+   "sim_title": 0.162069,
+   "sim_category": 0.091894,
+   "style_white_bg": 0.083348,
+   "style_lifestyle": 0.065725,
+   "style_flatlay": 0.210735,
+   "style_closeup": 0.640192,
+   "emb_pca_0": -0.002032,
+   "emb_pca_1": -0.326114,
+   "emb_pca_2": -0.063136,
+   "emb_pca_3": -0.039543,
+   "emb_pca_4": 0.075901,
+   "emb_pca_5": 0.184624,
+   "emb_pca_6": 0.087949,
+   "emb_pca_7": 0.019457,
+   "emb_pca_8": 0.093658,
+   "emb_pca_9": 0.003669,
+   "emb_pca_10": -0.068127,
+   "emb_pca_11": 0.052634,
+   "emb_pca_12": -0.094831,
+   "emb_pca_13": -0.005727,
+   "emb_pca_14": 0.110335,
+   "emb_pca_15": -0.036241
+  },
+  "sport": {
+   "img_w": 256.0,
+   "img_h": 256.0,
+   "img_aspect": 1.0,
+   "img_sharpness": 4.436788,
+   "img_brightness": 0.62054,
+   "img_contrast": 0.293745,
+   "img_border_uniform": 0.175729,
+   "img_center_edges": 0.060043,
+   "img_text_ratio": 0.043804,
+   "sim_title": 0.123463,
+   "sim_category": 0.077046,
+   "style_white_bg": 0.080682,
+   "style_lifestyle": 0.039753,
+   "style_flatlay": 0.249293,
+   "style_closeup": 0.630271,
+   "emb_pca_0": -0.100261,
+   "emb_pca_1": 0.082465,
+   "emb_pca_2": 0.137262,
+   "emb_pca_3": -0.13167,
+   "emb_pca_4": 0.018654,
+   "emb_pca_5": -0.02694,
+   "emb_pca_6": -0.095061,
+   "emb_pca_7": -0.155419,
+   "emb_pca_8": -0.028272,
+   "emb_pca_9": -0.006131,
+   "emb_pca_10": -0.107363,
+   "emb_pca_11": 0.174243,
+   "emb_pca_12": -0.131894,
+   "emb_pca_13": -0.071952,
+   "emb_pca_14": 0.021854,
+   "emb_pca_15": -0.025751
+  }
+ },
+ "image_impute_rule": "listing không có ảnh được điền các feature ảnh bằng vector của một ảnh train thật trong cùng nhóm, chọn là ảnh làm điểm trung bình của model gộp thấp nhất khi thay vào 200 dòng train của nhóm (cột thị hiếu để trống như lúc phục vụ); chỉ dùng train",
+ "feature_constants": {
+  "bags": {
+   "title_banned": 0.0
+  },
+  "fashion": {
+   "title_banned": 0.0,
+   "desc_len": 0.0,
+   "desc_words": 0.0,
+   "img_w": 256.0,
+   "img_h": 256.0,
+   "img_aspect": 1.0
+  },
+  "home": {
+   "title_banned": 0.0,
+   "desc_len": 0.0,
+   "desc_words": 0.0,
+   "img_w": 256.0,
+   "img_h": 256.0,
+   "img_aspect": 1.0
+  },
+  "shoes": {
+   "title_banned": 0.0
+  },
+  "sport": {
+   "title_banned": 0.0,
+   "desc_len": 0.0,
+   "desc_words": 0.0
+  }
+ },
+ "n_iter": {
+  "fusion": 171,
+  "image": 10,
+  "text": 166,
+  "market": 400
+ },
+ "metrics": {
+  "test": {
+   "roc_auc": 0.626,
+   "auc_ci95": [
+    0.539,
+    0.753
+   ],
+   "pr_auc": 0.391,
+   "within_cat_auc": 0.651,
+   "top20_hit": 0.449,
+   "base_rate": 0.294,
+   "spearman": 0.261,
+   "ndcg10": 0.601,
+   "n": 782,
+   "n_sellers": 234
+  },
+  "val": {
+   "roc_auc": 0.634,
+   "auc_ci95": [
+    0.56,
+    0.743
+   ],
+   "pr_auc": 0.289,
+   "within_cat_auc": 0.654,
+   "top20_hit": 0.287,
+   "base_rate": 0.201,
+   "spearman": 0.323,
+   "ndcg10": 0.665,
+   "n": 507,
+   "n_sellers": 234
+  }
+ },
+ "baselines": {
+  "Ngẫu nhiên": {
+   "roc_auc": 0.517,
+   "auc_ci95": [
+    0.477,
+    0.557
+   ],
+   "pr_auc": 0.31,
+   "within_cat_auc": 0.513,
+   "top20_hit": 0.321,
+   "base_rate": 0.294,
+   "spearman": -0.0,
+   "ndcg10": 0.504,
+   "n": 782,
+   "n_sellers": 234
+  },
+  "health-1.0 (ảnh ≥5, mô tả ≥150)": {
+   "roc_auc": 0.5,
+   "auc_ci95": [
+    0.5,
+    0.5
+   ],
+   "pr_auc": 0.294,
+   "within_cat_auc": 0.5,
+   "top20_hit": 0.294,
+   "base_rate": 0.294,
+   "spearman": null,
+   "ndcg10": null,
+   "n": 782,
+   "n_sellers": 234
+  },
+  "Chỉ giá (log_price) + nhóm": {
+   "roc_auc": 0.557,
+   "auc_ci95": [
+    0.482,
+    0.654
+   ],
+   "pr_auc": 0.328,
+   "within_cat_auc": 0.585,
+   "top20_hit": 0.333,
+   "base_rate": 0.294,
+   "spearman": 0.173,
+   "ndcg10": 0.577,
+   "n": 782,
+   "n_sellers": 234
+  },
+  "Chỉ số ảnh (n_images) + nhóm": {
+   "roc_auc": 0.428,
+   "auc_ci95": [
+    0.357,
+    0.503
+   ],
+   "pr_auc": 0.264,
+   "within_cat_auc": 0.5,
+   "top20_hit": 0.209,
+   "base_rate": 0.294,
+   "spearman": null,
+   "ndcg10": null,
+   "n": 782,
+   "n_sellers": 234
+  },
+  "TF-IDF tiêu đề + logistic": {
+   "roc_auc": 0.6,
+   "auc_ci95": [
+    0.518,
+    0.701
+   ],
+   "pr_auc": 0.391,
+   "within_cat_auc": 0.622,
+   "top20_hit": 0.429,
+   "base_rate": 0.294,
+   "spearman": 0.193,
+   "ndcg10": 0.612,
+   "n": 782,
+   "n_sellers": 234
+  }
+ },
+ "best_baseline": {
+  "name": "TF-IDF tiêu đề + logistic",
+  "auc": 0.6,
+  "delta": 0.0259,
+  "ci95": [
+   -0.071,
+   0.119
+  ],
+  "significant": false,
+  "best_on_val": "Chỉ giá (log_price) + nhóm",
+  "val_choice": {
+   "name": "Chỉ giá (log_price) + nhóm",
+   "auc": 0.557,
+   "delta": 0.068,
+   "ci95": [
+    0.019,
+    0.126
+   ],
+   "significant": true
+  },
+  "gate": "spec §1.2: baseline mạnh nhất trên chính test tiki26",
+  "secondary": {
+   "test_tiki23": {
+    "delta": 0.0201,
+    "ci95": [
+     -0.014,
+     0.053
+    ]
+   },
+   "test_all": {
+    "delta": 0.018,
+    "ci95": [
+     -0.018,
+     0.05
+    ]
+   }
+  }
+ },
+ "beats_best_baseline": false,
+ "ablation": {
+  "image": {
+   "lift": 0.0093,
+   "ci95": [
+    -0.019,
+    0.053
+   ],
+   "n": 782,
+   "sources": [
+    "tiki26"
+   ]
+  },
+  "text": {
+   "lift": 0.0321,
+   "ci95": [
+    -0.013,
+    0.075
+   ],
+   "n": 782,
+   "sources": [
+    "tiki26"
+   ]
+  },
+  "market": {
+   "lift": -0.003,
+   "ci95": [
+    -0.02,
+    0.029
+   ],
+   "n": 782,
+   "sources": [
+    "tiki26"
+   ]
+  },
+  "trend": {
+   "lift": -0.0023,
+   "ci95": [
+    -0.02,
+    0.014
+   ],
+   "n": 782,
+   "sources": [
+    "tiki26"
+   ]
+  }
+ },
+ "evidence": {
+  "image": "practice",
+  "text": "practice",
+  "tags": "practice",
+  "market": "practice",
+  "trend": "practice"
+ },
+ "axis_modes": {
+  "image": {
+   "mode": "formula",
+   "reason": "độ bền trên validation (507 ảnh, 241 cấu hình): model ảnh ổn định nhất (max_iter=10, max_depth=4) lệch trung vị 0,0 nhưng p90 lệch 33,8 điểm phân vị, so với p90 lớn nhất 13,3 của công thức `c8_rel_sharp_flags_0.05`",
+   "val": {
+    "val": {
+     "auc": 0.592,
+     "ci95": [
+      0.54,
+      0.661
+     ],
+     "n": 507
+    },
+    "val_all": {
+     "auc": 0.592,
+     "ci95": [
+      0.54,
+      0.661
+     ],
+     "n": 507
+    }
+   },
+   "formula": {
+    "val": {
+     "auc": 0.489,
+     "ci95": [
+      0.381,
+      0.578
+     ],
+     "n": 507
+    },
+    "val_all": {
+     "auc": 0.489,
+     "ci95": [
+      0.381,
+      0.578
+     ],
+     "n": 507
+    },
+    "test": {
+     "auc": 0.561,
+     "ci95": [
+      0.443,
+      0.631
+     ],
+     "n": 782
+    }
+   }
+  },
+  "text": {
+   "mode": "formula",
+   "reason": "AUC validation không hơn ngẫu nhiên",
+   "val": {
+    "val": {
+     "auc": 0.462,
+     "ci95": [
+      0.383,
+      0.589
+     ],
+     "n": 507
+    },
+    "val_all": {
+     "auc": 0.69,
+     "ci95": [
+      0.642,
+      0.734
+     ],
+     "n": 7713
+    }
+   },
+   "formula": {
+    "val": {
+     "auc": 0.577,
+     "ci95": [
+      0.411,
+      0.696
+     ],
+     "n": 507
+    },
+    "val_all": {
+     "auc": 0.536,
+     "ci95": [
+      0.475,
+      0.597
+     ],
+     "n": 7713
+    },
+    "test": {
+     "auc": 0.576,
+     "ci95": [
+      0.5,
+      0.642
+     ],
+     "n": 782
+    }
+   }
+  },
+  "market": {
+   "mode": "model",
+   "reason": "AUC validation hơn ngẫu nhiên",
+   "val": {
+    "val": {
+     "auc": 0.616,
+     "ci95": [
+      0.544,
+      0.703
+     ],
+     "n": 507
+    },
+    "val_all": {
+     "auc": 0.616,
+     "ci95": [
+      0.544,
+      0.703
+     ],
+     "n": 507
+    }
+   }
+  }
+ },
+ "axis_mode_rule": "trục dùng model khi cận dưới CI95 (bootstrap theo seller) của ROC-AUC trên mọi tập validation có trục đó (validation tiki26, validation gộp) lớn hơn 0,5; nếu không, trục dùng công thức minh bạch. Riêng trục ảnh dùng công thức khi kết quả độ bền đã lưu (`reference/image_design.json`) cho thấy p90 lệch của model ổn định nhất lớn hơn p90 lệch của công thức trên cùng tập ảnh validation biến đổi",
+ "tables": {
+  "test": {
+   "Model gộp (fusion)": {
+    "roc_auc": 0.626,
+    "auc_ci95": [
+     0.539,
+     0.753
+    ],
+    "pr_auc": 0.391,
+    "within_cat_auc": 0.651,
+    "top20_hit": 0.449,
+    "base_rate": 0.294,
+    "spearman": 0.261,
+    "ndcg10": 0.601,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Chỉ trục image": {
+    "roc_auc": 0.486,
+    "auc_ci95": [
+     0.407,
+     0.561
+    ],
+    "pr_auc": 0.285,
+    "within_cat_auc": 0.507,
+    "top20_hit": 0.263,
+    "base_rate": 0.294,
+    "spearman": 0.054,
+    "ndcg10": 0.595,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Chỉ trục text": {
+    "roc_auc": 0.59,
+    "auc_ci95": [
+     0.512,
+     0.658
+    ],
+    "pr_auc": 0.348,
+    "within_cat_auc": 0.612,
+    "top20_hit": 0.346,
+    "base_rate": 0.294,
+    "spearman": 0.19,
+    "ndcg10": 0.608,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Chỉ trục market": {
+    "roc_auc": 0.557,
+    "auc_ci95": [
+     0.493,
+     0.644
+    ],
+    "pr_auc": 0.345,
+    "within_cat_auc": 0.575,
+    "top20_hit": 0.365,
+    "base_rate": 0.294,
+    "spearman": 0.12,
+    "ndcg10": 0.612,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Công thức trục image": {
+    "roc_auc": 0.561,
+    "auc_ci95": [
+     0.443,
+     0.631
+    ],
+    "pr_auc": 0.36,
+    "within_cat_auc": 0.522,
+    "top20_hit": 0.41,
+    "base_rate": 0.294,
+    "spearman": 0.067,
+    "ndcg10": 0.566,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Công thức trục text": {
+    "roc_auc": 0.576,
+    "auc_ci95": [
+     0.5,
+     0.642
+    ],
+    "pr_auc": 0.366,
+    "within_cat_auc": 0.51,
+    "top20_hit": 0.353,
+    "base_rate": 0.294,
+    "spearman": -0.01,
+    "ndcg10": 0.518,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Ngẫu nhiên": {
+    "roc_auc": 0.517,
+    "auc_ci95": [
+     0.477,
+     0.557
+    ],
+    "pr_auc": 0.31,
+    "within_cat_auc": 0.513,
+    "top20_hit": 0.321,
+    "base_rate": 0.294,
+    "spearman": -0.0,
+    "ndcg10": 0.504,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "health-1.0 (ảnh ≥5, mô tả ≥150)": {
+    "roc_auc": 0.5,
+    "auc_ci95": [
+     0.5,
+     0.5
+    ],
+    "pr_auc": 0.294,
+    "within_cat_auc": 0.5,
+    "top20_hit": 0.294,
+    "base_rate": 0.294,
+    "spearman": null,
+    "ndcg10": null,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Chỉ giá (log_price) + nhóm": {
+    "roc_auc": 0.557,
+    "auc_ci95": [
+     0.482,
+     0.654
+    ],
+    "pr_auc": 0.328,
+    "within_cat_auc": 0.585,
+    "top20_hit": 0.333,
+    "base_rate": 0.294,
+    "spearman": 0.173,
+    "ndcg10": 0.577,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Chỉ số ảnh (n_images) + nhóm": {
+    "roc_auc": 0.428,
+    "auc_ci95": [
+     0.357,
+     0.503
+    ],
+    "pr_auc": 0.264,
+    "within_cat_auc": 0.5,
+    "top20_hit": 0.209,
+    "base_rate": 0.294,
+    "spearman": null,
+    "ndcg10": null,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "TF-IDF tiêu đề + logistic": {
+    "roc_auc": 0.6,
+    "auc_ci95": [
+     0.518,
+     0.701
+    ],
+    "pr_auc": 0.391,
+    "within_cat_auc": 0.622,
+    "top20_hit": 0.429,
+    "base_rate": 0.294,
+    "spearman": 0.193,
+    "ndcg10": 0.612,
+    "n": 782,
+    "n_sellers": 234
+   }
+  },
+  "val": {
+   "Model gộp (fusion)": {
+    "roc_auc": 0.634,
+    "auc_ci95": [
+     0.56,
+     0.743
+    ],
+    "pr_auc": 0.289,
+    "within_cat_auc": 0.654,
+    "top20_hit": 0.287,
+    "base_rate": 0.201,
+    "spearman": 0.323,
+    "ndcg10": 0.665,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Chỉ trục image": {
+    "roc_auc": 0.592,
+    "auc_ci95": [
+     0.54,
+     0.661
+    ],
+    "pr_auc": 0.248,
+    "within_cat_auc": 0.607,
+    "top20_hit": 0.248,
+    "base_rate": 0.201,
+    "spearman": 0.156,
+    "ndcg10": 0.554,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Chỉ trục text": {
+    "roc_auc": 0.462,
+    "auc_ci95": [
+     0.383,
+     0.589
+    ],
+    "pr_auc": 0.234,
+    "within_cat_auc": 0.499,
+    "top20_hit": 0.228,
+    "base_rate": 0.201,
+    "spearman": 0.081,
+    "ndcg10": 0.677,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Chỉ trục market": {
+    "roc_auc": 0.616,
+    "auc_ci95": [
+     0.544,
+     0.703
+    ],
+    "pr_auc": 0.302,
+    "within_cat_auc": 0.628,
+    "top20_hit": 0.287,
+    "base_rate": 0.201,
+    "spearman": 0.239,
+    "ndcg10": 0.687,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Công thức trục image": {
+    "roc_auc": 0.489,
+    "auc_ci95": [
+     0.381,
+     0.578
+    ],
+    "pr_auc": 0.191,
+    "within_cat_auc": 0.447,
+    "top20_hit": 0.158,
+    "base_rate": 0.201,
+    "spearman": -0.047,
+    "ndcg10": 0.512,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Công thức trục text": {
+    "roc_auc": 0.577,
+    "auc_ci95": [
+     0.411,
+     0.696
+    ],
+    "pr_auc": 0.233,
+    "within_cat_auc": 0.569,
+    "top20_hit": 0.248,
+    "base_rate": 0.201,
+    "spearman": 0.118,
+    "ndcg10": 0.61,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Ngẫu nhiên": {
+    "roc_auc": 0.49,
+    "auc_ci95": [
+     0.448,
+     0.549
+    ],
+    "pr_auc": 0.195,
+    "within_cat_auc": 0.496,
+    "top20_hit": 0.139,
+    "base_rate": 0.201,
+    "spearman": -0.066,
+    "ndcg10": 0.472,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "health-1.0 (ảnh ≥5, mô tả ≥150)": {
+    "roc_auc": 0.5,
+    "auc_ci95": [
+     0.5,
+     0.5
+    ],
+    "pr_auc": 0.201,
+    "within_cat_auc": 0.5,
+    "top20_hit": 0.201,
+    "base_rate": 0.201,
+    "spearman": null,
+    "ndcg10": null,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Chỉ giá (log_price) + nhóm": {
+    "roc_auc": 0.617,
+    "auc_ci95": [
+     0.531,
+     0.723
+    ],
+    "pr_auc": 0.266,
+    "within_cat_auc": 0.644,
+    "top20_hit": 0.327,
+    "base_rate": 0.201,
+    "spearman": 0.32,
+    "ndcg10": 0.636,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Chỉ số ảnh (n_images) + nhóm": {
+    "roc_auc": 0.439,
+    "auc_ci95": [
+     0.311,
+     0.62
+    ],
+    "pr_auc": 0.187,
+    "within_cat_auc": 0.5,
+    "top20_hit": 0.181,
+    "base_rate": 0.201,
+    "spearman": null,
+    "ndcg10": null,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "TF-IDF tiêu đề + logistic": {
+    "roc_auc": 0.611,
+    "auc_ci95": [
+     0.496,
+     0.7
+    ],
+    "pr_auc": 0.295,
+    "within_cat_auc": 0.608,
+    "top20_hit": 0.317,
+    "base_rate": 0.201,
+    "spearman": 0.15,
+    "ndcg10": 0.67,
+    "n": 507,
+    "n_sellers": 234
+   }
+  },
+  "test_tiki23": {
+   "Model gộp (fusion)": {
+    "roc_auc": 0.712,
+    "auc_ci95": [
+     0.677,
+     0.742
+    ],
+    "pr_auc": 0.44,
+    "within_cat_auc": 0.711,
+    "top20_hit": 0.479,
+    "base_rate": 0.25,
+    "spearman": 0.358,
+    "ndcg10": 0.704,
+    "n": 6676,
+    "n_sellers": 571
+   },
+   "Chỉ trục image": null,
+   "Chỉ trục text": {
+    "roc_auc": 0.693,
+    "auc_ci95": [
+     0.658,
+     0.73
+    ],
+    "pr_auc": 0.404,
+    "within_cat_auc": 0.694,
+    "top20_hit": 0.44,
+    "base_rate": 0.25,
+    "spearman": 0.336,
+    "ndcg10": 0.517,
+    "n": 6676,
+    "n_sellers": 571
+   },
+   "Chỉ trục market": null,
+   "Công thức trục image": null,
+   "Công thức trục text": {
+    "roc_auc": 0.534,
+    "auc_ci95": [
+     0.49,
+     0.58
+    ],
+    "pr_auc": 0.288,
+    "within_cat_auc": 0.574,
+    "top20_hit": 0.26,
+    "base_rate": 0.25,
+    "spearman": 0.134,
+    "ndcg10": 0.694,
+    "n": 6676,
+    "n_sellers": 571
+   },
+   "Ngẫu nhiên": {
+    "roc_auc": 0.499,
+    "auc_ci95": [
+     0.484,
+     0.518
+    ],
+    "pr_auc": 0.25,
+    "within_cat_auc": 0.5,
+    "top20_hit": 0.246,
+    "base_rate": 0.25,
+    "spearman": -0.012,
+    "ndcg10": 0.539,
+    "n": 6676,
+    "n_sellers": 571
+   },
+   "health-1.0 (ảnh ≥5, mô tả ≥150)": {
+    "roc_auc": 0.519,
+    "auc_ci95": [
+     0.485,
+     0.557
+    ],
+    "pr_auc": 0.258,
+    "within_cat_auc": 0.519,
+    "top20_hit": 0.259,
+    "base_rate": 0.25,
+    "spearman": 0.047,
+    "ndcg10": 0.509,
+    "n": 6676,
+    "n_sellers": 571
+   },
+   "Chỉ giá (log_price) + nhóm": {
+    "roc_auc": 0.583,
+    "auc_ci95": [
+     0.545,
+     0.62
+    ],
+    "pr_auc": 0.321,
+    "within_cat_auc": 0.577,
+    "top20_hit": 0.354,
+    "base_rate": 0.25,
+    "spearman": 0.12,
+    "ndcg10": 0.581,
+    "n": 6676,
+    "n_sellers": 571
+   },
+   "Chỉ số ảnh (n_images) + nhóm": {
+    "roc_auc": 0.505,
+    "auc_ci95": [
+     0.472,
+     0.535
+    ],
+    "pr_auc": 0.259,
+    "within_cat_auc": 0.506,
+    "top20_hit": 0.237,
+    "base_rate": 0.25,
+    "spearman": 0.002,
+    "ndcg10": 0.594,
+    "n": 6676,
+    "n_sellers": 571
+   },
+   "TF-IDF tiêu đề + logistic": {
+    "roc_auc": 0.691,
+    "auc_ci95": [
+     0.654,
+     0.729
+    ],
+    "pr_auc": 0.405,
+    "within_cat_auc": 0.692,
+    "top20_hit": 0.449,
+    "base_rate": 0.25,
+    "spearman": 0.324,
+    "ndcg10": 0.677,
+    "n": 6676,
+    "n_sellers": 571
+   }
+  },
+  "test_all": {
+   "Model gộp (fusion)": {
+    "roc_auc": 0.7,
+    "auc_ci95": [
+     0.666,
+     0.732
+    ],
+    "pr_auc": 0.432,
+    "within_cat_auc": 0.705,
+    "top20_hit": 0.477,
+    "base_rate": 0.255,
+    "spearman": 0.31,
+    "ndcg10": 0.652,
+    "n": 7458,
+    "n_sellers": 804
+   },
+   "Chỉ trục image": {
+    "roc_auc": 0.486,
+    "auc_ci95": [
+     0.407,
+     0.561
+    ],
+    "pr_auc": 0.285,
+    "within_cat_auc": 0.507,
+    "top20_hit": 0.263,
+    "base_rate": 0.294,
+    "spearman": 0.054,
+    "ndcg10": 0.595,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Chỉ trục text": {
+    "roc_auc": 0.682,
+    "auc_ci95": [
+     0.649,
+     0.719
+    ],
+    "pr_auc": 0.397,
+    "within_cat_auc": 0.685,
+    "top20_hit": 0.436,
+    "base_rate": 0.255,
+    "spearman": 0.263,
+    "ndcg10": 0.562,
+    "n": 7458,
+    "n_sellers": 804
+   },
+   "Chỉ trục market": {
+    "roc_auc": 0.557,
+    "auc_ci95": [
+     0.493,
+     0.644
+    ],
+    "pr_auc": 0.345,
+    "within_cat_auc": 0.575,
+    "top20_hit": 0.365,
+    "base_rate": 0.294,
+    "spearman": 0.12,
+    "ndcg10": 0.612,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Công thức trục image": {
+    "roc_auc": 0.561,
+    "auc_ci95": [
+     0.443,
+     0.631
+    ],
+    "pr_auc": 0.36,
+    "within_cat_auc": 0.522,
+    "top20_hit": 0.41,
+    "base_rate": 0.294,
+    "spearman": 0.067,
+    "ndcg10": 0.566,
+    "n": 782,
+    "n_sellers": 234
+   },
+   "Công thức trục text": {
+    "roc_auc": 0.542,
+    "auc_ci95": [
+     0.499,
+     0.58
+    ],
+    "pr_auc": 0.298,
+    "within_cat_auc": 0.567,
+    "top20_hit": 0.278,
+    "base_rate": 0.255,
+    "spearman": 0.062,
+    "ndcg10": 0.606,
+    "n": 7458,
+    "n_sellers": 804
+   },
+   "Ngẫu nhiên": {
+    "roc_auc": 0.502,
+    "auc_ci95": [
+     0.484,
+     0.514
+    ],
+    "pr_auc": 0.256,
+    "within_cat_auc": 0.502,
+    "top20_hit": 0.254,
+    "base_rate": 0.255,
+    "spearman": -0.006,
+    "ndcg10": 0.521,
+    "n": 7458,
+    "n_sellers": 804
+   },
+   "health-1.0 (ảnh ≥5, mô tả ≥150)": {
+    "roc_auc": 0.504,
+    "auc_ci95": [
+     0.472,
+     0.543
+    ],
+    "pr_auc": 0.258,
+    "within_cat_auc": 0.517,
+    "top20_hit": 0.259,
+    "base_rate": 0.255,
+    "spearman": 0.047,
+    "ndcg10": 0.509,
+    "n": 7458,
+    "n_sellers": 804
+   },
+   "Chỉ giá (log_price) + nhóm": {
+    "roc_auc": 0.578,
+    "auc_ci95": [
+     0.551,
+     0.614
+    ],
+    "pr_auc": 0.32,
+    "within_cat_auc": 0.578,
+    "top20_hit": 0.353,
+    "base_rate": 0.255,
+    "spearman": 0.147,
+    "ndcg10": 0.579,
+    "n": 7458,
+    "n_sellers": 804
+   },
+   "Chỉ số ảnh (n_images) + nhóm": {
+    "roc_auc": 0.493,
+    "auc_ci95": [
+     0.465,
+     0.518
+    ],
+    "pr_auc": 0.258,
+    "within_cat_auc": 0.505,
+    "top20_hit": 0.244,
+    "base_rate": 0.255,
+    "spearman": 0.002,
+    "ndcg10": 0.594,
+    "n": 7458,
+    "n_sellers": 804
+   },
+   "TF-IDF tiêu đề + logistic": {
+    "roc_auc": 0.682,
+    "auc_ci95": [
+     0.647,
+     0.718
+    ],
+    "pr_auc": 0.402,
+    "within_cat_auc": 0.685,
+    "top20_hit": 0.443,
+    "base_rate": 0.255,
+    "spearman": 0.259,
+    "ndcg10": 0.645,
+    "n": 7458,
+    "n_sellers": 804
+   }
+  },
+  "val_all": {
+   "Model gộp (fusion)": {
+    "roc_auc": 0.706,
+    "auc_ci95": [
+     0.648,
+     0.756
+    ],
+    "pr_auc": 0.402,
+    "within_cat_auc": 0.711,
+    "top20_hit": 0.412,
+    "base_rate": 0.23,
+    "spearman": 0.335,
+    "ndcg10": 0.758,
+    "n": 7713,
+    "n_sellers": 805
+   },
+   "Chỉ trục image": {
+    "roc_auc": 0.592,
+    "auc_ci95": [
+     0.54,
+     0.661
+    ],
+    "pr_auc": 0.248,
+    "within_cat_auc": 0.607,
+    "top20_hit": 0.248,
+    "base_rate": 0.201,
+    "spearman": 0.156,
+    "ndcg10": 0.554,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Chỉ trục text": {
+    "roc_auc": 0.69,
+    "auc_ci95": [
+     0.642,
+     0.734
+    ],
+    "pr_auc": 0.391,
+    "within_cat_auc": 0.688,
+    "top20_hit": 0.405,
+    "base_rate": 0.23,
+    "spearman": 0.202,
+    "ndcg10": 0.732,
+    "n": 7713,
+    "n_sellers": 805
+   },
+   "Chỉ trục market": {
+    "roc_auc": 0.616,
+    "auc_ci95": [
+     0.544,
+     0.703
+    ],
+    "pr_auc": 0.302,
+    "within_cat_auc": 0.628,
+    "top20_hit": 0.287,
+    "base_rate": 0.201,
+    "spearman": 0.239,
+    "ndcg10": 0.687,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Công thức trục image": {
+    "roc_auc": 0.489,
+    "auc_ci95": [
+     0.381,
+     0.578
+    ],
+    "pr_auc": 0.191,
+    "within_cat_auc": 0.447,
+    "top20_hit": 0.158,
+    "base_rate": 0.201,
+    "spearman": -0.047,
+    "ndcg10": 0.512,
+    "n": 507,
+    "n_sellers": 234
+   },
+   "Công thức trục text": {
+    "roc_auc": 0.536,
+    "auc_ci95": [
+     0.475,
+     0.597
+    ],
+    "pr_auc": 0.255,
+    "within_cat_auc": 0.576,
+    "top20_hit": 0.238,
+    "base_rate": 0.23,
+    "spearman": 0.115,
+    "ndcg10": 0.573,
+    "n": 7713,
+    "n_sellers": 805
+   },
+   "Ngẫu nhiên": {
+    "roc_auc": 0.476,
+    "auc_ci95": [
+     0.464,
+     0.492
+    ],
+    "pr_auc": 0.219,
+    "within_cat_auc": 0.477,
+    "top20_hit": 0.213,
+    "base_rate": 0.23,
+    "spearman": -0.044,
+    "ndcg10": 0.451,
+    "n": 7713,
+    "n_sellers": 805
+   },
+   "health-1.0 (ảnh ≥5, mô tả ≥150)": {
+    "roc_auc": 0.53,
+    "auc_ci95": [
+     0.49,
+     0.566
+    ],
+    "pr_auc": 0.242,
+    "within_cat_auc": 0.525,
+    "top20_hit": 0.244,
+    "base_rate": 0.23,
+    "spearman": 0.047,
+    "ndcg10": 0.509,
+    "n": 7713,
+    "n_sellers": 805
+   },
+   "Chỉ giá (log_price) + nhóm": {
+    "roc_auc": 0.571,
+    "auc_ci95": [
+     0.515,
+     0.626
+    ],
+    "pr_auc": 0.288,
+    "within_cat_auc": 0.566,
+    "top20_hit": 0.315,
+    "base_rate": 0.23,
+    "spearman": 0.211,
+    "ndcg10": 0.583,
+    "n": 7713,
+    "n_sellers": 805
+   },
+   "Chỉ số ảnh (n_images) + nhóm": {
+    "roc_auc": 0.498,
+    "auc_ci95": [
+     0.444,
+     0.545
+    ],
+    "pr_auc": 0.248,
+    "within_cat_auc": 0.509,
+    "top20_hit": 0.226,
+    "base_rate": 0.23,
+    "spearman": 0.002,
+    "ndcg10": 0.744,
+    "n": 7713,
+    "n_sellers": 805
+   },
+   "TF-IDF tiêu đề + logistic": {
+    "roc_auc": 0.674,
+    "auc_ci95": [
+     0.619,
+     0.726
+    ],
+    "pr_auc": 0.381,
+    "within_cat_auc": 0.676,
+    "top20_hit": 0.42,
+    "base_rate": 0.23,
+    "spearman": 0.217,
+    "ndcg10": 0.715,
+    "n": 7713,
+    "n_sellers": 805
+   }
+  }
+ }
+}

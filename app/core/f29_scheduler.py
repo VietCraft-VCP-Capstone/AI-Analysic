@@ -133,6 +133,11 @@ def start_scheduler():
         max_instances=1,
         coalesce=True,
     )
+    try:
+        from app.core.listing_intel.jobs import register
+        register(scheduler)
+    except Exception as e:  # noqa: BLE001
+        print(f"[f29_scheduler] Khong dang ky duoc job Listing Intel: {type(e).__name__}: {e}", flush=True)
     scheduler.start()
     _scheduler = scheduler
     return scheduler

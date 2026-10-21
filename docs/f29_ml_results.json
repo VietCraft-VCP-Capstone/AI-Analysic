@@ -1,0 +1,279 @@
+{
+ "cleaning": {
+  "order_items_raw": 112650,
+  "orders_dropped_status": 1234,
+  "orders_dropped_date": 297,
+  "sales_rows": 111752,
+  "products_missing_content": 610,
+  "reviews_raw": 99224,
+  "reviews_kept": 98673
+ },
+ "splits": [
+  {
+   "name": "train",
+   "cutoffs": [
+    "2017-07-01",
+    "2017-08-01",
+    "2017-09-01",
+    "2017-10-01"
+   ],
+   "rows": 33198,
+   "positive_rate": 0.259
+  },
+  {
+   "name": "validation",
+   "cutoffs": [
+    "2018-01-01"
+   ],
+   "rows": 12905,
+   "positive_rate": 0.249
+  },
+  {
+   "name": "test",
+   "cutoffs": [
+    "2018-05-01"
+   ],
+   "rows": 16130,
+   "positive_rate": 0.205
+  }
+ ],
+ "validation": {
+  "Ngẫu nhiên": {
+   "roc_auc": 0.503,
+   "auc_ci95": [
+    0.492,
+    0.515
+   ],
+   "pr_auc": 0.252,
+   "within_cat_auc": 0.501,
+   "top20_hit": 0.25,
+   "base_rate": 0.249
+  },
+  "health-1.0 (luật hiện tại)": {
+   "roc_auc": 0.512,
+   "auc_ci95": [
+    0.485,
+    0.542
+   ],
+   "pr_auc": 0.264,
+   "within_cat_auc": 0.528,
+   "top20_hit": 0.287,
+   "base_rate": 0.249
+  },
+  "Bán nhiều 90 ngày qua": {
+   "roc_auc": 0.706,
+   "auc_ci95": [
+    0.692,
+    0.719
+   ],
+   "pr_auc": 0.458,
+   "within_cat_auc": 0.707,
+   "top20_hit": 0.521,
+   "base_rate": 0.249
+  },
+  "Đơn gần nhất": {
+   "roc_auc": 0.7,
+   "auc_ci95": [
+    0.686,
+    0.714
+   ],
+   "pr_auc": 0.439,
+   "within_cat_auc": 0.699,
+   "top20_hit": 0.477,
+   "base_rate": 0.249
+  },
+  "Logistic regression": {
+   "roc_auc": 0.747,
+   "auc_ci95": [
+    0.732,
+    0.761
+   ],
+   "pr_auc": 0.536,
+   "within_cat_auc": 0.747,
+   "top20_hit": 0.547,
+   "base_rate": 0.249
+  },
+  "Gradient boosting": {
+   "roc_auc": 0.741,
+   "auc_ci95": [
+    0.726,
+    0.756
+   ],
+   "pr_auc": 0.531,
+   "within_cat_auc": 0.739,
+   "top20_hit": 0.547,
+   "base_rate": 0.249
+  },
+  "Gradient boosting, bỏ lịch sử bán": {
+   "roc_auc": 0.7,
+   "auc_ci95": [
+    0.683,
+    0.718
+   ],
+   "pr_auc": 0.466,
+   "within_cat_auc": 0.692,
+   "top20_hit": 0.483,
+   "base_rate": 0.249
+  },
+  "Gradient boosting, bản chạy trên VietCraft": {
+   "roc_auc": 0.751,
+   "auc_ci95": [
+    0.737,
+    0.763
+   ],
+   "pr_auc": 0.54,
+   "within_cat_auc": 0.747,
+   "top20_hit": 0.548,
+   "base_rate": 0.249
+  },
+  "Gradient boosting, chỉ lịch sử bán": {
+   "roc_auc": 0.734,
+   "auc_ci95": [
+    0.72,
+    0.746
+   ],
+   "pr_auc": 0.54,
+   "within_cat_auc": 0.734,
+   "top20_hit": 0.553,
+   "base_rate": 0.249
+  }
+ },
+ "test": {
+  "Ngẫu nhiên": {
+   "roc_auc": 0.507,
+   "auc_ci95": [
+    0.496,
+    0.516
+   ],
+   "pr_auc": 0.21,
+   "within_cat_auc": 0.509,
+   "top20_hit": 0.21,
+   "base_rate": 0.205
+  },
+  "health-1.0 (luật hiện tại)": {
+   "roc_auc": 0.517,
+   "auc_ci95": [
+    0.495,
+    0.545
+   ],
+   "pr_auc": 0.224,
+   "within_cat_auc": 0.536,
+   "top20_hit": 0.243,
+   "base_rate": 0.205
+  },
+  "Bán nhiều 90 ngày qua": {
+   "roc_auc": 0.73,
+   "auc_ci95": [
+    0.72,
+    0.741
+   ],
+   "pr_auc": 0.426,
+   "within_cat_auc": 0.726,
+   "top20_hit": 0.473,
+   "base_rate": 0.205
+  },
+  "Đơn gần nhất": {
+   "roc_auc": 0.734,
+   "auc_ci95": [
+    0.722,
+    0.744
+   ],
+   "pr_auc": 0.418,
+   "within_cat_auc": 0.731,
+   "top20_hit": 0.446,
+   "base_rate": 0.205
+  },
+  "Logistic regression": {
+   "roc_auc": 0.766,
+   "auc_ci95": [
+    0.752,
+    0.778
+   ],
+   "pr_auc": 0.5,
+   "within_cat_auc": 0.765,
+   "top20_hit": 0.491,
+   "base_rate": 0.205
+  },
+  "Gradient boosting": {
+   "roc_auc": 0.756,
+   "auc_ci95": [
+    0.742,
+    0.768
+   ],
+   "pr_auc": 0.509,
+   "within_cat_auc": 0.754,
+   "top20_hit": 0.486,
+   "base_rate": 0.205
+  },
+  "Gradient boosting, bỏ lịch sử bán": {
+   "roc_auc": 0.693,
+   "auc_ci95": [
+    0.67,
+    0.709
+   ],
+   "pr_auc": 0.4,
+   "within_cat_auc": 0.691,
+   "top20_hit": 0.408,
+   "base_rate": 0.205
+  },
+  "Gradient boosting, bản chạy trên VietCraft": {
+   "roc_auc": 0.761,
+   "auc_ci95": [
+    0.747,
+    0.774
+   ],
+   "pr_auc": 0.508,
+   "within_cat_auc": 0.755,
+   "top20_hit": 0.488,
+   "base_rate": 0.205
+  },
+  "Gradient boosting, chỉ lịch sử bán": {
+   "roc_auc": 0.759,
+   "auc_ci95": [
+    0.747,
+    0.769
+   ],
+   "pr_auc": 0.52,
+   "within_cat_auc": 0.756,
+   "top20_hit": 0.499,
+   "base_rate": 0.205
+  }
+ },
+ "deployed": "Gradient boosting, bản chạy trên VietCraft",
+ "best_baseline": "Đơn gần nhất",
+ "delta": {
+  "vs": "Đơn gần nhất",
+  "auc": 0.027,
+  "ci95": [
+   0.016,
+   0.04
+  ]
+ },
+ "group_lift": {
+  "history": 0.0671,
+  "price": -0.0021,
+  "content": 0.0011,
+  "reviews": 0.0017,
+  "seller": 0.0004,
+  "physical": 0.0028
+ },
+ "importance": {
+  "days_since_last": 0.0969,
+  "log_seller_sales": 0.0276,
+  "log_seller_listings": 0.0206,
+  "log_reviews": 0.0155,
+  "log_sales_90d": 0.0132,
+  "log_weight": 0.0063,
+  "log_volume": 0.0026,
+  "name_length": 0.0024,
+  "log_sales_180d": 0.0022,
+  "rating": 0.0012,
+  "freight_ratio": 0.001,
+  "photos": 0.0004,
+  "low_star_share": 0.0004,
+  "seller_ship_days": 0.0003,
+  "seller_rating": 0.0001,
+  "log_price_rel": -0.0,
+  "description_length": -0.0005
+ }
+}
