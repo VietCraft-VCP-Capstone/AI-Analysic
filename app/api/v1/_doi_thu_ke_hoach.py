@@ -106,7 +106,7 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             khac = ", ".join(f"{g['name']} {g['theirs']} (bạn {g['mine']})" for g in f["gaps"][:2])
             viec.append({"action": f"Học cách bán của nhóm \"{f['best']}\"",
                          "why": f"Bạn thuộc nhóm \"{f['mine']}\"; nhóm bán tốt hơn khác bạn ở {khac}.",
-                         "link": "/seller/insights/benchmark"})
+                         "link": "/seller/insights/competitors#manh-yeu"})
         elif k == "theo_doi":
             viec.append({"action": f"Theo dõi {f['shop']}",
                          "why": f"Shop này có hàng giống {f['overlap']} sản phẩm của bạn nhất.",
