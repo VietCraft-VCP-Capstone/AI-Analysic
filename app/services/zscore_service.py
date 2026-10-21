@@ -125,6 +125,8 @@ class ZScoreService:
             seasonal = np.asarray(parts["seasonal"], dtype=float)
             residual = np.asarray(parts["residual"], dtype=float)
             method_base = "stl_residual" if full_stl else "rolling_trend_residual"
+            if parts.get("fallback"):
+                method_base = "mean_fallback"
         else:
             trend = np.full(n, np.nan)
             seasonal = np.full(n, np.nan)
@@ -158,7 +160,13 @@ class ZScoreService:
         rate = count / n
 
         # Thứ tự kiểm tra đi từ giới hạn nghiêm trọng nhất xuống.
-        if not full_stl and decompose:
+        if rate > max_anomaly_rate:
+            status = "unreliable_high_rate"
+            note = (f"Gắn cờ {count}/{n} điểm ({rate:.1%}), vượt ngưỡng {max_anomaly_rate:.0%}. "
+                    f"Chuỗi quá nhọn hoặc phương sai không đồng nhất so với giả định của mô hình "
+                    f"— hãy coi đây là tín hiệu 'chuỗi không phù hợp', không phải danh sách "
+                    f"bất thường. Cân nhắc gộp lên cấp cao hơn.")
+        elif not full_stl and decompose:
             status = "limited_no_seasonality"
             note = (f"Chuỗi {n} điểm chưa đủ hai chu kỳ {period}; mùa vụ chưa bóc được "
                     f"nên đỉnh mùa vụ vẫn có thể bị báo nhầm là bất thường.")
@@ -168,12 +176,6 @@ class ZScoreService:
                     f"Mỗi pha mùa vụ chỉ có ~{cycles:.0f} quan sát nên LOESS có thể HÚT ĐỘT BIẾN "
                     f"VÀO THÀNH PHẦN MÙA VỤ và làm nó tàng hình. Kết quả chỉ nên dùng tham khảo. "
                     f"Hãy dùng chuỗi ngày với period=7 thay vì chuỗi tuần với period=52.")
-        elif rate > max_anomaly_rate:
-            status = "unreliable_high_rate"
-            note = (f"Gắn cờ {count}/{n} điểm ({rate:.1%}), vượt ngưỡng {max_anomaly_rate:.0%}. "
-                    f"Chuỗi quá nhọn hoặc phương sai không đồng nhất so với giả định của mô hình "
-                    f"— hãy coi đây là tín hiệu 'chuỗi không phù hợp', không phải danh sách "
-                    f"bất thường. Cân nhắc gộp lên cấp cao hơn.")
         else:
             status = "ok"
             note = f"Gắn cờ {count}/{n} điểm ({rate:.1%}), nằm trong ngưỡng kỳ vọng."

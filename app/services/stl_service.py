@@ -43,7 +43,8 @@ class STLService:
             return {
                 "trend": [round(mean_val, 4)] * n,
                 "seasonal": [0.0] * n,
-                "residual": [round(float(v - mean_val), 4) for v in clean_data]
+                "residual": [round(float(v - mean_val), 4) for v in clean_data],
+                "fallback": True,
             }
 
 

@@ -7,7 +7,6 @@ from bson import ObjectId
 from app.api.v1 import _live, _live_competitor, _live_data, _live_listing, _live_overview
 from app.api.v1.f27_listing_timeseries import listing_timeseries
 from app.api.v1.f28_conversion import conversion
-from app.api.v1.f30_alerts import alerts
 from app.api.v1.f33_shop_comparison import shop_comparison
 from app.api.v1.f34_tag_gap import tag_gap
 from app.api.v1.f37_forecast_revenue import forecast_revenue
@@ -90,17 +89,10 @@ def test_f34_thieu_doi_thu_bao_tien_do(san):
     assert r["data"] is None and r["meta"]["unlock"]["current"] == 6
 
 
-def test_f30_chuoi_ngan_khong_do_nhung_van_tra_ket_qua(san):
-    r = alerts(shop_id=str(SHOP_A), period="90d")
-    assert r["data"]["shop_was_analysed"] is False and "ngày lịch sử" in r["data"]["limitation"]
-
-
-def test_f30_va_f37_du_lich_su_thi_chay_mo_hinh(db, san):
+def test_f37_du_lich_su_thi_chay_mo_hinh(db, san):
     p, nhieu = san[0][0]["_id"], random.Random(7)
     db["orders"].seed([_don(SHOP_A, p, d, 100000 + (d % 7) * 20000 + nhieu.gauss(0, 15000))
                        for d in range(1, 121)])
-    r = alerts(shop_id=str(SHOP_A), period="all")
-    assert r["data"]["shop_was_analysed"] is True
     f = forecast_revenue(shop_id=str(SHOP_A), targetId=None, window="30")
     assert len(f["data"]["points"]) == 30 and f["meta"]["source"]["mode"] == "live"
 

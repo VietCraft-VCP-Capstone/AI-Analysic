@@ -63,3 +63,12 @@ mart seed). `health_pearson` cũ (0,0347) đo một công thức seller không h
   ghi rõ số tag đang chờ duyệt.
 - Bỏ cảnh báo "cân nặng/kích thước còn mặc định" (plan §4.3): phí vận chuyển của BE không dùng cân nặng
   sản phẩm, và form sản phẩm không có ô cân nặng, nên cảnh báo vừa sai vừa không sửa được.
+
+## 5. F30 — Cảnh báo bất thường (2026-10-21)
+
+1. BR-183: thêm điều kiện đủ (|Δ| ≥ 30%, ≥ 100.000đ, kỳ vọng tối thiểu, trần 3/shop/tuần); z là z hiệu chỉnh từ phân phối dự báo, không phải z cửa sổ 7 ngày.
+2. Cửa sổ baseline 28 ngày (không phải 7) để có đủ 4 quan sát mỗi thứ.
+3. Dò cấp shop + liệt kê top listing, không dò từng listing.
+4. Pub/Sub thay bằng BE cron gọi AI nội bộ có `X-Gateway-Secret`.
+5. Thêm luật `zero_run` một phía cho ngừng bán.
+6. Bỏ ngưỡng 7.0 và câu "7,38% / 0,6%" (không có nguồn đo).

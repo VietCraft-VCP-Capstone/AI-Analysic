@@ -263,17 +263,41 @@ Trọng số phải **cộng đúng 1.0** — cổng ra kiểm.
 Listing chưa có đánh giá → `rating_shrunk: null`, **không mặc định 4.0 sao**.
 
 ### F30 · `GET /api/notifications/alerts`
+BE phơi cùng một handler ở `/api/notifications/alerts` (SRS) và `/api/seller/analytics/alerts` (FE insights).
+Tham số `period` ∈ `7d` · `30d` · `90d` · `all` (mặc định `90d`).
 ```json
-{"alerts":[{"listing_id":"lst_000123","date":"2026-09-18","direction":"drop",
-            "z":-10.6,"expected":1940000,"actual":520000,
-            "severity":"high","calendar_sensitive":false,
-            "confidence":"ok"}]}
+{"data":{"shop_id":"66f1…","period":"30d",
+  "alerts":[{"id":"66f1…:revenue:2026-10-20","date":"2026-10-20","metric":"revenue",
+             "direction":"drop","rule":"daily","z":-2.84,"expected":1940000,"actual":520000,
+             "change_pct":-73.2,"severity":"low","calendar_sensitive":false,"confidence":"ok",
+             "top_listings":[{"listing_id":"live_66f2…","title":"Áo thun XYZ",
+                              "expected":900000,"actual":0,"change_pct":-100.0}]}],
+  "total":1,"shop_was_analysed":true,"skip_reason":null,"limitation":null,
+  "threshold":{"z":2.0,"min_change_pct":30,"min_change_vnd":100000,
+               "min_expected":{"views":5,"revenue":1},"weekly_cap":3}},
+ "meta":{"computed_at":"2026-10-21T00:30:05Z","model_version":"f30-nb-1.0","scope":"shop", "…":"…"},
+ "error":null}
 ```
-⚠️ **Ngưỡng là `|z| > 7.0`, KHÔNG phải 2.0 như `BR-183`.** Nhóm đo thực nghiệm: ngưỡng
-2.0 cho **7,38% báo động giả**, ngưỡng 7.0 còn **0,6%**. Code đúng hơn SRS — đã ghi
-lệch vào `docs/SPEC_CHANGES.md` và phải sửa SRS.
-`confidence` nhận `ok` · `calendar_sensitive` · `limited_few_cycles` · `unreliable_high_rate`.
-`BR-184` chỉ gửi email khi người bán bật "Cảnh báo hiệu suất".
+- `metric` ∈ `views` · `revenue`. `expected`/`actual`: VND nguyên nếu `revenue`, lượt xem nếu `views`.
+- `rule` ∈ `daily` (một ngày lệch) · `zero_run` (nhiều ngày liền bằng 0; `date` là ngày cuối).
+- `confidence` ∈ `ok` · `low_history` (lịch sử 28–55 ngày).
+- `skip_reason` ∈ `null` · `chua_chay` · `qua_ngan` · `khong_co_san_pham` · `loi`;
+  `shop_was_analysed = (skip_reason == null)`. `limitation` là câu tiếng Việt tương ứng.
+- `meta.computed_at` lấy từ `anomaly_run` mới nhất **của chính shop**.
+
+`BR-183` Cảnh báo khi |z| > 2.0, z là z hiệu chỉnh: phân phối dự báo một bước (NegBin, 28 ngày
+trước t, hệ số thứ trong tuần), `z = Φ⁻¹(F(y−1) + ½P(y))`. Điều kiện đủ ghi ở phụ lục BR-183.
+`BR-184` Email chỉ gửi khi người bán bật "Cảnh báo hiệu suất" (mặc định tắt); thông báo trong
+app gửi khi cột "Ứng dụng" của mục đó bật (mặc định bật).
+Kênh: batch 07:30 GMT+7 → `Notification{type: ANALYTICS_ALERT}` → Socket.IO `notification_received`.
+Socket rớt: lần tải trang sau FE gọi REST `/api/notifications` và `/unread-count`.
+Lỗi tải (MSG134): badge im lặng, `console.warn`.
+
+Lỗi: `400 invalid_param` (period sai) · `401 unauthorized` · `503 mart_not_ready` (shop mẫu, mart rỗng).
+
+Trigger nội bộ (không cho FE): POST `/api/internal/f30/run`, chỉ nhận header `X-Gateway-Secret`.
+Body `{"run_date": "YYYY-MM-DD"?, "backfill_days": 0..90}`; trả `data.events` = cảnh báo của
+`run_date` (mặc định hôm qua GMT+7) kèm `shop_id`, cùng hình dạng phần tử `alerts`.
 
 ### F31 · `GET /api/analytics/shop/categories/revenue`
 ```json
@@ -472,7 +496,7 @@ Mục này trước đây tên là *"Chỗ chưa chốt — Đạt quyết"*. Đ
 | 2 | Bọc `{data, meta}` hay trải phẳng? | **Bọc** `{"data":…, "meta":…, "error":null}` | FE đọc một chỗ cho cả 16 màn hình. Cài trong `app/api/v1/_template.py` — import là đúng, không phải nhớ |
 | 2b | `meta` có đủ 8 trường con ở mọi endpoint? | **Có**, nhưng `status` chỉ còn **một** chỗ | `_template.build_meta()` tự sinh nên chi phí bằng 0. Xem bảng quy đổi bên dưới |
 | 3 | F30 đi đường nào? | `GET /api/notifications/alerts` — **theo SRS** | FE sàn đã trỏ theo SRS. Nhất quán thua tương thích |
-| 4 | WebSocket cho F30? | **Không làm trong phạm vi này.** Giữ polling | Chưa ai nhận, và không có trong 50 task. Ghi vào mục Hạn chế (QA-06) chứ không im lặng bỏ |
+| 4 | WebSocket cho F30? | **Có** (21/10/2026, đảo quyết định 21/09). Dùng gateway Socket.IO sẵn có, sự kiện 
 | 5 | `mart_listing_quality` / `mart_competitor` có `date` trong khoá? | **Không.** Giữ `["listing_id"]` | 5.000 listing × 365 ngày = 1,8 triệu dòng trên cụm M0 512 MB **dùng chung cả nhóm**. Lịch sử điểm đã nằm ở `listing_health` (khoá có `date`); hai bảng này là **ảnh chụp hiện tại** của phần đầu vào. Lý do đầy đủ ghi ngay trong `writer.MART_SCHEMA` |
 
 ### `status` chỉ nằm một chỗ: `meta.status`
