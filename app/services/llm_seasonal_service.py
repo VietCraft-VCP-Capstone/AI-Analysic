@@ -102,12 +102,12 @@ class LLMSeasonalService:
             }
         }
 
-        # Các model Gemini đang hoạt động tốt nhất hiện tại (ưu tiên bản phản hồi nhanh 3.1-flash-lite, tiếp theo 3.5-flash)
-        for model in ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"]:
+        # Các model Gemini chuẩn v1beta (ưu tiên gemini-2.0-flash và gemini-1.5-flash)
+        for model in ["gemini-2.0-flash", "gemini-1.5-flash"]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-                with urllib.request.urlopen(req, timeout=25) as response:
+                with urllib.request.urlopen(req, timeout=5) as response:
                     body = json.loads(response.read().decode("utf-8"))
                     text = body["candidates"][0]["content"]["parts"][0]["text"]
                     
