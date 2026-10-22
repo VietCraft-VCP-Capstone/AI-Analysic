@@ -292,14 +292,16 @@ Khi sàn có đủ đơn thật, job đổi `mode` thành `live` và nhãn tự 
 ### F32 · `GET /api/analytics/competitors?categoryId=`
 ```json
 {"category_id":"apparel",
- "my_listings":[{"listing_id":"lst_000123","price_vnd":237000,"rank_in_cat":17}],
+ "my_listings":[{"listing_id":"lst_000123","price_vnd":237000,"n_reviews":12,"favorite_count":30,"rank_in_cat":17}],
  "competitors":[{"rank":1,"listing_id":"lst_004821","shop_name":"...","price_vnd":198000,
                  "est_sales_90d":214,"rating_shrunk":4.7,"n_reviews":88,
                  "favorite_count":1204}],
  "my_position":{"price_percentile":92,"rating_percentile":41}}
 ```
-`BR-188` **top 20 xếp theo `est_sales_90d` giảm dần**. `BR-189` loại shop của chính
-người bán khỏi bảng xếp hạng, nhưng vẫn hiện riêng ở `my_listings`.
+`BR-188` **top 20 xếp theo `est_sales_90d` giảm dần, hoà thì theo `n_reviews` giảm dần**. `BR-189` loại shop của chính
+người bán khỏi bảng xếp hạng, nhưng vẫn hiện riêng ở `my_listings` (có `n_reviews`, `favorite_count` để vẽ chồng).
+`price_percentile`, `rating_percentile`: phân vị mid-rank so với sản phẩm của **shop khác** cùng danh mục;
+dưới 5 sản phẩm để so thì `null`.
 `BR-186` dropdown danh mục chỉ liệt kê danh mục người bán có ≥ 1 listing.
 
 ### F33 · `GET /api/analytics/shop-comparison`
@@ -307,10 +309,13 @@ người bán khỏi bảng xếp hạng, nhưng vẫn hiện riêng ở `my_lis
 {"segment":"apparel",
  "axes":["listing_count","avg_rating","response_speed","avg_price","product_diversity"],
  "me":[62,78,45,55,71],
- "competitors":[{"shop_id":"shp_00042","shop_name":"...","values":[88,82,90,61,84]}]}
+ "competitors":[{"shop_id":"shp_00042","shop_name":"...","values":[88,82,90,61,84]}],
+ "neutral_axes":["avg_price"],"ranked_by":"revenue"}
 ```
 `BR-190` phân khúc xác định **tự động** = danh mục chiếm tỉ trọng lớn nhất.
-`BR-191` 5 shop = top 5 theo doanh thu ước tính. `BR-192` chuẩn hoá min–max về 0–100.
+`BR-191` 5 shop = top 5 theo doanh thu ước tính; hoà thì theo số đánh giá, `ranked_by = "reviews"` khi doanh thu đều 0.
+`BR-192` chuẩn hoá min–max về 0–100 trên **đúng shop mình và 5 đối thủ**. Trục giá trung tính (`neutral_axes`):
+100 là đắt nhất, không phải tốt hơn. Không trả doanh thu của từng đối thủ.
 `BR-193` cần shop có **≥ 5 listing đã đăng**, không thì `insufficient_data`.
 
 ### F34 · `GET /api/analytics/tag-gap?categoryId=`
@@ -445,7 +450,8 @@ không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ s
   (`[{tag_id, used_by, mine}]`, tối đa 12 tag nhóm dẫn đầu hay dùng).
 - F36: danh sách theo dõi **là follow của sàn** (`shop_followers`), tối đa 10. POST/DELETE của shop thật
   do BE ghi; gọi thẳng module AI thì `400`. Cảnh báo = sản phẩm đối thủ đăng trong 7 ngày, trùng tag hoặc
-  danh mục, có `listed_at`, `tag_names`, `alerts_computed_at`. `added_at` luôn `null`. Bỏ theo dõi thì
+  danh mục **lá** (`matched_type`, `type_name`; `matched_category` vẫn là cấp 1), có `listed_at`, `tag_names`,
+  `alerts_computed_at`. `added_at` luôn `null`. Bỏ theo dõi thì
   cảnh báo của shop đó không còn hiện (chưa giữ được BR-204 vì không lưu cảnh báo).
 - F35 giữ chế độ `derived` so với catalog tham chiếu. Catalog trống thì so giá thật cùng danh mục trên sàn.
 

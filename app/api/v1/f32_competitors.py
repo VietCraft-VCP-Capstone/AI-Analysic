@@ -24,11 +24,15 @@ GHI_CHU = {
 }
 
 
+TOI_THIEU_PHAN_VI = 5
+
+
 def _phan_vi(gia_tri, moc_list):
-    """Phần trăm số phần tử nhỏ hơn hoặc bằng. Danh sách rỗng -> None, không phải 0."""
-    if gia_tri is None or not moc_list:
+    """Phân vị mid-rank so với sản phẩm của shop KHÁC; dưới 5 mốc thì None (một mình không 'cao hơn 100%')."""
+    if gia_tri is None or len(moc_list) < TOI_THIEU_PHAN_VI:
         return None
-    return round(sum(1 for m in moc_list if m <= gia_tri) / len(moc_list) * 100)
+    duoi = sum(1 for m in moc_list if m < gia_tri) + 0.5 * sum(1 for m in moc_list if m == gia_tri)
+    return round(duoi / len(moc_list) * 100)
 
 
 @router.get("/api/analytics/competitors", tags=["F32 · Nhi"])
@@ -60,9 +64,9 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             f"Danh mục {ten_dm.get(cat) or cat} chỉ có {len(doi_thu)} sản phẩm của shop khác, "
             f"chưa đủ để xếp hạng (cần từ 5)", meta)
 
-    doi_thu.sort(key=lambda r: (-r["est_sales_90d"], r.get("rank_in_cat") or 0))
-    gia_cat = sorted(r["price_vnd"] for r in trong_cat)
-    sao_cat = sorted(r["rating_shrunk"] for r in trong_cat if r["rating_shrunk"] is not None)
+    doi_thu.sort(key=lambda r: (-r["est_sales_90d"], -(r.get("n_reviews") or 0), r.get("rank_in_cat") or 0))   # BR-188
+    gia_cat = [r["price_vnd"] for r in doi_thu]
+    sao_cat = [r["rating_shrunk"] for r in doi_thu if r["rating_shrunk"] is not None]
 
     gia_toi = [r["price_vnd"] for r in cua_minh]
     sao_toi = [r["rating_shrunk"] for r in cua_minh if r["rating_shrunk"] is not None]
@@ -82,6 +86,8 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             "price_vnd": tien(r["price_vnd"]),
             "est_sales_90d": r["est_sales_90d"],
             "rating_shrunk": r["rating_shrunk"],
+            "n_reviews": r.get("n_reviews") or 0,
+            "favorite_count": r.get("favorite_count") or 0,
             "rank_in_cat": r.get("rank_in_cat"),
             "n_in_cat": r.get("n_in_cat"),
             **({"direct_rivals": may.doi_thu_truc_tiep(r["listing_id"])} if may else {}),

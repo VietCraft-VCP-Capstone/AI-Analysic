@@ -143,7 +143,7 @@ def bo(shop_id: str = CurrentShop, body: dict = Body(default={}),
     if not kq.matched_count:
         not_found("tracking")
     return ok({"tracked_shop_id": muc_tieu, "active": False,
-               "note": "Đã dừng cảnh báo tương lai. Cảnh báo cũ vẫn giữ (BR-204).",
+               "note": "Đã dừng theo dõi. Hệ thống chưa lưu lịch sử cảnh báo nên cảnh báo cũ của shop này cũng không còn hiện.",
                "slots_used": _kho().count_documents({"shop_id": shop_id, "active": True}),
                "slots_limit": TOI_DA},
               _meta(shop_id, 0))

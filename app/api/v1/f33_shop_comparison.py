@@ -61,8 +61,8 @@ def shop_comparison(shop_id: str = CurrentShop):
     trong_pk = list(coll.find({"category_id": phan_khuc},
                               {"_id": 0, "shop_id": 1, "shop_name": 1, "price_vnd": 1,
                                "rating_shrunk": 1, "product_type_id": 1, "revenue_90d_vnd": 1,
-                               "shop_response_seconds": 1}))
-    tho = defaultdict(lambda: {"n": 0, "gia": [], "sao": [], "loai": set(), "dt": 0})
+                               "shop_response_seconds": 1, "n_reviews": 1}))
+    tho = defaultdict(lambda: {"n": 0, "gia": [], "sao": [], "loai": set(), "dt": 0, "dg": 0})
     for r in trong_pk:
         s = tho[r["shop_id"]]
         s["n"] += 1
@@ -73,17 +73,18 @@ def shop_comparison(shop_id: str = CurrentShop):
             s["sao"].append(r["rating_shrunk"])
         s["loai"].add(r.get("product_type_id"))
         s["dt"] += r.get("revenue_90d_vnd") or 0
+        s["dg"] += r.get("n_reviews") or 0
 
     if ng["live"]:
         # Giây -> phút cho cùng đơn vị với dữ liệu mồi; thiếu là CHƯA ĐO nên None, không phải 0.
         phan_hoi = {r["shop_id"]: (r["shop_response_seconds"] / 60 if r.get("shop_response_seconds") else None)
                     for r in trong_pk}
     else:
-        phan_hoi = {s["shop_id"]: float(s.get("response_time_minutes") or 0)
+        phan_hoi = {s["shop_id"]: (float(s["response_time_minutes"]) if s.get("response_time_minutes") else None)
                     for s in db()["shops"].find({}, {"shop_id": 1, "response_time_minutes": 1})}
 
     def truc_tho(sid, s):
-        ph = phan_hoi.get(sid) if ng["live"] else phan_hoi.get(sid, 0)
+        ph = phan_hoi.get(sid)
         return {
             "listing_count": s["n"],
             "avg_rating": sum(s["sao"]) / len(s["sao"]) if s["sao"] else None,
@@ -93,8 +94,12 @@ def shop_comparison(shop_id: str = CurrentShop):
             "product_diversity": len(s["loai"]),
         }
 
+    # BR-191: top 5 theo doanh thu; sàn chưa có đơn thì doanh thu đều 0 nên hoà theo số đánh giá như BR-188.
+    top = sorted((sid for sid in tho if sid != shop_id),
+                 key=lambda s: (-tho[s]["dt"], -tho[s]["dg"], s))[:SO_DOI_THU]
     tho_all = {sid: truc_tho(sid, s) for sid, s in tho.items()}
-    cot = {t: [v[t] for v in tho_all.values() if v[t] is not None] for t in TRUC}
+    # BR-192: min–max trên đúng shop mình và 5 đối thủ, không trên cả phân khúc.
+    cot = {t: [tho_all[sid][t] for sid in [shop_id, *top] if tho_all[sid][t] is not None] for t in TRUC}
 
     def chuan(sid):
         return [_chuan_hoa(tho_all[sid][t], cot[t]) for t in TRUC]
@@ -102,8 +107,6 @@ def shop_comparison(shop_id: str = CurrentShop):
     def tho_tron(sid):
         return {t: (round(v, 2) if isinstance(v, float) else v) for t, v in tho_all[sid].items()}
 
-    top = sorted((sid for sid in tho if sid != shop_id),
-                 key=lambda s: -tho[s]["dt"])[:SO_DOI_THU]
     nhom, nhom_ly_do = nhom_chien_luoc(tho, phan_hoi, shop_id) if ng["live"] else (None, None)
 
     return ok({
@@ -113,7 +116,9 @@ def shop_comparison(shop_id: str = CurrentShop):
         "segment_reason": f"{dem_cat[phan_khuc]}/{len(cua_toi)} sản phẩm của shop nằm ở danh mục này",
         "axes": TRUC,
         "axes_vi": TEN_TRUC_VI,
-        "normalization": "min-max 0-100 trong phân khúc; 100 luôn là tốt hơn",
+        "normalization": "min-max 0-100 trên shop bạn và 5 đối thủ; 100 là tốt hơn, riêng giá: 100 là đắt nhất",
+        "neutral_axes": ["avg_price"],
+        "ranked_by": "revenue" if any(tho[s]["dt"] > 0 for s in top) else "reviews",
         "me": chuan(shop_id),
         "me_raw": tho_tron(shop_id),
         # Trục của shop mình chưa có số: FE không vẽ thành 0 và không tính là trục yếu nhất.
@@ -123,7 +128,6 @@ def shop_comparison(shop_id: str = CurrentShop):
             "shop_name": tho[sid].get("ten"),
             "values": chuan(sid),
             "raw": tho_tron(sid),       # số thật, để FE so "bạn vs nhóm" bằng đơn vị người bán hiểu
-            "est_revenue_90d_vnd": int(tho[sid]["dt"]),
         } for sid in top],
         "shops_in_segment": len(tho),
         **({"strategic_groups": nhom, "strategic_groups_reason": nhom_ly_do} if ng["live"] else {}),

@@ -18,12 +18,13 @@ from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, la_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import build_meta, mart_not_ready, meta_from_record, not_found, ok
 from app.config import settings
+from app.core.f29.constants import K_BAYESIAN_SHRINKAGE
 
 MART = "mart_competitor"
 MODEL = "competitor-live-1.0"
 CUA_SO_BAN_NGAY = 90
 CUA_SO_MOI_NGAY = 7
-K_CO_NGOT = 10              # giống build_marts.K_CO_NGOT của dữ liệu mồi
+K_CO_NGOT = K_BAYESIAN_SHRINKAGE   # cùng hằng co ngót với F29 và build_marts.M_BAYES (docs/BAYES_M_SELECTION.md)
 DA_GIAO = "DELIVERED"
 DANG_BAN = {"status": "PUBLISHED", "is_hidden": {"$ne": True}}   # = PUBLIC_QUERY của BE
 SO_CANH_BAO_TOI_DA = 50
@@ -195,7 +196,7 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
     for r in dong:
         theo_dm[r["category_id"]].append(r)
     for nhom in theo_dm.values():
-        nhom.sort(key=lambda r: (-r["est_sales_90d"], -r["revenue_90d_vnd"], r["listing_id"]))   # BR-188
+        nhom.sort(key=lambda r: (-r["est_sales_90d"], -r["n_reviews"], r["listing_id"]))   # BR-188: hoà thì theo số đánh giá
         for i, r in enumerate(nhom, 1):
             r["rank_in_cat"], r["n_in_cat"] = i, len(nhom)
 
@@ -218,12 +219,12 @@ def tinh_canh_bao(dong: Iterable[dict], shops: Iterable[dict], followers: Iterab
                 theo_doi[w].add(bi)
 
     tag_ngach: Dict[str, set] = defaultdict(set)
-    dm_ngach: Dict[str, set] = defaultdict(set)
+    loai_ngach: Dict[str, set] = defaultdict(set)
     sp_theo_shop: Dict[str, List[dict]] = defaultdict(list)
     for r in dong:
         sp_theo_shop[r["shop_id"]].append(r)
         tag_ngach[r["shop_id"]].update(r.get("tags") or [])
-        dm_ngach[r["shop_id"]].add(r.get("category_id"))
+        loai_ngach[r["shop_id"]].add(r.get("product_type_id"))
 
     canh_bao: List[Dict[str, Any]] = []
     for w in sorted(theo_doi):
@@ -233,8 +234,9 @@ def tinh_canh_bao(dong: Iterable[dict], shops: Iterable[dict], followers: Iterab
                 if dang_luc is None or not moc <= dang_luc <= now:
                     continue
                 trung = sorted(set(r.get("tags") or []) & tag_ngach[w])
-                dm = r.get("category_id") if r.get("category_id") in dm_ngach[w] else None
-                if not trung and dm is None:
+                # So ngách ở danh mục lá: bán cốc thì không bị báo mọi đồ "Nhà cửa" của đối thủ.
+                loai = r.get("product_type_id") if r.get("product_type_id") in loai_ngach[w] else None
+                if not trung and loai is None:
                     continue
                 canh_bao.append({
                     "watcher_shop_id": w,
@@ -247,8 +249,10 @@ def tinh_canh_bao(dong: Iterable[dict], shops: Iterable[dict], followers: Iterab
                     "detected_at": _iso(now),
                     "in_my_niche": True,
                     "matched_tags": trung,
-                    "matched_category": dm,
-                    "category_name": r.get("category_name") if dm else None,
+                    "matched_category": r.get("category_id") if loai else None,
+                    "category_name": r.get("category_name") if loai else None,
+                    "matched_type": loai,
+                    "type_name": r.get("product_type_name") if loai else None,
                     "est_sales_90d": r.get("est_sales_90d") or 0,
                 })
     return canh_bao
