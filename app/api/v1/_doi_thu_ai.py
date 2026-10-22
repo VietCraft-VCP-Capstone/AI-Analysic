@@ -13,7 +13,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
-NGUONG_GIONG = 0.15         # dưới mức này coi là không giống
+# Hai ngưỡng đo trên 17.000 tin Shopee chưa dùng để chỉnh (22/10/2026), đáp án là nhãn "cùng sản phẩm":
+NGUONG_GIONG = 0.15         # liệt kê đối thủ: bắt được 79% hàng cùng sản phẩm trong top 5
+NGUONG_GAN_NHU_Y_HET = 0.35 # từ mức này 73% đúng là cùng sản phẩm (ngưỡng F1 cao nhất)
 NGUONG_KHONG_LY_DO = 0.35   # không có từ hiếm nào chung thì phải giống tới mức này mới tính
 SO_DOI_THU = 5
 K_GIA = 8
@@ -23,7 +25,7 @@ TRONG_SO_KY_TU = 0.6        # cụm ký tự giúp bắt "tshirt"/"t-shirt" như
 TRONG_SO_MO_TA = 0.5        # mô tả hay là văn mẫu của shop nên nhẹ hơn tên
 TAN_SUAT_LY_DO = 0.5        # từ có ở từ nửa số sản phẩm CÙNG LOẠI trở lên là từ chung của loại, không làm lý do
 CACHE_GIAY = 300
-GIONG_TOI_DA = 0.6          # đe doạ: giống từ mức này coi như hàng thay thế được hoàn toàn
+GIONG_TOI_DA = NGUONG_GAN_NHU_Y_HET   # đe doạ: gần như y hệt thì coi như thay thế được hoàn toàn
 NGUONG_DE_DOA = (50, 25)    # điểm đe doạ: từ 50 là cao, từ 25 là vừa
 Z_TANG_TOC = 3.0            # z-score bền của tuần gần nhất so với các tuần trước
 TUAN_TOI_THIEU = 4
@@ -159,6 +161,7 @@ class MayGiong:
             "price_vnd": self.dong[j].get("price_vnd"),
             "est_sales_90d": self.dong[j].get("est_sales_90d") or 0,
             "similarity": round(s, 3),
+            "near_identical": s >= NGUONG_GAN_NHU_Y_HET,
             "reasons": self._ly_do(i, j),
         } for j, s in self.lang_gieng(listing_id, k)]
 
@@ -265,6 +268,7 @@ def diem_de_doa(may: MayGiong, listing_id: str, shop_toi: str, manh: Dict[str, f
         "score": diem,
         "level": "high" if diem >= NGUONG_DE_DOA[0] else "medium" if diem >= NGUONG_DE_DOA[1] else "low",
         "similarity": round(s, 3),
+        "near_identical": s >= NGUONG_GAN_NHU_Y_HET,
         "matched_product_id": may.dong[j]["listing_id"] if j is not None else None,
         "matched_title": may.dong[j].get("title") if j is not None else None,
         "price_gap_pct": round(lech * 100) if lech is not None else None,

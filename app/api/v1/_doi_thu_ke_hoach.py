@@ -39,6 +39,7 @@ def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: D
         if t.get("level") in ("high", "medium") and t.get("matched_title"):
             su.append({"kind": "de_doa", "level": t["level"], "shop_id": a["shop_id"], "shop": a.get("shop_name"),
                        "title": a.get("title"), "mine": t["matched_title"], "similarity_pct": round(t["similarity"] * 100),
+                       "near_identical": bool(t.get("near_identical")),
                        "cheaper_pct": t.get("price_gap_pct") if (t.get("price_gap_pct") or 0) > 0 else None})
     for s in (f36 or {}).get("surging") or []:
         su.append({"kind": "tang_toc", "shop_id": s["shop_id"], "shop": s.get("shop_name"),
@@ -85,7 +86,8 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if k == "de_doa":
             re_hon = f", rẻ hơn {f['cheaper_pct']}%" if f.get("cheaper_pct") else ""
             viec.append({"action": f"{'Xem ngay' if f['level'] == 'high' else 'Để ý'} sản phẩm mới \"{f['title']}\" của {f['shop']}",
-                         "why": f"Giống {f['similarity_pct']}% \"{f['mine']}\" của bạn{re_hon}.",
+                         "why": (f"Gần như cùng sản phẩm với \"{f['mine']}\" của bạn (giống {f['similarity_pct']}%){re_hon}."
+                                 if f.get("near_identical") else f"Giống {f['similarity_pct']}% \"{f['mine']}\" của bạn{re_hon}."),
                          "link": f"/seller/competitors/{f['shop_id']}"})
         elif k == "gia":
             huong = "cao hơn" if f["my_price"] > f["high"] else "thấp hơn"

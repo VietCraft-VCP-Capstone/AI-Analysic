@@ -462,15 +462,17 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 Đo chất lượng bằng script đo riêng, không nằm trong repo.
 
 - F32 `my_listings[].direct_rivals`: `[{product_id, shop_id, shop_name, title, price_vnd, est_sales_90d,
-  similarity (0–1), reasons[]}]`, tối đa 5. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity}]`,
+  similarity (0–1), near_identical, reasons[]}]`, tối đa 5. Liệt kê từ độ giống 0,15; `near_identical` khi ≥ 0,35.
+  Hai ngưỡng đo trên 17.000 tin Shopee Product Matching chưa dùng để chỉnh: ở 0,15 bắt được 79% hàng cùng sản phẩm
+  trong top 5; từ 0,35 thì 73% kết quả đúng là cùng sản phẩm. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity}]`,
   tối đa 3 shop trùng nhiều sản phẩm của mình nhất.
 - F35 (khi đã chọn `productId`) `ai_price`: `{suggested_vnd, low_vnd, high_vnd, confidence: high|medium|low,
   rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
   `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 8 sản phẩm giống nhất, pha với mặt
   bằng cùng loại theo `rival_weight`.
 - F36 `alerts[].threat`: `{score 0–100, level high|medium|low, similarity, matched_product_id, matched_title,
-  price_gap_pct (> 0 là đối thủ rẻ hơn), shop_strength}`. Điểm = độ giống với sản phẩm khớp nhất của mình (đủ 0,6 là
-  tối đa) × sức mạnh shop đối thủ (doanh số 90 ngày so với shop lớn nhất) × áp lực giá (rẻ hơn, tối đa +50%).
+  price_gap_pct (> 0 là đối thủ rẻ hơn), shop_strength, near_identical}`. Điểm = độ giống với sản phẩm khớp nhất của mình (đủ 0,35,
+  tức gần như cùng sản phẩm, là tối đa) × sức mạnh shop đối thủ (doanh số 90 ngày so với shop lớn nhất) × áp lực giá (rẻ hơn, tối đa +50%).
   Cảnh báo xếp theo `threat.score` giảm dần. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z}]` —
   shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3 so với 7 tuần trước (cần ≥ 4 tuần có đơn).
 - F34 `per_product`: `[{product_id, title, suggestions[{tag_id, score, used_by, better_sellers, popular_in_type}]}]`.
