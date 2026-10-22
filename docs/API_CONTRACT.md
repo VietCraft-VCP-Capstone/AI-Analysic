@@ -474,7 +474,8 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   price_gap_pct (> 0 là đối thủ rẻ hơn), shop_strength, near_identical}`. Điểm = độ giống với sản phẩm khớp nhất của mình (đủ 0,35,
   tức gần như cùng sản phẩm, là tối đa) × sức mạnh shop đối thủ (doanh số 90 ngày so với shop lớn nhất) × áp lực giá (rẻ hơn, tối đa +50%).
   Cảnh báo xếp theo `threat.score` giảm dần. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z}]` —
-  shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3 so với 7 tuần trước (cần ≥ 4 tuần có đơn).
+  shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3,5 so với 7 tuần trước (cần ≥ 4 tuần có đơn). Ngưỡng 3,5 chọn
+  trên số bán theo tuần của người bán Olist năm 2017 (báo nhầm ≤ 2%); chấm trên 2018: báo nhầm 1,2%, 55% cảnh báo là tăng tốc thật.
 - F34 `per_product`: `[{product_id, title, suggestions[{tag_id, score, used_by, better_sellers, popular_in_type}]}]`.
   Gợi ý lai: 0,7 theo sản phẩm giống (độ giống × độ bán chạy) + 0,3 theo độ phổ biến cùng loại.
 - F33 `strategic_groups`: `{k, silhouette, clear (≥ 0,25), features[], axes{x, y}, groups[{id, label, size,
