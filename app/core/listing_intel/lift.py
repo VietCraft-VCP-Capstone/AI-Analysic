@@ -6,7 +6,7 @@ from .normalize import ngrams
 
 def lift_table(titles, groups, top, min_count=20, alpha=1.0):
     rows = defaultdict(list)
-    for title, group, is_top in zip(titles, groups, top):
+    for title, group, is_top in zip(titles, groups, top, strict=True):
         if group is not None:
             rows[group].append((set(ngrams(title)), bool(is_top)))
     table = {}

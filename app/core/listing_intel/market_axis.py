@@ -38,10 +38,16 @@ def _margin(vecs, top_centroid, rest_centroid):
     return _unit(np.asarray(vecs, dtype=np.float64)) @ (_unit(top_centroid) - _unit(rest_centroid))
 
 
+def _class_centroid(rows):
+    if len(rows) == 0:
+        return np.full(rows.shape[1], np.nan)
+    return _unit(rows.mean(axis=0))
+
+
 def centroids(vecs, top):
     vecs = np.asarray(vecs, dtype=np.float64)
     top = np.asarray(top).astype(bool)
-    return _unit(vecs[top].mean(axis=0)), _unit(vecs[~top].mean(axis=0))
+    return _class_centroid(vecs[top]), _class_centroid(vecs[~top])
 
 
 def centroid_margin(vec, top_centroid, rest_centroid):

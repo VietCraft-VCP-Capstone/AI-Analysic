@@ -4,6 +4,8 @@ MAX_ITEMS = 6
 MATERIAL = "missing_material"
 FALLBACK_MESSAGE = "Mục này cần được cải thiện."
 MATERIAL_MESSAGE = "Chưa nêu chất liệu sản phẩm. Thêm chất liệu vào ô Chất liệu hoặc tiêu đề."
+MIN_RATING = 4.0
+PINNED = {MATERIAL, "no_reviews", "low_rating"}
 
 FIXES = {
     "title_short": ["title_len", "title_words"],
@@ -49,7 +51,18 @@ def _key(a) -> tuple:
     return a["evidence"] == "measured", a["impact"] or 0.0, -a["effort"]
 
 
-def build(axes: dict, material: dict, evidence: dict, impacts: dict) -> list[dict]:
+def review_issue(inp) -> dict | None:
+    if inp.rating_count is None:
+        return None
+    if inp.rating_count == 0:
+        return {"code": "no_reviews", "message": "Sản phẩm chưa có đánh giá nào. Nhắc khách đã mua để lại đánh giá để người mua sau tin tưởng hơn."}
+    if inp.average_rating is not None and inp.average_rating < MIN_RATING:
+        rating = f"{inp.average_rating:.1f}".replace(".", ",")
+        return {"code": "low_rating", "message": f"Điểm đánh giá trung bình {rating}/5, dưới 4. Đọc lại phản hồi của khách để sửa chất lượng hoặc mô tả cho đúng."}
+    return None
+
+
+def build(axes: dict, material: dict, evidence: dict, impacts: dict, review: dict | None = None) -> list[dict]:
     items, seen = [], set()
     for axis, res in axes.items():
         for issue in res.issues:
@@ -58,7 +71,9 @@ def build(axes: dict, material: dict, evidence: dict, impacts: dict) -> list[dic
                 items.append(_item(axis, issue, evidence, impacts))
     if material.get("missing") and MATERIAL not in seen:
         items.append(_item("text", {"code": MATERIAL, "message": MATERIAL_MESSAGE}, evidence, impacts))
+    if review:
+        items.append(_item("market", review, {}, impacts))
     ranked = sorted(items, key=_key, reverse=True)
     best = max(ranked, key=lambda a: a["impact"] or 0.0, default=None)
-    pinned = [a for a in ranked[MAX_ITEMS:] if a["code"] == MATERIAL or (a is best and a["impact"])]
+    pinned = [a for a in ranked[MAX_ITEMS:] if a["code"] in PINNED or (a is best and a["impact"])]
     return ranked[:MAX_ITEMS - len(pinned)] + pinned

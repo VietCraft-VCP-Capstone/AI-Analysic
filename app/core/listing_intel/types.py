@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 @dataclass
@@ -13,6 +14,9 @@ class ListingInput:
     image_urls: list[str] = field(default_factory=list)
     product_id: str | None = None
     seller_id: str | None = None
+    updated_at: datetime | None = None
+    rating_count: int | None = None
+    average_rating: float | None = None
 
 
 @dataclass

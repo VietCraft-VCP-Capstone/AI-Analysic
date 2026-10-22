@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ TTL = 3600
 COLS = ["keyword", "observed_on", "scaled"]
 log = logging.getLogger(__name__)
 _cache: dict = {"at": 0.0, "data": None}
+_lock = threading.Lock()
 
 
 def _from_mongo() -> pd.DataFrame:
@@ -61,6 +63,7 @@ def _load() -> dict:
 
 
 def weekly_series() -> dict:
-    if _cache["data"] is None or time.monotonic() - _cache["at"] > TTL:
-        _cache.update(data=_load(), at=time.monotonic())
-    return _cache["data"]
+    with _lock:
+        if _cache["data"] is None or time.monotonic() - _cache["at"] > TTL:
+            _cache.update(data=_load(), at=time.monotonic())
+        return _cache["data"]

@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from app.core.listing_intel.context import FeatureContext, save_context
 from app.core.listing_intel.formulas import FORMULAS, title_keys
@@ -19,14 +18,16 @@ DESIGN = "image_design.json"
 
 
 def population(table):
-    val = table[table["split"] == "val"]
-    counts = val["group"].value_counts()
-    small = set(table["group"].dropna()) - set(counts[counts >= MIN_REF].index)
-    return pd.concat([val[~val["group"].isin(small)], table[table["group"].isin(small)]])
+    return table[table["split"] == "val"]
 
 
-def _dist(df, s, prefix=""):
-    parts = [(str(g), np.asarray(i)) for g, i in df.groupby("group", observed=True).indices.items()]
+def big_groups(table):
+    counts = population(table)["group"].value_counts()
+    return set(counts[counts >= MIN_REF].index)
+
+
+def _dist(df, s, big, prefix=""):
+    parts = [(str(g), np.asarray(i)) for g, i in df.groupby("group", observed=True).indices.items() if g in big]
     return {f"{prefix}{g}": np.percentile(s[idx], QS) for g, idx in parts + [("all", np.arange(len(df)))]}
 
 
@@ -62,14 +63,14 @@ def write(table, models, ref, context_dir=None):
     if design:
         (ref / DESIGN).write_text(json.dumps(design, ensure_ascii=False, indent=1), "utf-8")
     (ref / "top_medians.json").write_text(json.dumps(top_medians(table), ensure_ascii=False), "utf-8")
-    pop = population(table)
-    np.savez(ref / "score_dist.npz", **_dist(pop, predict(models["fusion"], pop, FULL)))
+    pop, big = population(table), big_groups(table)
+    np.savez(ref / "score_dist.npz", **_dist(pop, predict(models["fusion"], pop, FULL), big))
     axes = {}
     for a in AXIS_MODELS:
         p = defined(pop, a)
-        axes |= _dist(p, predict(models[a], p, axis_cols(a)), f"{a}__") if len(p) else {}
+        axes |= _dist(p, predict(models[a], p, axis_cols(a)), big, f"{a}__") if len(p) else {}
     np.savez(ref / "axis_dist.npz", **axes)
-    np.savez(ref / "formula_dist.npz", **formula_dist(pop))
+    np.savez(ref / "formula_dist.npz", **formula_dist(pop, big))
     return design
 
 
@@ -81,11 +82,11 @@ def formula_values(df, axis):
     return np.array([FORMULAS[axis](r) for r in recs], dtype=float)
 
 
-def formula_dist(pop):
+def formula_dist(pop, big):
     out = {}
     for a in AXIS_MODELS:
         p = defined(pop, a)
         v = formula_values(p, a) if len(p) else np.empty(0)
         ok = ~np.isnan(v)
-        out |= _dist(p[ok], v[ok], f"{a}__") if ok.any() else {}
+        out |= _dist(p[ok], v[ok], big, f"{a}__") if ok.any() else {}
     return out

@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -8,7 +9,7 @@ from app.core.calendar_vn import upcoming_events
 
 from . import fusion, live_data, store, trend_store
 from .intel import analyze
-from .output import AXES, jsonable, score_doc
+from .output import AXES, jsonable, model_card, score_doc
 from .trend_axis import informative, cached_season, week_of_year, momentum
 
 GIO_VN = timezone(timedelta(hours=7))
@@ -30,24 +31,47 @@ def today():
     return datetime.now(GIO_VN).date()
 
 
+def _naive(t):
+    return t.astimezone(timezone.utc).replace(tzinfo=None) if t.tzinfo else t
+
+
+def _stale(inp, doc) -> bool:
+    if not doc or "todos" not in doc:
+        return True
+    done = doc.get("computed_at")
+    return bool(inp.updated_at and isinstance(done, datetime) and _naive(inp.updated_at) > _naive(done))
+
+
 def _item(inp, doc) -> dict:
     doc = doc or {}
     return {"product_id": inp.product_id, "title": inp.title, "thumbnail": (inp.image_urls or [None])[0],
             "score": doc.get("score"), "axes": {a: (doc.get("axes") or {}).get(a) for a in AXES},
-            "trend_direction": doc.get("trend_direction"), "computed_at": doc.get("computed_at")}
+            "trend_direction": doc.get("trend_direction"), "computed_at": doc.get("computed_at"),
+            "top_todo": ((doc.get("todos") or [{}])[0]).get("message"), "todo_count": len(doc.get("todos") or [])}
+
+
+def common_issues(docs, limit=3) -> list[dict]:
+    counts, messages = Counter(), {}
+    for d in docs:
+        for t in d.get("todos") or []:
+            counts[t["code"]] += 1
+            messages.setdefault(t["code"], t["message"])
+    return [{"code": c, "message": messages[c], "count": n} for c, n in counts.most_common(limit)]
 
 
 def shop_summary(shop_id) -> dict:
     rows = live_data.shop_listings(shop_id)
     ids, version = [r.product_id for r in rows], fusion.load_bundle().meta["model_version"]
     latest = store.latest_scores(ids, version)
-    for inp in [r for r in rows if r.product_id not in latest][:MAX_SYNC]:
+    for inp in [r for r in rows if _stale(r, latest.get(r.product_id))][:MAX_SYNC]:
         try:
             doc = score_doc(analyze(inp, today(), persist=True))
             latest[inp.product_id] = {**doc, "computed_at": datetime.now(timezone.utc)}
         except Exception:
             log.exception("listing intel failed for %s", inp.product_id)
-    return jsonable({"items": [_item(r, latest.get(r.product_id)) for r in rows], "total": len(rows)})
+    docs = [latest[r.product_id] for r in rows if r.product_id in latest]
+    return jsonable({"items": [_item(r, latest.get(r.product_id)) for r in rows], "total": len(rows),
+                     "common_issues": common_issues(docs), "model": model_card(fusion.load_bundle().meta)})
 
 
 def _momentum(s, at):

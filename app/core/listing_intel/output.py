@@ -89,4 +89,5 @@ def score_doc(out: dict) -> dict:
         "axes": {a: out["axes"][a]["score"] for a in AXES},
         "trend_direction": direction(out["score_timeline"]),
         "title": out["title"], "thumbnail": out["thumbnail"],
+        "todos": [{"code": t["code"], "message": t["message"]} for t in out["advice"]],
     }

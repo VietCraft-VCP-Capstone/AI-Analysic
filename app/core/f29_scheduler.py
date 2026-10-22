@@ -1,7 +1,7 @@
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
@@ -9,6 +9,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from app.api.v1._live import db_live, LOC_SP_THAT
 from app.core.f29.calculator import HealthScoreCalculator
+from app.core.f29.constants import MODEL_VERSION
 
 STATE_COLLECTION = "scheduler_state"
 STATE_ID_MINUTE_SCAN = "f29_minute_scan"
@@ -39,19 +40,22 @@ def _set_last_scan_time(job_id: str, ts: datetime) -> None:
 
 def _recalculate_and_save(
     product_ids: Iterable, calculator: Optional[HealthScoreCalculator] = None
-) -> int:
+) -> Tuple[int, bool]:
     calc = calculator or HealthScoreCalculator()
     n_ok = 0
     for pid in product_ids:
         try:
             result = calc.calculate(str(pid))
+            if result is not None and "error" in result:
+                print(f"[f29_scheduler] Bo qua: {result['error']}", flush=True)
+                return n_ok, True
             if result is not None:
                 calc.save(result)
                 n_ok += 1
         except Exception as e:  # noqa: BLE001
             print(f"[f29_scheduler] Loi cham diem product_id={pid}: "
                   f"{type(e).__name__}: {e}", flush=True)
-    return n_ok
+    return n_ok, False
 
 
 def scan_changed_products() -> int:
@@ -86,9 +90,15 @@ def scan_changed_products() -> int:
             )
         }
 
-    n_ok = _recalculate_and_save(changed_ids) if changed_ids else 0
-    _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at)
+    n_ok, stopped = _recalculate_and_save(changed_ids) if changed_ids else (0, False)
+    if not stopped:
+        _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at)
     return n_ok
+
+
+def needs_full_rescan(db) -> bool:
+    latest = db["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
+    return latest is None or latest.get("model_version") != MODEL_VERSION
 
 
 def nightly_full_rescan() -> int:
@@ -96,10 +106,10 @@ def nightly_full_rescan() -> int:
     scan_started_at = datetime.now(timezone.utc)
 
     all_ids = [p["_id"] for p in db["products"].find(LOC_SP_THAT, {"_id": 1})]
-    n_ok = _recalculate_and_save(all_ids) if all_ids else 0
-
-    _set_last_scan_time(STATE_ID_NIGHTLY, scan_started_at)
-    _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at)
+    n_ok, stopped = _recalculate_and_save(all_ids) if all_ids else (0, False)
+    if not stopped:
+        _set_last_scan_time(STATE_ID_NIGHTLY, scan_started_at)
+        _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at)
     return n_ok
 
 
@@ -133,6 +143,17 @@ def start_scheduler():
         max_instances=1,
         coalesce=True,
     )
+    try:
+        if needs_full_rescan(db_live()):
+            scheduler.add_job(
+                nightly_full_rescan,
+                id="f29_boot_rescan",
+                next_run_time=datetime.now(timezone.utc),
+                max_instances=1,
+                coalesce=True,
+            )
+    except Exception as e:  # noqa: BLE001
+        print(f"[f29_scheduler] Khong kiem tra duoc quet lai khi khoi dong: {type(e).__name__}: {e}", flush=True)
     try:
         from app.core.listing_intel.jobs import register
         register(scheduler)

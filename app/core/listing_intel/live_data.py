@@ -12,7 +12,7 @@ from .types import ListingInput
 _MAP = json.loads((Path(__file__).parent / "data" / "category_map.json").read_text("utf-8"))["vietcraft"]
 GROUPS = {norm(k): v for k, v in _MAP.items()}
 FIELDS = {"title": 1, "description": 1, "tags": 1, "materials": 1, "categories": 1, "images": 1,
-          "shop_id": 1, "updated_at": 1}
+          "shop_id": 1, "updated_at": 1, "rating_count": 1, "average_rating": 1}
 PEER_CAP = 300
 
 
@@ -51,6 +51,8 @@ def _input(p: dict, price=None) -> ListingInput:
         category=category, group=group_of(category), price=price,
         image_urls=[u for u in p.get("images") or [] if isinstance(u, str)],
         product_id=str(p["_id"]), seller_id=str(p.get("shop_id")),
+        updated_at=p["updated_at"] if isinstance(p.get("updated_at"), datetime) else None,
+        rating_count=int(p.get("rating_count") or 0), average_rating=_price(p.get("average_rating")),
     )
 
 

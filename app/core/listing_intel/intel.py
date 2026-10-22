@@ -117,7 +117,7 @@ def analyze(inp: ListingInput, at, persist: bool, store_embeddings: bool = True)
     evidence = fusion.load_bundle().meta.get("evidence") or {}
     base = fusion.base_score(feats, group)
     out = listing_intel(parts, base, _timeline(base, parts["ms"], parts["ctx"], group), material,
-                        advice.build(results, material, evidence, impacts), evidence, at)
+                        advice.build(results, material, evidence, impacts, advice.review_issue(parts["inp"])), evidence, at)
     if persist and parts["inp"].product_id:
         store.save_score(score_doc(out))
     return out

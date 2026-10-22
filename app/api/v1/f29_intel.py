@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import List, Optional
 
@@ -11,6 +12,7 @@ from app.core.listing_intel import embedder, fusion, image_fetch, live_data, ser
 from app.core.listing_intel.types import ListingInput
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 TAG = "F29 · Listing Intelligence"
 NO_SHOP = "Cần cấu hình gian hàng trước khi xem phân tích listing"
 NO_MODEL = "Model phân tích listing chưa sẵn sàng, cần chạy huấn luyện trước"
@@ -51,6 +53,9 @@ def _run(fn, scope: str, scope_id):
     try:
         version = fusion.load_bundle().meta["model_version"]
     except (FileNotFoundError, RuntimeError):
+        return insufficient(NO_MODEL, _meta(scope, scope_id))
+    except Exception:
+        logger.exception("listing intel model bundle failed to load")
         return insufficient(NO_MODEL, _meta(scope, scope_id))
     meta = _meta(scope, scope_id, version, attributed_to_live_shop=scope != "draft")
     if not embedder.available():
