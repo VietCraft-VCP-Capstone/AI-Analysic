@@ -2,9 +2,10 @@ import time
 
 from bson import ObjectId
 
-from app.core.f29 import price_ref
+from app.core.f29 import price_ref, price_suggest
 from app.core.f29.price_ref import PriceRef, clear_index_cache, product_price
 from tests.f29.fake_mongo import make_calculator
+from tests.f29.fake_price import FakePriceModel
 
 PARAMS = {"full_at": 1.0, "zero_at": 2.0, "min_peers": 8}
 TARGET_CAT = "Váy Đầm"
@@ -43,12 +44,29 @@ def test_reference_category_needs_8_peers():
     assert ref["source"] != "category"
 
 
-def test_reference_falls_back_to_group_then_tiki():
+def test_reference_falls_back_group_then_model(fake_price_model):
     items = [(0, TARGET_CAT, 100000)] + [(i, "Áo thun", 200000) for i in range(1, 9)]
     ref = PriceRef(_db(*items), PARAMS).reference(_target())
     assert ref["source"] == "group"
     clear_index_cache()
     ref = PriceRef(_db(*items[:-1]), PARAMS).reference(_target())
+    assert ref["source"] == "model" and ref["n"] == 0
+
+
+def test_reference_uses_model_when_few_peers(fake_price_model):
+    ref = PriceRef(_db((0, TARGET_CAT, 100000)), PARAMS).reference(_target())
+    assert ref["source"] == "model" and ref["n"] == 0
+
+
+def test_reference_falls_back_to_tiki_without_model():
+    ref = PriceRef(_db((0, TARGET_CAT, 100000)), PARAMS).reference(_target())
+    assert ref == {"price": 189000.0, "source": "tiki", "n": 0}
+
+
+def test_reference_falls_back_to_tiki_when_predict_fails(monkeypatch):
+    model = FakePriceModel(error=RuntimeError("boom"))
+    monkeypatch.setattr(price_suggest, "_load", lambda path: (model, -0.2, 0.2))
+    ref = PriceRef(_db((0, TARGET_CAT, 100000)), PARAMS).reference(_target())
     assert ref == {"price": 189000.0, "source": "tiki", "n": 0}
 
 
@@ -83,3 +101,31 @@ def test_index_build_sends_no_in_filter():
         db[name].find = spy
     PriceRef(db, PARAMS).reference(_target())
     assert len(seen) == 2 and all("$in" not in repr(q) for q in seen)
+
+
+def test_dirty_data_handled():
+    clear_index_cache()
+    items = [(0, TARGET_CAT, 100000)] + [(i, TARGET_CAT, 200000) for i in range(1, 9)]
+    db = _db(*items)
+    db["products"].docs.append({"_id": _oid(99), "categories": [12345]})
+    db["products"].docs.append({"_id": _oid(100), "categories": None})
+    db["product_variants"].docs.append({"retail_price": "200000"})
+    db["product_variants"].docs.append({"product_id": None, "retail_price": "200000"})
+    db["product_variants"].docs.append({"product_id": _oid(0), "retail_price": "Infinity"})
+    db["product_variants"].docs.append({"product_id": _oid(0), "retail_price": "NaN"})
+    ref = PriceRef(db, PARAMS).reference(_target())
+    assert ref["source"] == "category" and ref["n"] == 8
+
+
+def test_reference_excludes_same_shop():
+    clear_index_cache()
+    shop_a = _oid(500)
+    shop_b = _oid(501)
+    products = [{"_id": _oid(0), "shop_id": shop_a, "categories": [TARGET_CAT]}]
+    for i in range(1, 9):
+        products.append({"_id": _oid(i), "shop_id": shop_a, "categories": [TARGET_CAT]})
+    variants = [{"product_id": _oid(i), "retail_price": "200000"} for i in range(9)]
+    db = make_calculator(products=products, product_variants=variants).live_db
+    ref = PriceRef(db, PARAMS).reference(products[0])
+    assert ref["source"] != "category"
+

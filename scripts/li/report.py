@@ -110,7 +110,7 @@ def render(r, previous=None):
     m = r["model"]
     head = (f"# Báo cáo Listing Intelligence (F29 v2)\n\nSinh tự động bởi `scripts/li/evaluate.py` ngày {r['generated']}, "
             f"model `{m['model_version']}`, scikit-learn {m['sklearn']}. Mọi số liệu ở phần sinh tự động lấy nguyên từ "
-            "`docs/listing_intel_results.json`. Các khối \"viết tay\" (giữa hai dấu `manual`) được giữ nguyên khi chạy "
+            "`notes/docs-listing/09_listing_intel_ket_qua_danh_gia.json`. Các khối \"viết tay\" (giữa hai dấu `manual`) được giữ nguyên khi chạy "
             "lại; số trong đó lấy từ file kết quả hoặc từ audit được nêu tên.")
     sections = [
         head, "## 1. Tóm tắt", summary(r), "## 2. Dữ liệu", data_section(r["data"]),

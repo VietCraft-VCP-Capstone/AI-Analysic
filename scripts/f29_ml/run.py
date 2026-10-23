@@ -111,8 +111,8 @@ def main():
         "importance": dict(sorted(zip(cols, perm.importances_mean.round(4).tolist()), key=lambda kv: -kv[1])),
     }
     _deploy(deploy, fitted[deploy], fit_on, results)
-    (ROOT / "docs" / "f29_ml_results.json").write_text(json.dumps(results, ensure_ascii=False, indent=1))
-    (ROOT / "docs" / "F29_ML_RESULTS.md").write_text(report.render(results))
+    (ROOT.parent / "notes" / "docs-listing" / "05_ket_qua_model_kha_nang_ra_don.json").write_text(json.dumps(results, ensure_ascii=False, indent=1))
+    (ROOT.parent / "notes" / "docs-listing" / "05_KET_QUA_MODEL_KHA_NANG_RA_DON.md").write_text(report.render(results))
     print(report.render(results))
 
 

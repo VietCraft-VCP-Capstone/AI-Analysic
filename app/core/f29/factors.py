@@ -1,9 +1,10 @@
-KEYS = ("image", "description", "tags", "review", "price")
+KEYS = ("image", "description", "tags", "material", "review", "price")
 
 LABELS = {
     "image": "Số ảnh",
     "description": "Độ dài mô tả",
     "tags": "Số tag",
+    "material": "Chất liệu",
     "review": "Tỉ lệ đánh giá tốt",
     "price": "Cạnh tranh giá",
 }

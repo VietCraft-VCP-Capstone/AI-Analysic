@@ -14,8 +14,8 @@ from scripts.li.availability import impute_check
 from scripts.li.select_features import OUT as SELECTION
 from scripts.li.train import MODEL_DIR, ROOT, finite, load_table
 
-RESULTS = ROOT / "docs" / "listing_intel_results.json"
-REPORT = ROOT / "docs" / "LISTING_INTEL_REPORT.md"
+RESULTS = ROOT.parent / "notes" / "docs-listing" / "09_listing_intel_ket_qua_danh_gia.json"
+REPORT = ROOT.parent / "notes" / "docs-listing" / "09_LISTING_INTEL_KET_QUA_DANH_GIA.md"
 META_KEYS = ["model_version", "sklearn", "onnx_model", "features", "axis_features", "groups", "thresholds",
              "trained_on", "train_data", "trend_keywords", "feature_availability", "image_impute",
              "image_impute_rule", "feature_constants", "metrics", "baselines", "best_baseline", "beats_best_baseline",

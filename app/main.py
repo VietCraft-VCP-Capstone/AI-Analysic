@@ -79,6 +79,13 @@ async def lifespan(app: FastAPI):
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
 
     try:
+        from app.core.f29.price_suggest import MODEL_PATH, _load
+        _load(MODEL_PATH)
+        ra("  [OK] F29 price model: da nap san vao bo nho (warm-up).")
+    except Exception as e:
+        ra(f"  [!] F29 price model khong warm-up duoc: {type(e).__name__}: {e}")
+
+    try:
         from app.core.f29_scheduler import start_scheduler
         start_scheduler()
         ra("  [OK] F29 scheduler: da bat (quet doi moi 60s + quet toan san 0h UTC).")

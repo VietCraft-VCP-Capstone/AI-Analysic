@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_DIR = Path(__file__).resolve().parents[4] / "olist"
+DEFAULT_DIR = Path(os.environ.get("F29_OLIST_DIR") or Path(__file__).resolve().parents[3] / "ai-data-train-prod" / "olist")
 START, END = pd.Timestamp("2017-01-01"), pd.Timestamp("2018-09-01")
 DROP_STATUS = ["canceled", "unavailable"]
 PRODUCT_COLS = {

@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "app" / "collectors"))
 import collect_trends as ct
 
 KEYWORDS = ROOT / "app" / "core" / "listing_intel" / "data" / "trend_keywords.json"
-OUT = Path(os.environ.get("LI_DATA_DIR", ROOT.parents[1] / "data-li")) / "clean"
+OUT = Path(os.environ.get("LI_DATA_DIR", ROOT.parent / "ai-data-train-prod" / "data-li")) / "clean"
 BUDGET = 20 * 60
 STALE = timedelta(days=7)
 MISSING = "trend_missing.json"

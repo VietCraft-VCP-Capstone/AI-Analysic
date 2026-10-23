@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 DATA_DIR = Path(
-    os.environ.get("LI_DATA_DIR") or Path(__file__).resolve().parents[4] / "data-li"
+    os.environ.get("LI_DATA_DIR") or Path(__file__).resolve().parents[3] / "ai-data-train-prod" / "data-li"
 )
 
 

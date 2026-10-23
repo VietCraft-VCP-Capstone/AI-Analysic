@@ -1,3 +1,4 @@
+import math
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -29,7 +30,10 @@ def to_float(value: Any) -> Optional[float]:
     if value is None:
         return None
     try:
-        return float(str(value))
+        val = float(str(value))
+        if not math.isfinite(val):
+            return None
+        return val
     except (TypeError, ValueError):
         return None
 
@@ -96,20 +100,49 @@ def content_axis_score(components: Dict[str, float]) -> Optional[float]:
     return min(100.0, max(0.0, sum(components.values()) / len(components)))
 
 
+def _text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _images(raw: Any) -> List[Any]:
+    if isinstance(raw, str):
+        return [raw] if raw.strip() else []
+    return raw if isinstance(raw, list) else []
+
+
+def normalize_image(img: Any) -> str:
+    if not img:
+        return ""
+    if isinstance(img, dict):
+        url = str(img.get("url") or img.get("src") or img.get("secure_url") or "").strip()
+    else:
+        url = str(img).strip()
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(url)
+        if p.scheme and p.netloc:
+            return f"{p.netloc.lower()}{p.path.rstrip('/')}"
+    except Exception:
+        pass
+    return url
+
+
 def content_score(
     product: Dict[str, Any], pending_tag_ids: FrozenSet = frozenset()
 ) -> Tuple[Optional[float], List[Dict[str, str]]]:
     hints: List[Dict[str, str]] = []
-    images = product.get("images") or []
-    description = (product.get("description") or "").strip()
-    title = (product.get("title") or "").strip()
+    images = _images(product.get("images"))
+    description = _text(product.get("description"))
+    title = _text(product.get("title"))
 
     if len(title) < MIN_TITLE_LENGTH or len(title) > MAX_TITLE_LENGTH:
         hints.append({"field": "title", "message":
                       f"Tên sản phẩm dài {len(title)} ký tự, nên trong khoảng {MIN_TITLE_LENGTH}-{MAX_TITLE_LENGTH} ký tự"})
     if description and description.lower() == title.lower():
         hints.append({"field": "description", "message": "Mô tả đang trùng với tên sản phẩm, nên viết riêng"})
-    if len({hashlib.md5(str(img).encode()).hexdigest() for img in images}) < len(images):
+    if len({normalize_image(img) for img in images if normalize_image(img)}) < len([img for img in images if img]):
         hints.append({"field": "images", "message": "Có ảnh bị trùng, nên thay bằng ảnh góc khác"})
 
     n_tags = count_approved_tags(product, pending_tag_ids)
@@ -176,6 +209,7 @@ def inputs_hash(product: Dict[str, Any], variants: List[Dict[str, Any]], n_revie
             "title": product.get("title"),
             "description": product.get("description"),
             "tags": product.get("tags"),
+            "materials": product.get("materials"),
             "images": product.get("images"),
             "categories": product.get("categories"),
             "category_ids": [str(c) for c in (product.get("category_ids") or [])],

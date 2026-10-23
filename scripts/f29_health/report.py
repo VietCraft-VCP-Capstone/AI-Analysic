@@ -2,130 +2,94 @@ from pathlib import Path
 
 from app.core.f29.factors import KEYS, LABELS
 from scripts.f29_health.candidates import BOOST, LEARNED, RECENCY
-from scripts.f29_health.learn import FLOOR
+from scripts.f29_health.report_evidence import (
+    markets_lines, material_lines, num, per100, ranges_lines, roles_lines, tiki_lines, tldr_lines,
+)
+from scripts.f29_health.report_price import price_lines
 
-
-def _n(x):
-    return f"{x:.3f}".replace(".", ",")
-
-
-def _ci(ci):
-    return f"[{_n(ci[0])}; {_n(ci[1])}]"
-
-
-def _tied(ci):
-    return ci[0] <= 0 <= ci[1]
-
-
-def _verdict(ci):
-    if ci[0] > 0:
-        return "học tốt hơn, có ý nghĩa"
-    if ci[1] < 0:
-        return "học kém hơn, có ý nghĩa"
-    return "khoảng chứa 0, chưa đủ chứng cứ là khác nhau"
-
-
-def _cell(metrics, name):
-    m = metrics.get(name)
-    return "—" if m is None else f"{_n(m['roc_auc'])} {_ci(m['auc_ci95'])}"
+CASE = "## Case study VietCraft"
 
 
 def _method(p):
-    w, c, t, r, d = p["weights"], p["coefficients"], p["targets"], p["rows"], p["dates"]
+    w, c, t = p["weights"], p["coefficients"], p["targets"]
     rev = p["review"]
     return [
-        "# Điểm sức khoẻ sản phẩm v2 (health-2.0)",
-        "",
-        f"Tạo lúc {p['created_at']}. Trọng số lưu ở `app/core/f29/health_weights.json`.",
-        "",
-        "## 1. Dữ liệu dùng",
-        f"- Học: Olist (sàn ở Brazil), 4 mốc {', '.join(p['trained_on']['cutoffs'])}, {r['olist_train']} dòng sản phẩm.",
-        f"- Kiểm tra: Olist mốc {d['val']}, {r['olist_val']} dòng. Olist mốc {d['test']}, {r['olist_test']} dòng.",
-        f"- Đề thi cuối: Tiki 2023 (tập test), {r['tiki_test']} sản phẩm. Model chưa thấy đề này khi học.",
-        "- Nhãn cần đoán: sản phẩm có nằm trong top 25% bán chạy của cùng nhóm hàng trong 90 ngày sau mốc.",
-        "- Olist không có tag, Tiki không có đánh giá, nên mỗi bên chấm ít yếu tố hơn.",
-        "",
-        "## 2. Công thức 5 yếu tố",
+        "## 2. Công thức 6 yếu tố",
         "Mỗi yếu tố cho điểm con từ 0 đến 100. Điểm sức khoẻ = tổng của (trọng số % × điểm con ÷ 100).",
         "",
-        f"- Số ảnh: số ảnh ÷ {t['image']}, tối đa 100.",
-        f"- Độ dài mô tả: số ký tự ÷ {t['description']}, tối đa 100.",
+        f"- Số ảnh: số ảnh ÷ {t['image']}, tối đa 100. Số {t['image']} là trung vị số ảnh của sản phẩm bán chạy trên Tiki.",
+        f"- Độ dài mô tả: số ký tự ÷ {t['description']}, tối đa 100. Số {t['description']} là trung vị (làm tròn đến 10) của sản phẩm bán chạy trên Olist.",
         f"- Số tag đã duyệt: số tag ÷ {t['tags']}, tối đa 100.",
-        f"- Tỉ lệ đánh giá tốt: (số đánh giá từ 4 sao + {rev['m']} × {_n(rev['p0'])}) ÷ (số đánh giá + {rev['m']}) × 100. "
-        f"Không có đánh giá thì 0. {_n(rev['p0'])} là tỉ lệ đánh giá từ 4 sao của cả sàn, học từ Olist.",
-        "- Cạnh tranh giá: giá ÷ giá tham chiếu. Giá tham chiếu là trung vị giá cùng danh mục (không tính chính nó, cần ≥ 8 sản phẩm khác), "
-        "rồi đến cùng nhóm, rồi đến trung vị Tiki theo nhóm. Giá ≤ 1 lần được 100, giá ≥ 2 lần được 0, ở giữa giảm dần.",
+        "- Chất liệu: có ô Chất liệu hoặc tên/mô tả nêu một từ chất liệu thì 100, không thì 0. Theo chính sách, không học từ dữ liệu.",
+        f"- Tỉ lệ đánh giá tốt: (số đánh giá từ 4 sao + {rev['m']} × {num(rev['p0'], 3)}) ÷ (số đánh giá + {rev['m']}) × 100. "
+        "Không có đánh giá thì 0. Khi chạy thật, p0 là tỉ lệ đánh giá 4–5 sao của chính VietCraft (chỉ đơn thật) tại lúc chấm; "
+        f"{num(rev['p0'], 3)} là giá trị học từ Olist, chỉ để lưu vết.",
+        "- Cạnh tranh giá: giá ÷ giá tham chiếu. Giá tham chiếu lấy theo thứ tự: trung vị giá cùng danh mục trên VietCraft "
+        "→ cùng nhóm hàng trên VietCraft (mỗi bậc cần ≥ 8 sản phẩm khác, không tính chính sản phẩm và không tính các sản phẩm khác của cùng shop) "
+        "→ giá giữa do mô hình gợi ý giá đoán từ tên sản phẩm → trung vị Tiki theo nhóm. "
+        "Lúc học trên Olist chỉ loại chính sản phẩm (Olist không có nhóm như VietCraft). "
+        "Giá ≤ 1 lần được 100, giá ≥ 2 lần được 0, ở giữa giảm dần.",
         "",
-        "## 3. Trọng số và hệ số gốc",
         "| Yếu tố | Trọng số (%) | Hệ số học từ Olist |",
         "|---|---|---|",
-        *[f"| {LABELS[k]} | {w[k]} | {_n(c[k]) if k in c else 'cố định (chính sách)'} |" for k in KEYS],
+        *[f"| {LABELS[k]} | {w[k]} | {num(c[k], 3) if k in c else 'cố định (chính sách)'} |" for k in KEYS],
         "",
         "Hệ số càng lớn, yếu tố đó càng gắn với việc bán chạy trong dữ liệu Olist, nên được nhiều điểm hơn.",
     ]
 
 
-def _results(p):
-    m, g = p["metrics"], p["gate"]
-    names = list(dict.fromkeys(n for split in m.values() for n in split))
-    lines = [
-        "## 4. Bảng AUC (đo khả năng xếp hàng bán chạy lên trước)",
-        "AUC: 0,5 là đoán bừa, 1,0 là xếp đúng hết. Khoảng trong ngoặc vuông là khoảng tin cậy 95%.",
-        "",
-        "| Phương án | Olist kiểm tra | Olist thử | Tiki (đề thi) |",
-        "|---|---|---|---|",
-        *[f"| {n} | {_cell(m['olist_val'], n)} | {_cell(m['olist_test'], n)} | {_cell(m['tiki_test'], n)} |" for n in names],
-        "",
-        "## 5. Kết quả cổng đạt",
-        f"- Học trừ chia đều, trên Tiki: khoảng {_ci(g['vs_equal_ci'])}, {_verdict(g['vs_equal_ci'])}.",
-        f"- Học trừ health-1.0, trên Tiki: khoảng {_ci(g['vs_v1_ci'])}, {_verdict(g['vs_v1_ci'])}.",
-        f"- Kết quả: {'ĐẠT' if g['passed'] else 'KHÔNG ĐẠT'}. Cổng là kiểm định không thua: đạt khi cận trên của cả hai khoảng ≥ 0.",
-    ]
-    if _tied(g["vs_equal_ci"]):
-        lines.append("- Học và chia đều ngang nhau về thống kê. Giữ trọng số học được vì nó đến từ dữ liệu và cho thứ tự yếu tố "
-                     "có cơ sở, không phải vì dự đoán tốt hơn chia đều.")
-    else:
-        lines.append("- Học và chia đều khác nhau có ý nghĩa thống kê, xem khoảng ở trên.")
-    return lines
-
-
 def _limits(p):
-    m, w, c, r = p["metrics"], p["weights"], p["coefficients"], p["rows"]
-    o_learned = m["olist_test"][LEARNED]["roc_auc"]
-    t_learned = m["tiki_test"][LEARNED]["roc_auc"]
-    t_desc = m["tiki_test"]["Chỉ độ dài mô tả"]["roc_auc"]
+    m, w = p["metrics"], p["weights"]
+    t_learned = per100(m["tiki_test"][LEARNED]["roc_auc"])
+    t_desc = per100(m["tiki_test"]["Chỉ độ dài mô tả"]["roc_auc"])
     desc_note = ("riêng độ dài mô tả nhỉnh hơn toàn bộ điểm tổng hợp" if t_desc > t_learned
                  else "riêng độ dài mô tả không nhỉnh hơn điểm tổng hợp")
-    review_note = f"{w['review']}% (mức sàn)" if w["review"] == FLOOR else f"{w['review']}%"
     return [
-        "## 6. Giới hạn",
-        f"- Yếu tố nội dung và giá dự đoán yếu: AUC của điểm học được trên Olist thử là {_n(o_learned)}. "
-        "Đây là điểm chất lượng tin đăng, không phải dự báo doanh số.",
-        f"- Lịch sử bán mạnh hơn: 'Đơn gần nhất' đạt AUC {_n(m['olist_test'][RECENCY]['roc_auc'])} trên Olist thử. "
+        "## 8. Giới hạn",
+        f"- Điểm đo chất lượng tin đăng, không dự báo doanh số. "
+        f"Trên Olist thử, điểm học được đúng {per100(m['olist_test'][LEARNED]['roc_auc'])}/100 cặp.",
+        f"- Lịch sử bán mạnh hơn: 'Đơn gần nhất' đúng {per100(m['olist_test'][RECENCY]['roc_auc'])}/100 cặp trên Olist thử. "
         "Chỉ để so sánh, không dùng để chấm điểm.",
-        f"- Trên Tiki, điểm học được đạt AUC {_n(t_learned)}, còn chỉ độ dài mô tả đạt {_n(t_desc)}: {desc_note}.",
-        "- Tập học Olist chỉ gồm sản phẩm có bán trong 180 ngày trước mốc. Sản phẩm không bán không có trong tập học, "
-        "còn production chấm mọi tin đăng.",
-        "- Giá Olist là trung vị giá bán thực tế (giá trong đơn) của 180 ngày trước mốc, không phải giá niêm yết. "
-        "Production dùng trung vị giá niêm yết của các biến thể đang bật.",
-        "- Khi học, giá tham chiếu chỉ có tầng danh mục rồi đến cả mốc (Olist không có nhóm và tầng Tiki như production). "
-        "Điểm giá khi áp lên VietCraft có thể lệch vì khác biệt này.",
-        f"- HistGB trên Olist (học trên tập Olist train, 4 điểm con) đạt AUC {_n(m['olist_test'][BOOST]['roc_auc'])} trên Olist thử, "
-        f"so với {_n(o_learned)} của trọng số học được. Phương án này chỉ để tham chiếu.",
-        f"- HistGB trên Tiki học trên tập Tiki train ({r['tiki_train']} dòng), với 3 điểm con ảnh, mô tả, giá, nhãn top25, "
-        "tham số models.boosting (tốc độ học 0,05, tối đa 500 vòng, random_state 42). Trọng số học được chưa thấy dữ liệu Tiki, "
-        f"nên AUC {_n(m['tiki_test'][BOOST]['roc_auc'])} của HistGB trên Tiki và {_n(t_learned)} của trọng số không cùng điều kiện.",
-        "- Mô tả Tiki bị cắt khoảng 200 ký tự, nên yếu tố mô tả trên Tiki bị giới hạn. Mốc 570 lấy từ Olist.",
-        f"- Trọng số giá lớn ({w['price']}%). Giá được đo bằng tỉ lệ so với giá tham chiếu, nên không phụ thuộc đơn vị tiền tệ.",
-        f"- Yếu tố đánh giá nhận {review_note}, hệ số học từ Olist {_n(c['review'])}.",
+        f"- Trên Tiki, điểm học được đúng {t_learned}/100 cặp, còn riêng độ dài mô tả {t_desc}/100: {desc_note}. "
+        "Mô tả Tiki bị cắt khoảng 200 ký tự, nên yếu tố mô tả bị giới hạn trên Tiki.",
+        "- Tập học Olist chỉ gồm sản phẩm có bán trong 180 ngày trước mốc. Giá Olist là giá bán thực tế, không phải giá niêm yết.",
+        "- Khi học, giá tham chiếu chỉ tính theo danh mục, rồi theo cả mốc thời gian (Olist không có nhóm nhỏ như trên VietCraft). "
+        "Điểm giá trên VietCraft có thể lệch vì khác biệt này.",
+        f"- HistGB (mô hình máy học phức tạp hơn, chỉ để so sánh): đúng {per100(m['olist_test'][BOOST]['roc_auc'])}/100 cặp trên Olist thử "
+        f"và {per100(m['tiki_test'][BOOST]['roc_auc'])}/100 trên Tiki. Trọng số học được: "
+        f"{per100(m['olist_test'][LEARNED]['roc_auc'])}/100 và {t_learned}/100.",
+        f"- Giá có trọng số lớn nhất ({w['price']}%). Giá đo bằng tỉ lệ với giá tham chiếu, nên không phụ thuộc đơn vị tiền tệ.",
         "- Cổng đạt là tiêu chuẩn tối thiểu. Trước khi dùng cho sản phẩm thật, cần kiểm tra thêm trên dữ liệu VietCraft.",
+        "",
+        "### Giới hạn Shopee",
+        "- Nhãn 'bán chạy' trên Shopee dùng số đánh giá thay cho doanh số, vì Shopee không công bố (định nghĩa ở Tóm tắt).",
+        "- Bỏ các sản phẩm Shopee không có mã danh mục (không xếp hạng được trong danh mục): 1.025 trên 30.000 dòng.",
+        "- Dữ liệu là thị trường Đài Loan, không phải Việt Nam.",
+        "- Nguồn: Rebrowser, giấy phép CC-BY-NC. Chỉ dùng để thi, không dùng để học trọng số.",
     ]
 
 
-def _lines(p):
-    return _method(p) + [""] + _results(p) + [""] + _limits(p)
+def _text(p):
+    head = ["# Điểm sức khoẻ sản phẩm v2 (health-2.1)",
+            f"Tạo lúc {p['created_at']}. Trọng số lưu ở `app/core/f29/health_weights.json`."]
+    parts = [head, tldr_lines(p), roles_lines(p), _method(p), markets_lines(p), ranges_lines(p),
+             tiki_lines(p), material_lines(p), price_lines(), _limits(p)]
+    return "\n\n".join("\n".join(part) for part in parts if part) + "\n"
+
+
+def _case_study(path):
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8")
+    start = text.find(CASE)
+    if start < 0:
+        return ""
+    stop = text.find("\n## ", start + 1)
+    return text[start:stop if stop >= 0 else len(text)].strip()
 
 
 def write(path, payload):
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text("\n".join(_lines(payload)) + "\n", encoding="utf-8")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    case = _case_study(path)
+    path.write_text(_text(payload) + (f"\n{case}\n" if case else ""), encoding="utf-8")

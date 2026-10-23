@@ -20,7 +20,7 @@ from app.core.f29.preview import preview_health
 
 router = APIRouter()
 NO_SHOP = "Cần cấu hình gian hàng trước khi xem sức khoẻ listing"
-NO_WEIGHTS = "Chưa có trọng số điểm sức khoẻ, cần chạy huấn luyện"
+NO_WEIGHTS = "Điểm sức khoẻ đang được cập nhật, vui lòng thử lại sau."
 
 
 def _kiem_quyen_listing(id: str, shop_id: str) -> None:
@@ -31,7 +31,11 @@ def _kiem_quyen_listing(id: str, shop_id: str) -> None:
     product = db_live()["products"].find_one({"_id": product_id}, {"_id": 1, "shop_id": 1})
     if not product:
         not_found("listing")
-    if product.get("shop_id") != ObjectId(shop_id):
+    try:
+        shop_oid = ObjectId(shop_id)
+    except Exception:
+        forbidden()
+    if product.get("shop_id") != shop_oid:
         forbidden()
 
 
@@ -50,7 +54,11 @@ def health_score(id: str, shop_id: str = CurrentShop):
 
     _kiem_quyen_listing(id, shop_id)
 
-    result = HealthScoreCalculator().calculate(id)
+    try:
+        result = HealthScoreCalculator().calculate(id)
+    except Exception as e:
+        print(f"[f29_health] {type(e).__name__}: {e}", flush=True)
+        return insufficient("Hệ thống chưa thể tính điểm cho sản phẩm này, vui lòng thử lại sau.", build_meta(**meta_args))
     if result is None:
         not_found("listing")
     if "error" in result:
@@ -68,7 +76,11 @@ def health_preview(id: str, body: HealthPreviewBody, shop_id: str = CurrentShop)
 
     _kiem_quyen_listing(id, shop_id)
 
-    result = preview_health(HealthScoreCalculator(), id, body.model_dump())
+    try:
+        result = preview_health(HealthScoreCalculator(), id, body.model_dump())
+    except Exception as e:
+        print(f"[f29_health] {type(e).__name__}: {e}", flush=True)
+        return insufficient("Hệ thống chưa thể tính điểm xem trước, vui lòng thử lại sau.", build_meta(**meta_args))
     if result is None:
         return insufficient("Không đủ dữ liệu để chấm điểm sản phẩm này", build_meta(**meta_args))
     if "error" in result:

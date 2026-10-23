@@ -51,7 +51,7 @@ class TestCalculateIntegration:
         assert result["axes_missing"] == ["review"]
         assert [r["key"] for r in result["breakdown"]] == list(KEYS)
         assert result["basis"]["weights"] == weights.load()["weights"]
-        assert result["model_version"] == "health-2.0"
+        assert result["model_version"] == "health-2.1"
         assert result["content_hash"] and result["inputs_hash"]
 
     def test_missing_review_scores_zero(self):
@@ -81,15 +81,29 @@ class TestCalculateIntegration:
                                orders=[{"_id": ORDER}], reviews=reviews)
         assert calc.calculate(PRODUCT_ID)["axes"]["review"] == pytest.approx(64.3, abs=0.05)
 
-    def test_no_active_variant_price_is_missing(self):
+    def test_no_active_variant_price_is_missing(self, fake_price_model):
         product = with_id(base_product())
         variants = _priced(product, [{"is_active": False, "retail_price": "150000", "base_cost": "80000"}])
         calc = make_calculator(products=[product], product_variants=variants)
         result = calc.calculate(PRODUCT_ID)
         assert result["axes"]["price"] == 0.0
         assert "price" in result["axes_missing"]
-        assert any(t["field"] == "price" and t["message"] == "Chưa có giá bán cho biến thể nào"
-                   for t in result["todos"])
+        msg = "Chưa có giá bán cho biến thể nào · Tham khảo giá sản phẩm tương tự: 82.000đ–122.000đ"
+        assert any(t["field"] == "price" and t["message"] == msg for t in result["todos"])
+
+    def test_price_row_has_suggestion(self, fake_price_model):
+        product = with_id(base_product())
+        calc = make_calculator(products=[product], product_variants=_priced(product))
+        price = next(r for r in calc.calculate(PRODUCT_ID)["breakdown"] if r["key"] == "price")
+        assert price["suggestion"] == {"low": 82000.0, "mid": 100000.0, "high": 122000.0}
+
+    def test_high_price_todo_mentions_reference(self, fake_price_model):
+        product = with_id(base_product())
+        variants = _priced(product, [{"is_active": True, "retail_price": "400000", "base_cost": "80000"}])
+        result = make_calculator(products=[product], product_variants=variants).calculate(PRODUCT_ID)
+        msg = next(t["message"] for t in result["todos"] if t["field"] == "price")
+        assert msg == ("Giá cao hơn 300% so với mức giữa cho sản phẩm tương tự (100.000đ) "
+                       "· Tham khảo giá sản phẩm tương tự: 82.000đ–122.000đ")
 
     def test_deterministic(self):
         product = with_id(base_product())
@@ -118,7 +132,7 @@ class TestSaveIdempotency:
             "axes_missing": ["review", "price"],
             "todos": [],
             "computed_at": NOW.isoformat().replace("+00:00", "Z"),
-            "model_version": "health-2.0",
+            "model_version": "health-2.1",
             "content_hash": "abc123",
             "inputs_hash": "def456",
         }

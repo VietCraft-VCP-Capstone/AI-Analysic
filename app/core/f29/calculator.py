@@ -1,17 +1,22 @@
+import hashlib
 from datetime import datetime, timezone
 from statistics import median
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from pymongo import MongoClient
 
 from app.api.v1._live import LOC_SP_THAT, db_live
 from app.config import settings
-from app.core.f29 import basis, breakdown, factors, review_stats, scoring, weights
+from app.core.f29 import basis, breakdown, factors, material, review_stats, scoring, weights
 from app.core.f29.constants import MODEL_VERSION
 from app.core.f29.factors import KEYS
-from app.core.f29.price_ref import PriceRef, product_price
+from app.core.f29.price_ref import PriceRef, product_group, product_price
+from app.core.f29.price_suggest import suggest
 from app.core.f29.todos import build_todos, build_warnings, content_peer_stats
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 
 def _parse_iso(value: str) -> datetime:
@@ -69,30 +74,44 @@ class HealthScoreCalculator:
         t, pc = cfg["targets"], cfg["price"]
         pending = self.pending_tag_ids()
         n_good, n_reviews = reviews
-        n_images = len(product.get("images") or [])
-        desc_len = len((product.get("description") or "").strip())
+        raw_imgs = product.get("images")
+        if isinstance(raw_imgs, str) and raw_imgs.strip():
+            imgs = [raw_imgs]
+        elif isinstance(raw_imgs, list):
+            imgs = raw_imgs
+        else:
+            imgs = []
+        unique_imgs = {scoring.normalize_image(img) for img in imgs if scoring.normalize_image(img)}
+        n_images = len(unique_imgs)
+        raw_desc = product.get("description")
+        desc_len = len(raw_desc.strip()) if isinstance(raw_desc, str) else 0
         n_tags = scoring.count_approved_tags(product, pending)
         price = product_price(variants)
+        has_mat = material.has_material(product)
         ref = self._reference(product, pc)
         img_peers, desc_peers, tag_peers, _ = self._peer_stats(scoring.category_key(product))
+        p0 = review_stats.platform_p0(self.live_db)
+        m = float(cfg["review"]["m"])
 
         values = {"image": n_images, "description": desc_len, "tags": n_tags,
-                  "review": n_reviews, "price": price}
+                  "material": int(has_mat), "review": n_reviews, "price": price}
         targets = {"image": t["image"], "description": t["description"], "tags": t["tags"],
-                   "review": None, "price": ref["price"] * pc["full_at"]}
+                   "material": 1, "review": None, "price": ref["price"] * pc["full_at"]}
         peers = {"image": _median(img_peers), "description": _median(desc_peers),
-                 "tags": _median(tag_peers), "review": None, "price": ref["price"]}
+                 "tags": _median(tag_peers), "material": None, "review": None, "price": ref["price"]}
         subs = {
             "image": factors.ratio_score(float(n_images), float(t["image"])),
             "description": factors.ratio_score(float(desc_len), float(t["description"])),
             "tags": factors.ratio_score(float(n_tags), float(t["tags"])),
-            "review": factors.review_score(n_good, n_reviews, review_stats.platform_p0(self.live_db),
-                                           float(cfg["review"]["m"])),
+            "material": 100.0 if has_mat else 0.0,
+            "review": factors.review_score(n_good, n_reviews, p0, m),
             "price": factors.price_score(price, ref["price"], float(pc["full_at"]), float(pc["zero_at"])),
         }
-        missing = {k for k in KEYS if not values[k]} | ({"price"} if ref["price"] is None else set())
+        missing = {k for k in KEYS if not values[k]}
         extra = {"tags": {"pending": scoring.count_pending_tags(product, pending)},
-                 "review": {"n_good": n_good}, "price": {"reference": ref}}
+                 "review": {"n_good": n_good, "p0": p0, "m": m},
+                 "price": {"reference": ref,
+                           "suggestion": suggest(product.get("title") or "", product_group(product))}}
         return breakdown.build(subs, values, targets, peers, missing, cfg["weights"], extra)
 
     def calculate(self, product_id: str) -> Optional[Dict[str, Any]]:
@@ -109,7 +128,8 @@ class HealthScoreCalculator:
         if not product:
             return None
 
-        now = datetime.now(timezone.utc)
+        now_utc = datetime.now(timezone.utc)
+        now_vn = datetime.now(VN_TZ)
         variants = list(self.live_db["product_variants"].find(
             {"product_id": product_oid},
             {"is_active": 1, "stock_quantity": 1, "retail_price": 1, "base_cost": 1},
@@ -119,11 +139,13 @@ class HealthScoreCalculator:
         infos = [{"type": "info", "field": h["field"], "message": h["message"], "current_value": None,
                   "target": None, "impact": 0} for h in self._get_content_score(product)[1]]
 
+        raw_imgs = product.get("images")
+        thumb = raw_imgs[0] if isinstance(raw_imgs, list) and raw_imgs else (raw_imgs if isinstance(raw_imgs, str) else None)
         return {
             "product_id": product_id,
             "title": product.get("title") or "",
-            "thumbnail": (product.get("images") or [None])[0],
-            "date": now.date().isoformat(),
+            "thumbnail": thumb,
+            "date": now_vn.date().isoformat(),
             "score": score,
             "status": self._get_status_from_score(score),
             "axes": {r["key"]: r["sub_score"] for r in rows},
@@ -131,7 +153,7 @@ class HealthScoreCalculator:
             "breakdown": rows,
             "todos": build_todos(rows),
             "warnings": self._get_warnings(product, variants) + infos,
-            "computed_at": now.isoformat().replace("+00:00", "Z"),
+            "computed_at": now_utc.isoformat().replace("+00:00", "Z"),
             "model_version": MODEL_VERSION,
             "content_hash": scoring.content_hash(product),
             "inputs_hash": self._compute_inputs_hash(product, variants, n_reviews),

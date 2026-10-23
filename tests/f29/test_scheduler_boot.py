@@ -28,14 +28,14 @@ def test_needs_full_rescan_when_latest_is_v1():
 
 
 def test_no_rescan_when_latest_is_v2():
-    assert f29_scheduler.needs_full_rescan(_db(_doc("health-1.0", OLD), _doc("health-2.0", NEW))) is False
+    assert f29_scheduler.needs_full_rescan(_db(_doc("health-1.0", OLD), _doc("health-2.1", NEW))) is False
 
 
 def test_recalculate_skips_error_result(monkeypatch):
     saved = []
     monkeypatch.setattr(HealthScoreCalculator, "calculate", lambda self, pid: {"error": "no_weights"})
     monkeypatch.setattr(HealthScoreCalculator, "save", lambda self, result: saved.append(result))
-    assert f29_scheduler._recalculate_and_save([PRODUCT_ID], make_calculator()) == (0, True)
+    assert f29_scheduler._recalculate_and_save([PRODUCT_ID], make_calculator()) == (0, True, [])
     assert saved == []
 
 

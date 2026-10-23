@@ -11,7 +11,7 @@ SAMPLE = {
     "product_id": PRODUCT_ID, "score": 71.5, "status": "needs_improvement",
     "axes": {"image": 83.3, "description": 45.6, "tags": 100.0, "review": 0.0, "price": 42.1},
     "axes_missing": ["review"], "breakdown": [], "todos": [], "warnings": [],
-    "model_version": "health-2.0", "basis": {},
+    "model_version": "health-2.1", "basis": {},
 }
 
 
@@ -35,7 +35,7 @@ def test_returns_health_score(monkeypatch, client):
     body = _get(client).json()
     assert body["data"]["score"] == 71.5
     assert body["meta"]["status"] == "ok"
-    assert body["meta"]["model_version"] == "health-2.0"
+    assert body["meta"]["model_version"] == "health-2.1"
 
 
 def test_no_weights_returns_insufficient(monkeypatch, client):
@@ -43,7 +43,7 @@ def test_no_weights_returns_insufficient(monkeypatch, client):
     body = _get(client).json()
     assert body["data"] is None
     assert body["meta"]["status"] == "insufficient_data"
-    assert "trọng số" in body["meta"]["reason"]
+    assert body["meta"]["reason"] == "Điểm sức khoẻ đang được cập nhật, vui lòng thử lại sau."
 
 
 def test_unknown_listing_404(monkeypatch, client):

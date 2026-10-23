@@ -95,7 +95,7 @@ class TestPreviewEndpoint:
         assert r.status_code == 200
         body = r.json()
         assert body["meta"]["status"] == "ok"
-        assert body["meta"]["model_version"] == "health-2.0"
+        assert body["meta"]["model_version"] == "health-2.1"
         assert body["data"]["delta_vs_current"] > 0
 
     def test_other_shop_forbidden(self, client):

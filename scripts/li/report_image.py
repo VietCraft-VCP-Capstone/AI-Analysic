@@ -34,7 +34,7 @@ def section(rb):
         f"dừng sớm. Bộ cột: {sets}. Quy tắc chọn: {rb['rule']}.", "\n".join(head + rows),
         f"Mục tiêu ≤ 5 điểm trên validation: {'đạt' if rb['meets_target'] else '**không đạt**'}. Lệch trung vị chỉ cho biết "
         "hơn nửa số ảnh giữ nguyên điểm; cột p90 cho thấy phần đuôi vẫn lệch lớn. Toàn bộ lưới nằm trong "
-        "`data-li/features/image_robust.json` và `docs/listing_intel_results.json`. AUC ở bảng này tính trên feature "
+        "`data-li/features/image_robust.json` và `notes/docs-listing/09_listing_intel_ket_qua_danh_gia.json`. AUC ở bảng này tính trên feature "
         f"tính lại từ ảnh (lệch tối đa {rb['parity_max_abs']:.1e} so với bảng feature), nên có thể khác mục 5 (tính "
         "trên bảng feature) ở chữ số thứ ba. Lưới này và công thức ở phần sau được thiết kế trên feature tính thẳng từ "
         "ảnh thu nhỏ, chưa qua bước `as_trained` của runtime; số đo lại qua đường runtime ở cuối mục."])

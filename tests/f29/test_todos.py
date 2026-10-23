@@ -3,6 +3,7 @@ from bson import ObjectId
 
 from app.core.f29 import scoring
 from app.core.f29.constants import EFFORT
+from app.core.f29.todos import _impact, build_todos
 from tests.f29.fake_mongo import make_calculator
 from tests.f29.samples import PRODUCT_ID, base_product, with_id
 
@@ -102,3 +103,10 @@ class TestTodosFromBreakdown:
         result = self._calc(["i1.jpg"]).calculate(PRODUCT_ID)
         todo = next(t for t in result["todos"] if t["code"] == "image")
         assert todo["target"] == 6
+
+
+def test_review_impact_is_real_gain():
+    row = {"key": "review", "value": 1000, "n_good": 900, "p0": 0.8, "m": 5.0,
+           "weight": 5, "points": 4.5, "sub_score": 90.0}
+    assert _impact(row) < 0.1
+    assert all(t["code"] != "review" for t in build_todos([row]))

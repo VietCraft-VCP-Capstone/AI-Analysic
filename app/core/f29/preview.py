@@ -33,7 +33,7 @@ def preview_health(
     subs: Dict[str, float] = {}
     points: Dict[str, float] = {}
     for key in KEYS:
-        if key == "review":
+        if key in ("review", "material"):
             subs[key], points[key] = rows[key]["sub_score"], rows[key]["points"]
             continue
         sub = _sub(key, used, rows, pc)

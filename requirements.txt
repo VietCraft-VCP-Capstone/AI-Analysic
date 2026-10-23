@@ -13,7 +13,7 @@ dnspython>=2.4.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 trendspy==0.1.6
-apscheduler>=3.10.0    # F29 sec 5: quet moi phut + job dem (app/core/f29_scheduler.py)
+apscheduler>=3.10.0,<4.0.0    # F29 sec 5: quet moi phut + job dem (app/core/f29_scheduler.py)
 python-multipart>=0.0.6   # FastAPI UploadFile can package nay
 
 # --- OCR & Xu ly anh CCCD ---

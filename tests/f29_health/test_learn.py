@@ -6,8 +6,8 @@ from scripts.f29_health.learn import subscores, to_weights
 
 def test_to_weights_proportional_with_floor():
     w = to_weights({"image": 0.27, "description": 0.12, "review": -0.03, "price": 0.44})
-    assert list(w) == ["image", "description", "tags", "review", "price"]
-    assert sum(w.values()) == 100 and w["tags"] == 10 and w["review"] == 5
+    assert list(w) == ["image", "description", "tags", "material", "review", "price"]
+    assert sum(w.values()) == 100 and w["tags"] == 10 and w["material"] == 10 and w["review"] == 5
     assert w["price"] > w["image"] > w["description"] >= 5
 
 

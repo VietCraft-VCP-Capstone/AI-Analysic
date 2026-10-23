@@ -1,17 +1,22 @@
 import numpy as np
 
 from app.core.f29 import factors
+from app.core.f29.constants import MODEL_VERSION
 from app.core.f29.scoring import content_axis_score, content_component_scores
 from scripts.f29_ml import baselines, evaluate, models
+from scripts.f29_health import evidence
 from scripts.f29_ml.evaluate import delta_ci
 from scripts.li import measure
 
-LEARNED = "Học (health-2.0)"
+LEARNED = f"Học ({MODEL_VERSION})"
 EQUAL = "Chia đều"
 V1 = "health-1.0 (luật hiện tại)"
 BOOST = "HistGB trên điểm con"
 RANDOM = "Ngẫu nhiên"
 RECENCY = "Đơn gần nhất"
+MARKETS = ("olist_test", "tiki_test", "shopee_test")
+CI_MARKETS = ("tiki_test", "shopee_test")
+LIFT_MIN = 1.2
 
 
 def _linear(sub, weights):
@@ -62,8 +67,16 @@ def tiki_metrics(df, scores):
     return {n: _auc(measure.measure(df, s)) for n, s in scores.items()}
 
 
-def gate(df, scores):
-    y, groups = df["top25"].to_numpy(), measure.sellers(df)
-    vs_equal = delta_ci(y, scores[LEARNED], scores[EQUAL], groups)
-    vs_v1 = delta_ci(y, scores[LEARNED], scores[V1], groups)
-    return {"vs_equal_ci": vs_equal, "vs_v1_ci": vs_v1, "passed": vs_equal[1] >= 0 and vs_v1[1] >= 0}
+def _market(df, scores, ci):
+    y = df["top25"].to_numpy()
+    out = {"lift": evidence.lift(y, scores[LEARNED])}
+    if ci:
+        out["vs_equal_ci"] = delta_ci(y, scores[LEARNED], scores[EQUAL], measure.sellers(df))
+    return out
+
+
+def gate(sets):
+    per = {m: _market(*sets[m], m in CI_MARKETS) for m in MARKETS}
+    ci_ok = all(per[m]["vs_equal_ci"][1] >= 0 for m in CI_MARKETS)
+    lift_ok = all(per[m]["lift"] >= LIFT_MIN for m in MARKETS)
+    return {"per_market": per, "passed": ci_ok and lift_ok}

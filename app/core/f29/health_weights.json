@@ -1,11 +1,12 @@
 {
-  "model_version": "health-2.0",
+  "model_version": "health-2.1",
   "weights": {
-    "image": 28,
-    "description": 12,
+    "image": 24,
+    "description": 11,
     "tags": 10,
+    "material": 10,
     "review": 5,
-    "price": 45
+    "price": 40
   },
   "targets": {
     "image": 6,
@@ -43,7 +44,8 @@
     "olist_val": 12905,
     "olist_test": 16130,
     "tiki_train": 27693,
-    "tiki_test": 6676
+    "tiki_test": 6676,
+    "shopee_test": 4296
   },
   "dates": {
     "val": "2018-01-01",
@@ -51,11 +53,11 @@
   },
   "metrics": {
     "olist_val": {
-      "Học (health-2.0)": {
+      "Học (health-2.1)": {
         "roc_auc": 0.542,
         "auc_ci95": [
-          0.514,
-          0.57
+          0.513,
+          0.569
         ]
       },
       "Chia đều": {
@@ -123,11 +125,11 @@
       }
     },
     "olist_test": {
-      "Học (health-2.0)": {
-        "roc_auc": 0.539,
+      "Học (health-2.1)": {
+        "roc_auc": 0.538,
         "auc_ci95": [
           0.517,
-          0.564
+          0.562
         ]
       },
       "Chia đều": {
@@ -195,7 +197,7 @@
       }
     },
     "tiki_test": {
-      "Học (health-2.0)": {
+      "Học (health-2.1)": {
         "roc_auc": 0.567,
         "auc_ci95": [
           0.522,
@@ -251,18 +253,133 @@
           0.591
         ]
       }
+    },
+    "shopee_test": {
+      "Học (health-2.1)": {
+        "roc_auc": 0.576,
+        "auc_ci95": [
+          0.546,
+          0.604
+        ]
+      },
+      "Chia đều": {
+        "roc_auc": 0.569,
+        "auc_ci95": [
+          0.539,
+          0.597
+        ]
+      },
+      "health-1.0 (luật hiện tại)": {
+        "roc_auc": 0.511,
+        "auc_ci95": [
+          0.485,
+          0.537
+        ]
+      },
+      "Ngẫu nhiên": {
+        "roc_auc": 0.495,
+        "auc_ci95": [
+          0.477,
+          0.517
+        ]
+      },
+      "HistGB trên điểm con": {
+        "roc_auc": 0.649,
+        "auc_ci95": [
+          0.623,
+          0.671
+        ]
+      },
+      "Chỉ số ảnh": {
+        "roc_auc": 0.443,
+        "auc_ci95": [
+          0.42,
+          0.468
+        ]
+      },
+      "Chỉ độ dài mô tả": {
+        "roc_auc": 0.563,
+        "auc_ci95": [
+          0.54,
+          0.589
+        ]
+      },
+      "Chỉ cạnh tranh giá": {
+        "roc_auc": 0.589,
+        "auc_ci95": [
+          0.565,
+          0.616
+        ]
+      }
     }
   },
   "gate": {
-    "vs_equal_ci": [
-      -0.006,
-      0.009
-    ],
-    "vs_v1_ci": [
-      -0.005,
-      0.098
-    ],
+    "per_market": {
+      "olist_test": {
+        "lift": 1.4322398010033583
+      },
+      "tiki_test": {
+        "lift": 1.6290582578790478,
+        "vs_equal_ci": [
+          -0.006,
+          0.009
+        ]
+      },
+      "shopee_test": {
+        "lift": 1.7598986285032798,
+        "vs_equal_ci": [
+          -0.004,
+          0.016
+        ]
+      }
+    },
     "passed": true
   },
-  "created_at": "2026-10-22T05:44:51+00:00"
+  "lift": {
+    "olist_test": 1.4322398010033583,
+    "tiki_test": 1.6290582578790478,
+    "shopee_test": 1.7598986285032798
+  },
+  "ranges": {
+    "image": [
+      14,
+      35
+    ],
+    "description": [
+      5,
+      21
+    ],
+    "tags": [
+      10,
+      10
+    ],
+    "material": [
+      10,
+      10
+    ],
+    "review": [
+      5,
+      5
+    ],
+    "price": [
+      31,
+      50
+    ]
+  },
+  "tiki_check": {
+    "tiki": {
+      "image": 31,
+      "price": 69
+    },
+    "olist": {
+      "image": 40,
+      "price": 60
+    }
+  },
+  "material_rate": {
+    "share": 35.1,
+    "top25_with": 22.9,
+    "top25_without": 26.9
+  },
+  "created_at": "2026-10-22T18:10:09+00:00"
 }

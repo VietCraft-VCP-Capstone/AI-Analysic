@@ -1,4 +1,4 @@
-MODEL_VERSION = "health-2.0"
+MODEL_VERSION = "health-2.1"
 
 WEIGHTS = {
     "conversion": 0.30,
@@ -22,4 +22,4 @@ FRESHNESS_ZERO_SCORE_DAYS = 365
 
 MIN_CATEGORY_SAMPLE = 8
 
-EFFORT = {"image": 1, "tags": 1, "description": 2, "price": 2, "review": 3}
+EFFORT = {"image": 1, "tags": 1, "material": 1, "description": 2, "price": 2, "review": 3}
