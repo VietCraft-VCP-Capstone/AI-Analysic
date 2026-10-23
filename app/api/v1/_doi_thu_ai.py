@@ -31,6 +31,7 @@ Z_TANG_TOC = 3.5            # z-score bền; chọn trên Olist 2017 (báo nhầ
 TUAN_TOI_THIEU = 4
 LANG_GIENG_TAG = 10
 TOI_THIEU_SHOP_NHOM = 6
+K_NHOM_TOI_DA = 5           # máy chọn k = 2..mức này theo silhouette; đo trên Olist: giới hạn 4 hoặc 3 không làm nhóm ổn định hơn
 SILHOUETTE_RO = 0.25        # dưới mức này các nhóm chồng lên nhau, chỉ nên đọc để tham khảo
 TRON_TAG = 0.7              # lai 0,7/0,3 gợi ý lại đúng nhiều nhất trên dữ liệu thử
 
@@ -366,7 +367,7 @@ def nhom_chien_luoc(tho: Dict[str, Dict[str, Any]], phan_hoi: Dict[str, Optional
         return None, "Các shop trong danh mục gần như giống hệt nhau về giá, số mẫu và đánh giá, chưa chia nhóm được"
     Z = (X[:, dung] - X[:, dung].mean(axis=0)) / X[:, dung].std(axis=0)
     tot = None
-    for k in range(2, min(5, len(sids) - 1) + 1):
+    for k in range(2, min(K_NHOM_TOI_DA, len(sids) - 1) + 1):
         km = KMeans(n_clusters=k, n_init=10, random_state=0).fit(Z)
         if len(set(km.labels_)) < 2:
             continue
