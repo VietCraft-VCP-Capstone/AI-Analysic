@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from bson import ObjectId
 
-from app.api.v1 import _live, _live_competitor, _live_data, _live_listing, _live_overview
+from app.api.v1 import _live, _live_data, _live_listing, _live_overview
 from app.api.v1.f27_listing_timeseries import listing_timeseries
 from app.api.v1.f28_conversion import conversion
 from app.api.v1.f30_alerts import alerts
@@ -33,7 +33,7 @@ def _don(shop, pid, ngay_truoc, gia=100000.0):
 @pytest.fixture
 def db(monkeypatch):
     fake = _FakeMongoClient()["vietcraft"]
-    for mod in (_live, _live_data, _live_listing, _live_competitor, _live_overview):
+    for mod in (_live, _live_data, _live_listing, _live_overview):
         monkeypatch.setattr(mod, "db_live", lambda: fake)
     return fake
 

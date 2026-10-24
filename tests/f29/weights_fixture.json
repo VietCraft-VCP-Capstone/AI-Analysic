@@ -1,0 +1,28 @@
+{
+  "model_version": "health-2.1",
+  "weights": {"image": 27, "description": 13, "tags": 10, "material": 10, "review": 5, "price": 35},
+  "targets": {"image": 6, "description": 570, "tags": 3},
+  "review": {"m": 5, "p0": 0.8},
+  "price": {"full_at": 1.0, "zero_at": 2.0, "min_peers": 8},
+  "coefficients": {"image": 0.27, "description": 0.12, "review": 0.03, "price": 0.44},
+  "trained_on": {"source": "olist", "cutoffs": ["2017-06-01"], "rows": 1000, "label": "top25"},
+  "metrics": {
+    "olist_val": {
+      "Học (health-2.1)": {"roc_auc": 0.542, "auc_ci95": [0.513, 0.569]},
+      "Chia đều": {"roc_auc": 0.542, "auc_ci95": [0.515, 0.565]},
+      "health-1.0 (luật hiện tại)": {"roc_auc": 0.513, "auc_ci95": [0.485, 0.543]}
+    },
+    "olist_test": {
+      "Học (health-2.1)": {"roc_auc": 0.54, "auc_ci95": [0.51, 0.57]},
+      "Chia đều": {"roc_auc": 0.54, "auc_ci95": [0.51, 0.57]},
+      "health-1.0 (luật hiện tại)": {"roc_auc": 0.51, "auc_ci95": [0.48, 0.54]}
+    },
+    "tiki_test": {
+      "Học (health-2.1)": {"roc_auc": 0.567, "auc_ci95": [0.522, 0.602]},
+      "Chia đều": {"roc_auc": 0.566, "auc_ci95": [0.524, 0.599]},
+      "health-1.0 (luật hiện tại)": {"roc_auc": 0.519, "auc_ci95": [0.485, 0.557]}
+    }
+  },
+  "gate": {"vs_equal_ci": [0.0, 0.01], "vs_v1_ci": [0.0, 0.02], "passed": true},
+  "created_at": "2026-10-22T00:00:00+00:00"
+}

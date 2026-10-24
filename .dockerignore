@@ -18,3 +18,4 @@ __pycache__/
 
 # Rác tạm / log cục bộ
 preflight_out.txt
+.superpowers/

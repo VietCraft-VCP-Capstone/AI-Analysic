@@ -96,7 +96,5 @@ def _ket_qua(muc_tieu, h, diem, ss, meta):
                     "thiếu một dòng là kết quả nghiên cứu hợp lệ; điền số giả thì không."),
         },
         "limitation": ("Dự báo ở CẤP SHOP theo quyết định E20. Cấp listing KHÔNG dự báo "
-                       "được: chuỗi trung vị 41 ngày, chỉ 7,3% số ngày có bán, và "
-                       "benchmark M5 của nhóm đo được ARIMA cấp listing MASE 1,12 — "
-                       "thua cả cách ngây thơ."),
+                       "được: chuỗi trung vị 41 ngày, chỉ 7,3% số ngày có bán."),
     }, meta)

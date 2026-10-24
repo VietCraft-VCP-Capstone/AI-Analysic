@@ -61,7 +61,6 @@ AI-Analysic/
 │   ├── collectors/           # Bộ crawler Google Trends & Printify API
 │   ├── core/                 # Tầng logic lõi AI & Abstraction I/O
 │   │   ├── build_marts.py    # [JOB ĐÊM] tính sẵn 9 bảng mart cho 16 endpoint đọc
-│   │   ├── benchmark_m5.py   # Thử nghiệm mức độ gộp chuỗi M5 (Item/Group/Category)
 │   │   ├── calendar_vn.py    # Xử lý lịch Tết âm lịch & đổi trục days_to_tet
 │   │   ├── compute_baselines.py # Tính sai số mốc Naive cho 40 từ khóa Trends
 │   │   ├── init_seed_db.py   # Khởi tạo 6 collections & indexes trên MongoDB
@@ -198,7 +197,6 @@ DEV_SHOP_ID=shp_00017 uvicorn app.main:app --reload
   && .venv/bin/python app/core/writer.py \
   && .venv/bin/python app/core/calendar_vn.py \
   && .venv/bin/python app/services/stl_service.py \
-  && .venv/bin/python app/core/benchmark_m5.py \
   && .venv/bin/python app/core/compute_baselines.py \
   && .venv/bin/python app/core/verify_trends_freq.py
 

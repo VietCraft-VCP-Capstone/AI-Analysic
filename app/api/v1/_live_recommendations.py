@@ -12,6 +12,7 @@ from app.api.v1._mart import db
 from app.api.v1._template import build_meta, insufficient, ok
 from app.config import settings
 from app.api.v1.f38_seasonal import _cua_so_ra_hang  # noqa: PLC0415
+from app.core.f29.constants import MODEL_VERSION
 
 TOI_DA = 5
 TOI_DA_YEU = 3
@@ -32,7 +33,7 @@ def _f29_thap(shop_id: str, gioi_han: int = 50) -> List[Dict[str, Any]]:
         return []
 
     rows = list(db_live()["listing_health_scores"].aggregate([
-        {"$match": {"product_id": {"$in": ids}}},
+        {"$match": {"product_id": {"$in": ids}, "model_version": MODEL_VERSION}},
         {"$sort": {"date": -1}},
         {"$group": {"_id": "$product_id", "score": {"$first": "$score"},
                     "status": {"$first": "$status"}, "todos": {"$first": "$todos"}}},
@@ -75,7 +76,7 @@ def _tag_nong(gioi_han: int = 5) -> List[Dict[str, Any]]:
 
 
 def recommendations_live(shop_id: str):
-    yeu = _f29_thap(shop_id) if db_live()["listing_health_scores"].estimated_document_count() > 0 else []
+    yeu = _f29_thap(shop_id) if db_live()["listing_health_scores"].find_one({"model_version": MODEL_VERSION}) else []
     mua_vu = _mua_vu_sap_toi()
     nong = _tag_nong()
 
