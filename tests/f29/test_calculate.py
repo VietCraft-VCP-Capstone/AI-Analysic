@@ -51,7 +51,7 @@ class TestCalculateIntegration:
         assert result["axes_missing"] == ["review"]
         assert [r["key"] for r in result["breakdown"]] == list(KEYS)
         assert result["basis"]["weights"] == weights.load()["weights"]
-        assert result["model_version"] == "health-2.1"
+        assert result["model_version"] == "health-2.2"
         assert result["content_hash"] and result["inputs_hash"]
 
     def test_missing_review_scores_zero(self):
@@ -105,6 +105,19 @@ class TestCalculateIntegration:
         assert msg == ("Giá cao hơn 300% so với mức giữa cho sản phẩm tương tự (100.000đ) "
                        "· Tham khảo giá sản phẩm tương tự: 82.000đ–122.000đ")
 
+    def test_cheap_price_todo_mentions_cheap_warning(self, fake_price_model):
+        product = with_id(base_product())
+        variants = _priced(product, [{"is_active": True, "retail_price": "50000", "base_cost": "30000"}])
+        result = make_calculator(products=[product], product_variants=variants).calculate(PRODUCT_ID)
+        msg = next(t["message"] for t in result["todos"] if t["field"] == "price")
+        assert msg == ("Giá thấp hơn mức giữa 50%, có thể đang bán rẻ quá "
+                       "· Tham khảo giá sản phẩm tương tự: 82.000đ–122.000đ")
+
+    def test_description_junk_scores_zero(self):
+        product = with_id(base_product(description="a " * 570))
+        result = make_calculator(products=[product], product_variants=_priced(product)).calculate(PRODUCT_ID)
+        assert result["axes"]["description"] == 0.0
+
     def test_deterministic(self):
         product = with_id(base_product())
         calc = make_calculator(products=[product], product_variants=_priced(product))
@@ -132,7 +145,7 @@ class TestSaveIdempotency:
             "axes_missing": ["review", "price"],
             "todos": [],
             "computed_at": NOW.isoformat().replace("+00:00", "Z"),
-            "model_version": "health-2.1",
+            "model_version": "health-2.2",
             "content_hash": "abc123",
             "inputs_hash": "def456",
         }

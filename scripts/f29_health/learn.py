@@ -34,7 +34,7 @@ def subscores(df, cols, targets, review, price):
         "image": lambda v: factors.ratio_score(v, targets["image"]),
         "description": lambda v: factors.ratio_score(v, targets["description"]),
         "review": lambda good, n: factors.review_score(good, n, review["p0"], review["m"]),
-        "price": lambda p, ref: factors.price_score(p, ref, price["full_at"], price["zero_at"]),
+        "price": lambda p, ref: factors.price_score(p, ref, price),
     }
     return pd.DataFrame(
         {k: _apply(fns[k], [df[c] for c in _values(col)]) for k, col in cols.items() if k in fns},

@@ -1,13 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from app.core.f29.scoring import (
-    bayes_shrunk_rating,
-    content_axis_score,
-    content_component_scores,
-    rating_axis_score,
-    total_score,
-)
+WEIGHTS_V1 = {"content": 0.20, "rating": 0.25}
 
 
 def _value(v):
@@ -15,10 +9,27 @@ def _value(v):
 
 
 def _health(row):
-    content = content_axis_score(content_component_scores(_value(row.photos), _value(row.description_length), None))
-    shrunk = bayes_shrunk_rating(row.review_sum, int(row.review_count), row.review_prior)
-    rating = rating_axis_score(shrunk) if shrunk is not None else None
-    return total_score({"content": content, "rating": rating})
+    photos = _value(row.photos)
+    desc = _value(row.description_length)
+    comps = {}
+    if photos is not None:
+        comps["images"] = min(100.0, max(0.0, photos / 5.0 * 100.0))
+    if desc is not None:
+        comps["description"] = min(100.0, max(0.0, desc / 150.0 * 100.0))
+    content = (sum(comps.values()) / len(comps)) if comps else None
+
+    n = int(row.review_count)
+    if n > 0:
+        shrunk = (row.review_sum + 50 * row.review_prior) / (n + 50)
+        rating = min(100.0, max(0.0, (shrunk - 1.0) / 4.0 * 100.0))
+    else:
+        rating = None
+
+    valid = {k: v for k, v in [("content", content), ("rating", rating)] if v is not None}
+    if not valid:
+        return 0.0
+    tot_w = sum(WEIGHTS_V1[k] for k in valid)
+    return round(sum(valid[k] * WEIGHTS_V1[k] / tot_w for k in valid), 1)
 
 
 def health_v1(df):

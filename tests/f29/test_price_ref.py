@@ -60,14 +60,24 @@ def test_reference_uses_model_when_few_peers(fake_price_model):
 
 def test_reference_falls_back_to_tiki_without_model():
     ref = PriceRef(_db((0, TARGET_CAT, 100000)), PARAMS).reference(_target())
-    assert ref == {"price": 189000.0, "source": "tiki", "n": 0}
+    assert ref == {"price": 189000.0, "source": "tiki", "n": 0, "kind": "std"}
 
 
 def test_reference_falls_back_to_tiki_when_predict_fails(monkeypatch):
     model = FakePriceModel(error=RuntimeError("boom"))
     monkeypatch.setattr(price_suggest, "_load", lambda path: (model, -0.2, 0.2))
     ref = PriceRef(_db((0, TARGET_CAT, 100000)), PARAMS).reference(_target())
-    assert ref == {"price": 189000.0, "source": "tiki", "n": 0}
+    assert ref == {"price": 189000.0, "source": "tiki", "n": 0, "kind": "std"}
+
+
+def test_pod_product_does_not_use_std_peers():
+    clear_index_cache()
+    items = [(0, TARGET_CAT, 100000)] + [(i, TARGET_CAT, 200000) for i in range(1, 9)]
+    db = _db(*items)
+    pod_product = {"_id": _oid(0), "categories": [TARGET_CAT], "product_type": "POD_TEMPLATE"}
+    ref = PriceRef(db, PARAMS).reference(pod_product)
+    assert ref["kind"] == "pod"
+    assert ref["source"] != "category"
 
 
 def test_reference_excludes_self():

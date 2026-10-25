@@ -55,7 +55,13 @@ def health_score(id: str, shop_id: str = CurrentShop):
     _kiem_quyen_listing(id, shop_id)
 
     try:
-        result = HealthScoreCalculator().calculate(id)
+        calc = HealthScoreCalculator()
+        result = calc.calculate(id)
+        if result and "error" not in result:
+            try:
+                calc.save(result)
+            except Exception:
+                pass
     except Exception as e:
         print(f"[f29_health] {type(e).__name__}: {e}", flush=True)
         return insufficient("Hệ thống chưa thể tính điểm cho sản phẩm này, vui lòng thử lại sau.", build_meta(**meta_args))

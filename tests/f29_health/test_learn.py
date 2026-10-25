@@ -24,11 +24,12 @@ def test_subscores_uses_factor_functions():
     })
     targets = {"image": 6, "description": 570, "tags": 3}
     cols = {"image": "photos", "description": "desc", "review": ("good", "n"), "price": ("price", "ref")}
-    out = subscores(df, cols, targets, {"p0": 0.8, "m": 5}, {"full_at": 1.0, "zero_at": 2.0})
+    price_cfg = {"low_full": 0.7, "full_at": 1.3, "zero_at": 2.0, "floor_at": 0.4}
+    out = subscores(df, cols, targets, {"p0": 0.8, "m": 5}, price_cfg)
     assert list(out.columns) == ["image", "description", "review", "price"]
     assert out.loc[0, "image"] == factors.ratio_score(3, 6)
     assert out.loc[1, "image"] == 0
     assert out.loc[0, "description"] == factors.ratio_score(300, 570)
     assert out.loc[0, "review"] == factors.review_score(2, 4, 0.8, 5)
     assert out.loc[1, "review"] == 0
-    assert out.loc[1, "price"] == factors.price_score(150.0, 100.0, 1.0, 2.0)
+    assert out.loc[1, "price"] == factors.price_score(150.0, 100.0, price_cfg)
