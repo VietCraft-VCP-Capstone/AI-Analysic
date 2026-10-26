@@ -51,10 +51,11 @@ def test_bang_endpoint_khop_voi_tai_lieu():
 
 
 def test_moi_endpoint_deu_song():
-    """Không endpoint nào được trả 404 hay 500. FE phải gọi được cả 16 ngay hôm nay."""
+    """Không endpoint nào được trả 404 (chưa gắn) hay 500. FE phải gọi được cả 16 ngay hôm nay."""
     for ep in ENDPOINTS:
         r = _goi(ep)
-        assert r.status_code != 404, f"{ep['f']} {ep['path']} chưa được gắn"
+        da_gan = r.status_code != 404 or r.json().get("error") == "not_found"
+        assert da_gan, f"{ep['f']} {ep['path']} chưa được gắn"
         assert r.status_code < 500 or r.status_code == 503, \
             f"{ep['f']} {ep['path']} trả {r.status_code} — chỉ 503 mart_not_ready mới được phép ở dải 5xx"
 
@@ -90,6 +91,7 @@ def test_mac_dinh_xac_thuc_van_bat():
     """Tắt hết cờ dev thì mọi endpoint phải 401. Bảo vệ khỏi việc lỡ tay bật khi deploy."""
     from app.api.v1._template import che_do_xac_thuc
     cu = os.environ.pop("DEV_TRUST_SHOP_HEADER", None)
+    cu_gw = os.environ.pop("AI_GATEWAY_SECRET", None)
     try:
         assert not che_do_xac_thuc(), "tắt hết cờ mà xác thực vẫn đang mở"
         r = client.get("/api/analytics/shop/overview", headers=SHOP)
@@ -97,6 +99,8 @@ def test_mac_dinh_xac_thuc_van_bat():
     finally:
         if cu is not None:
             os.environ["DEV_TRUST_SHOP_HEADER"] = cu
+        if cu_gw is not None:
+            os.environ["AI_GATEWAY_SECRET"] = cu_gw
 
 
 def test_gateway_be_san():
