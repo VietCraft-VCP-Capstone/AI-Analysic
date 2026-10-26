@@ -8,7 +8,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
-from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, nguon_doi_thu
+from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, mo_ta_live, nguon_doi_thu, ten_tag_live
+from app.api.v1._doi_thu_ai import may_giong, shop_canh_tranh_nhat
 from app.api.v1._mart import tien
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, ok
 
@@ -23,11 +24,15 @@ GHI_CHU = {
 }
 
 
+TOI_THIEU_PHAN_VI = 5
+
+
 def _phan_vi(gia_tri, moc_list):
-    """Phần trăm số phần tử nhỏ hơn hoặc bằng. Danh sách rỗng -> None, không phải 0."""
-    if gia_tri is None or not moc_list:
+    """Phân vị mid-rank so với sản phẩm của shop KHÁC; dưới 5 mốc thì None (một mình không 'cao hơn 100%')."""
+    if gia_tri is None or len(moc_list) < TOI_THIEU_PHAN_VI:
         return None
-    return round(sum(1 for m in moc_list if m <= gia_tri) / len(moc_list) * 100)
+    duoi = sum(1 for m in moc_list if m < gia_tri) + 0.5 * sum(1 for m in moc_list if m == gia_tri)
+    return round(duoi / len(moc_list) * 100)
 
 
 @router.get("/api/analytics/competitors", tags=["F32 · Nhi"])
@@ -54,23 +59,25 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
 
     meta = meta_doi_thu(ng, trong_cat[0], scope="category", scope_id=cat, sample_size=len(trong_cat))
 
-    if len(doi_thu) < 5:
-        return insufficient(
-            f"Danh mục {ten_dm.get(cat) or cat} chỉ có {len(doi_thu)} sản phẩm của shop khác, "
-            f"chưa đủ để xếp hạng (cần từ 5)", meta)
-
-    doi_thu.sort(key=lambda r: (-r["est_sales_90d"], r.get("rank_in_cat") or 0))
-    gia_cat = sorted(r["price_vnd"] for r in trong_cat)
-    sao_cat = sorted(r["rating_shrunk"] for r in trong_cat if r["rating_shrunk"] is not None)
+    doi_thu.sort(key=lambda r: (-r["est_sales_90d"], -(r.get("n_reviews") or 0), r.get("rank_in_cat") or 0))   # BR-188
+    # Chưa có đơn (đang xếp theo số đánh giá) hoặc ít đối thủ thì thứ hạng chưa chắc: không để mặc định "medium".
+    co_don = any(r["est_sales_90d"] for r in doi_thu)
+    meta["quality"]["confidence"] = "medium" if co_don and len(doi_thu) >= TOI_THIEU_PHAN_VI else "low"
+    gia_cat = [r["price_vnd"] for r in doi_thu]
+    sao_cat = [r["rating_shrunk"] for r in doi_thu if r["rating_shrunk"] is not None]
 
     gia_toi = [r["price_vnd"] for r in cua_minh]
     sao_toi = [r["rating_shrunk"] for r in cua_minh if r["rating_shrunk"] is not None]
     gia_tb = sum(gia_toi) / len(gia_toi) if gia_toi else None
     sao_tb = sum(sao_toi) / len(sao_toi) if sao_toi else None
+    # Đối thủ trực tiếp theo nội dung sản phẩm (AI), chỉ có ở shop thật.
+    may = may_giong(coll, mo_ta_live, ten_tag_live) if ng["live"] else None
 
     return ok({
         "category_id": cat,
         "available_categories": cua_toi,
+        # SRS 3.9.1: ít đối thủ vẫn hiện đúng số đang có; dưới 5 thì FE ghi thứ hạng chỉ để tham khảo.
+        "low_sample": len(doi_thu) < TOI_THIEU_PHAN_VI,
         # Danh mục của sàn không có nhãn cứng ở FE như dữ liệu mồi nên trả kèm tên.
         **({"category_names": ten_dm} if ng["live"] else {}),
         "my_listings": [{
@@ -79,9 +86,13 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             "price_vnd": tien(r["price_vnd"]),
             "est_sales_90d": r["est_sales_90d"],
             "rating_shrunk": r["rating_shrunk"],
+            "n_reviews": r.get("n_reviews") or 0,
+            "favorite_count": r.get("favorite_count") or 0,
             "rank_in_cat": r.get("rank_in_cat"),
             "n_in_cat": r.get("n_in_cat"),
+            **({"direct_rivals": may.doi_thu_truc_tiep(r["listing_id"])} if may else {}),
         } for r in sorted(cua_minh, key=lambda r: r.get("rank_in_cat") or 10**9)],
+        **({"direct_rival_shops": shop_canh_tranh_nhat(may, [r["listing_id"] for r in cua_minh])} if may else {}),
         "competitors": [{
             "rank": i,
             "listing_id": r["listing_id"],

@@ -269,7 +269,7 @@ BLOCKED: Dict[str, str] = {
         "Đã thử 21/09: cụm Atlas M0 (512 MB, DÙNG CHUNG CẢ NHÓM) vọt lên 526/512 MB "
         "và CHẶN GHI VỚI TẤT CẢ MỌI NGƯỜI. Phải xoá bảng mới gỡ được.\n"
         "  → 4 cột khoá đã được điền THẲNG vào `listing_daily` bằng "
-        "app/core/backfill_listing_daily_ids.py. F26/F27/F30/F31/F37 đọc trực tiếp "
+        "script một lần backfill_listing_daily_ids.py (đã xoá 21/10, xem git history). F26/F27/F30/F31/F37 đọc trực tiếp "
         "bảng đó, đã có index trên shop_id / category_id / product_type_id / date.\n"
         "  → Cần một bảng gộp thật thì gộp ở ĐỘ MỊN THÔ HƠN, ví dụ (shop_id, date): "
         "80 shop x ~550 ngày = ~44.000 dòng thay vì 796.025."

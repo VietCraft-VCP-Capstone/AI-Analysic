@@ -13,6 +13,8 @@ from app.api.v1._live import (
     la_shop_live,
     san_pham_live,
 )
+from app.api.v1._competitor_live import dong_live, mo_ta_live, ten_tag_live
+from app.api.v1._doi_thu_ai import gia_de_xuat, may_giong
 from app.api.v1._mart import db, tien
 from app.api.v1._template import (
     CurrentShop,
@@ -116,6 +118,10 @@ def _pricing_live(shop_id: str, productType: Optional[str],
         gia_toi = None
 
     loai_cua_toi = sorted({p["product_type_id"] for p in sp if p["product_type_id"]})
+    # Giá đối thủ trực tiếp (AI) cho sản phẩm đang chọn.
+    ai_gia, ai_ly_do = (gia_de_xuat(may_giong(dong_live(), mo_ta_live, ten_tag_live), chon["product_id"])
+                        if chon else (None, None))
+    ai = {"ai_price": ai_gia, "ai_price_reason": ai_ly_do}
 
     coll = db()[MART]
     co_catalog = coll.estimated_document_count() > 0
@@ -141,6 +147,7 @@ def _pricing_live(shop_id: str, productType: Optional[str],
                 "available_product_types": loai_cua_toi,
                 "my_products": cua_toi,
                 "selected_product_id": chon["product_id"] if chon else None,
+            **ai,
                 "basis_kind": "reference_catalog",
                 "n_listings": len(gia),
                 "basis": f"top {len(gia)} sản phẩm bán chạy nhất cùng loại phôi trong catalog tham chiếu (BR-198)",
@@ -183,6 +190,7 @@ def _pricing_live(shop_id: str, productType: Optional[str],
             "available_product_types": loai_cua_toi,
             "my_products": cua_toi,
             "selected_product_id": chon["product_id"] if chon else None,
+            **ai,
             "basis_kind": "live_category",
             "n_listings": len(gia_that),
             "basis": f"giá thật của {len(gia_that)} biến thể sản phẩm thuộc {', '.join(danh_muc) or 'cùng danh mục'} trên sàn",

@@ -1,0 +1,16 @@
+{
+  "groups": {
+    "fashion": "ảnh sản phẩm quần áo thời trang",
+    "bags": "ảnh sản phẩm túi xách, balo, ví",
+    "shoes": "ảnh sản phẩm giày dép",
+    "accessories": "ảnh phụ kiện thời trang như trang sức, đồng hồ, kính mắt, thắt lưng",
+    "home": "ảnh đồ gia dụng và đồ trang trí nhà cửa",
+    "sport": "ảnh đồ thể thao và đồ dã ngoại"
+  },
+  "styles": {
+    "white_bg": "ảnh sản phẩm trên nền trắng",
+    "lifestyle": "ảnh người mẫu mặc sản phẩm ngoài đời",
+    "flatlay": "ảnh sản phẩm xếp phẳng chụp từ trên xuống",
+    "closeup": "ảnh chụp cận chất liệu sản phẩm"
+  }
+}

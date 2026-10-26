@@ -9,7 +9,7 @@ try:
     if app_env_path.exists():
         load_dotenv(dotenv_path=app_env_path, override=False)
     if root_env_path.exists():
-        load_dotenv(dotenv_path=root_env_path, override=False)
+        load_dotenv(dotenv_path=root_env_path, override=True)
 except ImportError:
     pass
 
@@ -33,6 +33,10 @@ class Settings:
     )
     MONGO_DB_SEED: str = os.getenv("MONGO_DB_SEED", "vietcraft-seed")
     MONGO_DB_LIVE: str = os.getenv("MONGO_DB_LIVE", "vietcraft")
+
+    ENABLE_INPROCESS_SCHEDULER: bool = (
+        os.getenv("ENABLE_INPROCESS_SCHEDULER", "true").lower() in ("true", "1", "yes")
+    )
 
     # External APIs
     PRINTIFY_TOKEN: str = os.getenv("PRINTIFY_TOKEN", "")

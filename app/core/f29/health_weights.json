@@ -1,0 +1,388 @@
+{
+  "model_version": "health-2.2",
+  "weights": {
+    "image": 24,
+    "description": 11,
+    "tags": 10,
+    "material": 10,
+    "review": 5,
+    "price": 40
+  },
+  "targets": {
+    "image": 6,
+    "description": 570,
+    "description_words": 115,
+    "tags": 3
+  },
+  "review": {
+    "m": 5,
+    "p0": 0.7922
+  },
+  "price": {
+    "low_full": 0.7,
+    "full_at": 1.3,
+    "zero_at": 2.0,
+    "floor_at": 0.4,
+    "min_peers": 8
+  },
+  "coefficients": {
+    "image": 0.2668,
+    "description": 0.1197,
+    "review": -0.0755,
+    "price": 0.4328
+  },
+  "trained_on": {
+    "source": "Olist (Brazil)",
+    "cutoffs": [
+      "2017-07-01",
+      "2017-08-01",
+      "2017-09-01",
+      "2017-10-01"
+    ],
+    "rows": 33198,
+    "label": "top25"
+  },
+  "rows": {
+    "olist_train": 33198,
+    "olist_val": 12905,
+    "olist_test": 16130,
+    "tiki_train": 27693,
+    "tiki_test": 6676,
+    "shopee_test": 4296
+  },
+  "dates": {
+    "val": "2018-01-01",
+    "test": "2018-05-01"
+  },
+  "metrics": {
+    "olist_val": {
+      "Học (health-2.1)": {
+        "roc_auc": 0.542,
+        "auc_ci95": [
+          0.513,
+          0.569
+        ]
+      },
+      "Chia đều": {
+        "roc_auc": 0.542,
+        "auc_ci95": [
+          0.515,
+          0.565
+        ]
+      },
+      "health-1.0 (luật hiện tại)": {
+        "roc_auc": 0.513,
+        "auc_ci95": [
+          0.485,
+          0.543
+        ]
+      },
+      "Đơn gần nhất": {
+        "roc_auc": 0.702,
+        "auc_ci95": [
+          0.686,
+          0.717
+        ]
+      },
+      "Ngẫu nhiên": {
+        "roc_auc": 0.504,
+        "auc_ci95": [
+          0.493,
+          0.517
+        ]
+      },
+      "HistGB trên điểm con": {
+        "roc_auc": 0.667,
+        "auc_ci95": [
+          0.654,
+          0.684
+        ]
+      },
+      "Chỉ số ảnh": {
+        "roc_auc": 0.516,
+        "auc_ci95": [
+          0.49,
+          0.541
+        ]
+      },
+      "Chỉ độ dài mô tả": {
+        "roc_auc": 0.512,
+        "auc_ci95": [
+          0.484,
+          0.535
+        ]
+      },
+      "Chỉ tỉ lệ đánh giá tốt": {
+        "roc_auc": 0.523,
+        "auc_ci95": [
+          0.511,
+          0.536
+        ]
+      },
+      "Chỉ cạnh tranh giá": {
+        "roc_auc": 0.526,
+        "auc_ci95": [
+          0.507,
+          0.544
+        ]
+      }
+    },
+    "olist_test": {
+      "Học (health-2.1)": {
+        "roc_auc": 0.538,
+        "auc_ci95": [
+          0.517,
+          0.562
+        ]
+      },
+      "Chia đều": {
+        "roc_auc": 0.529,
+        "auc_ci95": [
+          0.507,
+          0.552
+        ]
+      },
+      "health-1.0 (luật hiện tại)": {
+        "roc_auc": 0.518,
+        "auc_ci95": [
+          0.495,
+          0.545
+        ]
+      },
+      "Đơn gần nhất": {
+        "roc_auc": 0.735,
+        "auc_ci95": [
+          0.722,
+          0.745
+        ]
+      },
+      "Ngẫu nhiên": {
+        "roc_auc": 0.505,
+        "auc_ci95": [
+          0.494,
+          0.515
+        ]
+      },
+      "HistGB trên điểm con": {
+        "roc_auc": 0.653,
+        "auc_ci95": [
+          0.638,
+          0.668
+        ]
+      },
+      "Chỉ số ảnh": {
+        "roc_auc": 0.532,
+        "auc_ci95": [
+          0.511,
+          0.557
+        ]
+      },
+      "Chỉ độ dài mô tả": {
+        "roc_auc": 0.514,
+        "auc_ci95": [
+          0.495,
+          0.531
+        ]
+      },
+      "Chỉ tỉ lệ đánh giá tốt": {
+        "roc_auc": 0.492,
+        "auc_ci95": [
+          0.48,
+          0.507
+        ]
+      },
+      "Chỉ cạnh tranh giá": {
+        "roc_auc": 0.523,
+        "auc_ci95": [
+          0.508,
+          0.542
+        ]
+      }
+    },
+    "tiki_test": {
+      "Học (health-2.1)": {
+        "roc_auc": 0.567,
+        "auc_ci95": [
+          0.522,
+          0.602
+        ]
+      },
+      "Chia đều": {
+        "roc_auc": 0.566,
+        "auc_ci95": [
+          0.524,
+          0.599
+        ]
+      },
+      "health-1.0 (luật hiện tại)": {
+        "roc_auc": 0.519,
+        "auc_ci95": [
+          0.485,
+          0.557
+        ]
+      },
+      "Ngẫu nhiên": {
+        "roc_auc": 0.501,
+        "auc_ci95": [
+          0.485,
+          0.52
+        ]
+      },
+      "HistGB trên điểm con": {
+        "roc_auc": 0.608,
+        "auc_ci95": [
+          0.571,
+          0.647
+        ]
+      },
+      "Chỉ số ảnh": {
+        "roc_auc": 0.513,
+        "auc_ci95": [
+          0.481,
+          0.557
+        ]
+      },
+      "Chỉ độ dài mô tả": {
+        "roc_auc": 0.577,
+        "auc_ci95": [
+          0.536,
+          0.622
+        ]
+      },
+      "Chỉ cạnh tranh giá": {
+        "roc_auc": 0.552,
+        "auc_ci95": [
+          0.508,
+          0.591
+        ]
+      }
+    },
+    "shopee_test": {
+      "Học (health-2.1)": {
+        "roc_auc": 0.576,
+        "auc_ci95": [
+          0.546,
+          0.604
+        ]
+      },
+      "Chia đều": {
+        "roc_auc": 0.569,
+        "auc_ci95": [
+          0.539,
+          0.597
+        ]
+      },
+      "health-1.0 (luật hiện tại)": {
+        "roc_auc": 0.511,
+        "auc_ci95": [
+          0.485,
+          0.537
+        ]
+      },
+      "Ngẫu nhiên": {
+        "roc_auc": 0.495,
+        "auc_ci95": [
+          0.477,
+          0.517
+        ]
+      },
+      "HistGB trên điểm con": {
+        "roc_auc": 0.649,
+        "auc_ci95": [
+          0.623,
+          0.671
+        ]
+      },
+      "Chỉ số ảnh": {
+        "roc_auc": 0.443,
+        "auc_ci95": [
+          0.42,
+          0.468
+        ]
+      },
+      "Chỉ độ dài mô tả": {
+        "roc_auc": 0.563,
+        "auc_ci95": [
+          0.54,
+          0.589
+        ]
+      },
+      "Chỉ cạnh tranh giá": {
+        "roc_auc": 0.589,
+        "auc_ci95": [
+          0.565,
+          0.616
+        ]
+      }
+    }
+  },
+  "gate": {
+    "per_market": {
+      "olist_test": {
+        "lift": 1.4322398010033583
+      },
+      "tiki_test": {
+        "lift": 1.6290582578790478,
+        "vs_equal_ci": [
+          -0.006,
+          0.009
+        ]
+      },
+      "shopee_test": {
+        "lift": 1.7598986285032798,
+        "vs_equal_ci": [
+          -0.004,
+          0.016
+        ]
+      }
+    },
+    "passed": true
+  },
+  "lift": {
+    "olist_test": 1.4322398010033583,
+    "tiki_test": 1.6290582578790478,
+    "shopee_test": 1.7598986285032798
+  },
+  "ranges": {
+    "image": [
+      14,
+      35
+    ],
+    "description": [
+      5,
+      21
+    ],
+    "tags": [
+      10,
+      10
+    ],
+    "material": [
+      10,
+      10
+    ],
+    "review": [
+      5,
+      5
+    ],
+    "price": [
+      31,
+      50
+    ]
+  },
+  "tiki_check": {
+    "tiki": {
+      "image": 31,
+      "price": 69
+    },
+    "olist": {
+      "image": 40,
+      "price": 60
+    }
+  },
+  "material_rate": {
+    "share": 35.1,
+    "top25_with": 22.9,
+    "top25_without": 26.9
+  },
+  "created_at": "2026-10-22T18:10:09+00:00"
+}
