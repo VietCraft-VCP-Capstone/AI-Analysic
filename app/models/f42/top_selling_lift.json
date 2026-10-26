@@ -1,0 +1,764 @@
+{
+  "accessories": [
+    {
+      "keyword": "Tập Khăn",
+      "lift": 3.87,
+      "freq": 14
+    },
+    {
+      "keyword": "Vintage Bdn01",
+      "lift": 3.87,
+      "freq": 14
+    },
+    {
+      "keyword": "Bdn01 54X54Cm",
+      "lift": 3.87,
+      "freq": 14
+    },
+    {
+      "keyword": "Gài Kính",
+      "lift": 3.87,
+      "freq": 11
+    },
+    {
+      "keyword": "Rớt",
+      "lift": 3.87,
+      "freq": 10
+    },
+    {
+      "keyword": "Rơi Rớt",
+      "lift": 3.87,
+      "freq": 9
+    },
+    {
+      "keyword": "Gomtat Chất",
+      "lift": 3.87,
+      "freq": 9
+    },
+    {
+      "keyword": "Ngắn Gomtat",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Army",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Australia Cận",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Gom",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Cảm Giác",
+      "lift": 3.87,
+      "freq": 7
+    },
+    {
+      "keyword": "Rớt Tiện",
+      "lift": 3.87,
+      "freq": 7
+    },
+    {
+      "keyword": "Liệu Sợi",
+      "lift": 3.87,
+      "freq": 7
+    },
+    {
+      "keyword": "Gom Tất",
+      "lift": 3.87,
+      "freq": 7
+    },
+    {
+      "keyword": "Đau Tai",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "Động Giản",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "Mặt Đen",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "-Hàng Chính",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "Mùi Onoff",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "Upf50+",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "(Tặng Khăn",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "Thiết Thoáng",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "Fuji",
+      "lift": 3.87,
+      "freq": 6
+    },
+    {
+      "keyword": "Móc Đeo",
+      "lift": 3.87,
+      "freq": 6
+    }
+  ],
+  "bags": [
+    {
+      "keyword": "Bụi Leather",
+      "lift": 3.87,
+      "freq": 20
+    },
+    {
+      "keyword": "Lịch Bamozo",
+      "lift": 3.87,
+      "freq": 15
+    },
+    {
+      "keyword": "Nam Haras",
+      "lift": 3.87,
+      "freq": 14
+    },
+    {
+      "keyword": "Size 20Inch",
+      "lift": 3.87,
+      "freq": 13
+    },
+    {
+      "keyword": "Được Bảo",
+      "lift": 3.87,
+      "freq": 12
+    },
+    {
+      "keyword": "Galaxy",
+      "lift": 3.87,
+      "freq": 11
+    },
+    {
+      "keyword": "Pc/Abs",
+      "lift": 3.87,
+      "freq": 11
+    },
+    {
+      "keyword": "Nhựa Pc/Abs",
+      "lift": 3.87,
+      "freq": 11
+    },
+    {
+      "keyword": "Pc/Abs Bảo",
+      "lift": 3.87,
+      "freq": 11
+    },
+    {
+      "keyword": "Galaxy Store",
+      "lift": 3.87,
+      "freq": 10
+    },
+    {
+      "keyword": "Grepaco",
+      "lift": 3.87,
+      "freq": 10
+    },
+    {
+      "keyword": "Pegava",
+      "lift": 3.87,
+      "freq": 10
+    },
+    {
+      "keyword": "Hãng Phân",
+      "lift": 3.87,
+      "freq": 10
+    },
+    {
+      "keyword": "Trang Haras",
+      "lift": 3.87,
+      "freq": 10
+    },
+    {
+      "keyword": "Nhựa Được",
+      "lift": 3.87,
+      "freq": 10
+    },
+    {
+      "keyword": "Gubag,",
+      "lift": 3.87,
+      "freq": 9
+    },
+    {
+      "keyword": "Suốt Đựng",
+      "lift": 3.87,
+      "freq": 9
+    },
+    {
+      "keyword": "Trùm Trùm",
+      "lift": 3.87,
+      "freq": 9
+    },
+    {
+      "keyword": "8801",
+      "lift": 3.87,
+      "freq": 9
+    },
+    {
+      "keyword": "I'Mmax",
+      "lift": 3.87,
+      "freq": 9
+    },
+    {
+      "keyword": "Vali Bọc",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Vs34",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Trầy Nhiều",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Size Vs34",
+      "lift": 3.87,
+      "freq": 8
+    },
+    {
+      "keyword": "Bamozo 8801",
+      "lift": 3.87,
+      "freq": 8
+    }
+  ],
+  "fashion": [
+    {
+      "keyword": "Ares Man",
+      "lift": 3.77,
+      "freq": 9
+    },
+    {
+      "keyword": "ThoáNg",
+      "lift": 3.77,
+      "freq": 9
+    },
+    {
+      "keyword": "MáT",
+      "lift": 3.77,
+      "freq": 9
+    },
+    {
+      "keyword": "ThoáNg MáT",
+      "lift": 3.77,
+      "freq": 9
+    },
+    {
+      "keyword": "Mịn Siêu",
+      "lift": 3.77,
+      "freq": 9
+    },
+    {
+      "keyword": "Gió Chống",
+      "lift": 3.77,
+      "freq": 9
+    },
+    {
+      "keyword": "Long",
+      "lift": 3.77,
+      "freq": 8
+    },
+    {
+      "keyword": "Ngoài Vải",
+      "lift": 3.77,
+      "freq": 8
+    },
+    {
+      "keyword": "ChiềU Mrm",
+      "lift": 3.77,
+      "freq": 8
+    },
+    {
+      "keyword": "Nam Big",
+      "lift": 3.77,
+      "freq": 8
+    },
+    {
+      "keyword": "Đôi Tất",
+      "lift": 3.77,
+      "freq": 8
+    },
+    {
+      "keyword": "Tất Nam",
+      "lift": 3.77,
+      "freq": 8
+    },
+    {
+      "keyword": "Mrm Fashion",
+      "lift": 3.77,
+      "freq": 8
+    },
+    {
+      "keyword": "Dù,",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "Nam Nữ.",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "Vải Dù,",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "Dù, Trong",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "MáT GiãN",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "SợI",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "MềM",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "MịN",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "MềM MịN",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "Tặng Đôi",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "Size Khoác",
+      "lift": 3.77,
+      "freq": 7
+    },
+    {
+      "keyword": "Hai Mảnh",
+      "lift": 3.77,
+      "freq": 6
+    }
+  ],
+  "home": [
+    {
+      "keyword": "Đựng Thức",
+      "lift": 4.14,
+      "freq": 4
+    },
+    {
+      "keyword": "Đèn Philips",
+      "lift": 4.14,
+      "freq": 4
+    },
+    {
+      "keyword": "Đàn",
+      "lift": 4.14,
+      "freq": 4
+    },
+    {
+      "keyword": "Philips Led",
+      "lift": 4.14,
+      "freq": 4
+    },
+    {
+      "keyword": "Kiềm",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Pin Kiềm",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Thức Giữ",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Bóng Đèn",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Đầy",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Đàn Guitar",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Bảo Quần",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Áo, Chăn",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Cotton Lidaco",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Túi Lưới",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Đáy",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Pin Energizer",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Bấm",
+      "lift": 4.14,
+      "freq": 3
+    },
+    {
+      "keyword": "Philips",
+      "lift": 3.73,
+      "freq": 9
+    },
+    {
+      "keyword": "Bóng",
+      "lift": 3.62,
+      "freq": 7
+    },
+    {
+      "keyword": "Energizer",
+      "lift": 3.31,
+      "freq": 8
+    },
+    {
+      "keyword": "Đựng Quần",
+      "lift": 3.11,
+      "freq": 6
+    },
+    {
+      "keyword": "Ống Hút",
+      "lift": 3.11,
+      "freq": 6
+    },
+    {
+      "keyword": "Guitar",
+      "lift": 3.11,
+      "freq": 3
+    },
+    {
+      "keyword": "Loại Dày",
+      "lift": 3.11,
+      "freq": 3
+    },
+    {
+      "keyword": "E27",
+      "lift": 3.11,
+      "freq": 3
+    }
+  ],
+  "shoes": [
+    {
+      "keyword": "Dây Siêu",
+      "lift": 4.07,
+      "freq": 13
+    },
+    {
+      "keyword": "Vải Cotton",
+      "lift": 4.07,
+      "freq": 9
+    },
+    {
+      "keyword": "Lòng",
+      "lift": 4.07,
+      "freq": 9
+    },
+    {
+      "keyword": "Lòng Bàn",
+      "lift": 4.07,
+      "freq": 9
+    },
+    {
+      "keyword": "Dyseven",
+      "lift": 4.07,
+      "freq": 8
+    },
+    {
+      "keyword": "LộN",
+      "lift": 4.07,
+      "freq": 8
+    },
+    {
+      "keyword": "Nam Duwa",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "Bụi Leather",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "Dùng Không",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "Nhiệt Trong",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "Sandal Mưa",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "GóT GóT",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "GóT Ht.Neo",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "Lông Mang",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "Chân Thời",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "ĐúC",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "Ombre",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "Cải",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "Giúp Chân",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "LoạI",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "Kim LoạI",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "Đệm Gót",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "Cầu Vai",
+      "lift": 4.07,
+      "freq": 6
+    },
+    {
+      "keyword": "ChéO",
+      "lift": 4.07,
+      "freq": 5
+    },
+    {
+      "keyword": "Toán",
+      "lift": 4.07,
+      "freq": 5
+    }
+  ],
+  "sport": [
+    {
+      "keyword": "Đá,",
+      "lift": 5.23,
+      "freq": 4
+    },
+    {
+      "keyword": "Đai Đeo",
+      "lift": 5.23,
+      "freq": 4
+    },
+    {
+      "keyword": "Gối Hàng",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Chân,",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Teement,",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "(125Ml)",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Zippo (125Ml)",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Đeo Chân",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Hông",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Chạy Chống",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Đeo Hông",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Hông Chạy",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Fitme",
+      "lift": 5.23,
+      "freq": 3
+    },
+    {
+      "keyword": "Bụng Chạy",
+      "lift": 4.36,
+      "freq": 5
+    },
+    {
+      "keyword": "Xăng",
+      "lift": 4.19,
+      "freq": 4
+    },
+    {
+      "keyword": "Xăng Zippo",
+      "lift": 4.19,
+      "freq": 4
+    },
+    {
+      "keyword": "Thao Cao",
+      "lift": 4.19,
+      "freq": 4
+    },
+    {
+      "keyword": "Chống Thấm",
+      "lift": 4.19,
+      "freq": 4
+    },
+    {
+      "keyword": "Thấm Nước",
+      "lift": 4.19,
+      "freq": 4
+    },
+    {
+      "keyword": "Dây Kháng",
+      "lift": 4.07,
+      "freq": 7
+    },
+    {
+      "keyword": "Phiên",
+      "lift": 3.93,
+      "freq": 3
+    },
+    {
+      "keyword": "Yoga,",
+      "lift": 3.93,
+      "freq": 3
+    },
+    {
+      "keyword": "Phiên Bản",
+      "lift": 3.93,
+      "freq": 3
+    },
+    {
+      "keyword": "Sản",
+      "lift": 3.93,
+      "freq": 3
+    },
+    {
+      "keyword": "Sản Phẩm",
+      "lift": 3.93,
+      "freq": 3
+    }
+  ]
+}
