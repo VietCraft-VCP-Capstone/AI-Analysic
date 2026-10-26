@@ -8,7 +8,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.api.v1._live import LOC_SP_THAT, _so, db_live
-from app.api.v1._live_data import DON_HOP_LE, _tien_don, ngay_vn, su_kien
+from app.api.v1._live_data import DON_HOP_LE, GIO_VN, _tien_don, ngay_vn, su_kien
 from app.api.v1._mart import phan_tram_thay_doi, tien, ty_le_chuyen_doi
 from app.api.v1._template import build_meta, insufficient, ok
 
@@ -48,7 +48,7 @@ def _luot_xem(shop_id: str) -> List[str]:
     return [n for n in (ngay_vn(e.get("created_at")) for e in su_kien(ids, tu) if e["event_type"] == "view") if n]
 
 
-def overview_live(shop_id: str, so_ngay: int, time_range: str):
+def overview_live(shop_id: str, so_ngay: int, time_range: str, to_date: Optional[str] = None):
     """Tổng quan shop từ đơn và lượt xem thật."""
     don = _don_cua_shop(shop_id)
     xem = _luot_xem(shop_id)
@@ -63,9 +63,18 @@ def overview_live(shop_id: str, so_ngay: int, time_range: str):
             "Shop bạn chưa có đơn hàng đã thanh toán hay lượt xem nào, nên chưa có số để tổng quan. "
             "Số liệu sẽ hiện ngay khi có lượt xem hoặc đơn đầu tiên.", meta)
 
-    moi_nhat = max([n for n in (_ngay(d.get("created_at")) for d in don) if n] + xem)
+    # Mặc định khoảng thời gian kết thúc ở thời gian hiện tại
+    if to_date:
+        try:
+            den = datetime.fromisoformat(to_date).replace(tzinfo=GIO_VN)
+            anchored = True
+        except Exception:
+            den = datetime.now(GIO_VN)
+            anchored = False
+    else:
+        den = datetime.now(GIO_VN)
+        anchored = False
 
-    den = datetime.fromisoformat(moi_nhat).replace(tzinfo=timezone.utc)
     tu = den - timedelta(days=so_ngay - 1)
     tu_truoc = tu - timedelta(days=so_ngay)
     den_truoc = tu - timedelta(days=1)
@@ -106,7 +115,7 @@ def overview_live(shop_id: str, so_ngay: int, time_range: str):
         "range": time_range,
         "from": tu.date().isoformat(),
         "to": den.date().isoformat(),
-        "anchored_to_latest_data": True,
+        "anchored_to_latest_data": anchored,
         "compare_from": tu_truoc.date().isoformat(),
         "compare_to": den_truoc.date().isoformat(),
         "kpi": {

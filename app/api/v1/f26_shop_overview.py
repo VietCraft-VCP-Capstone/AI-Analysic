@@ -6,6 +6,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from typing import Optional
 from fastapi import APIRouter
 
 from app.api.v1._mart import (
@@ -23,11 +24,11 @@ SO_TOP_PRODUCT = 5
 
 
 @router.get("/api/analytics/shop/overview", tags=["F26 · Hiếu"])
-def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d"):
+def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d", to: Optional[str] = None):
     so_ngay = doc_khoang(timeRange)
 
     if la_shop_live(shop_id):
-        return overview_live(shop_id, so_ngay, timeRange)
+        return overview_live(shop_id, so_ngay, timeRange, to_date=to)
 
     moi_nhat = ngay_moi_nhat({"shop_id": shop_id})
     if moi_nhat is None:

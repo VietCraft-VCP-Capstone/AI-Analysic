@@ -51,10 +51,11 @@ def test_bang_endpoint_khop_voi_tai_lieu():
 
 
 def test_moi_endpoint_deu_song():
-    """Không endpoint nào được trả 404 hay 500. FE phải gọi được cả 16 ngay hôm nay."""
+    """Không endpoint nào được trả 404 (chưa gắn) hay 500. FE phải gọi được cả 16 ngay hôm nay."""
     for ep in ENDPOINTS:
         r = _goi(ep)
-        assert r.status_code != 404 or r.json().get("error") == "not_found", f"{ep['f']} {ep['path']} chưa được gắn"
+        da_gan = r.status_code != 404 or r.json().get("error") == "not_found"
+        assert da_gan, f"{ep['f']} {ep['path']} chưa được gắn"
         assert r.status_code < 500 or r.status_code == 503, \
             f"{ep['f']} {ep['path']} trả {r.status_code} — chỉ 503 mart_not_ready mới được phép ở dải 5xx"
 
