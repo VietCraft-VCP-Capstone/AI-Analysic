@@ -108,6 +108,9 @@ def shop_comparison(shop_id: str = CurrentShop):
         return {t: (round(v, 2) if isinstance(v, float) else v) for t, v in tho_all[sid].items()}
 
     nhom, nhom_ly_do = nhom_chien_luoc(tho, phan_hoi, shop_id) if ng["live"] else (None, None)
+    xep_theo = "revenue" if any(tho[s]["dt"] > 0 for s in top) else "reviews"
+    # Top 5 chọn theo số đánh giá (sàn chưa có đơn) hoặc chưa đủ 5 đối thủ thì chưa ổn định.
+    meta["quality"]["confidence"] = "medium" if xep_theo == "revenue" and len(top) == SO_DOI_THU else "low"
 
     return ok({
         "segment": phan_khuc,
@@ -118,7 +121,7 @@ def shop_comparison(shop_id: str = CurrentShop):
         "axes_vi": TEN_TRUC_VI,
         "normalization": "min-max 0-100 trên shop bạn và 5 đối thủ; 100 là tốt hơn, riêng giá: 100 là đắt nhất",
         "neutral_axes": ["avg_price"],
-        "ranked_by": "revenue" if any(tho[s]["dt"] > 0 for s in top) else "reviews",
+        "ranked_by": xep_theo,
         "me": chuan(shop_id),
         "me_raw": tho_tron(shop_id),
         # Trục của shop mình chưa có số: FE không vẽ thành 0 và không tính là trục yếu nhất.

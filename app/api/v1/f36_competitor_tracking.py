@@ -64,22 +64,10 @@ def danh_sach(shop_id: str = CurrentShop):
     tag_toi = {t for r in db()[MART].find({"shop_id": shop_id}, {"_id": 0, "tags": 1})
                for t in r.get("tags") or []}
 
-    canh_bao, dem_moi = [], {}
+    dem_moi = {}
     if ma:
-        for r in db()[MART].find({"shop_id": {"$in": ma}},
-                                 {"_id": 0, "shop_id": 1, "shop_name": 1, "listing_id": 1,
-                                  "title": 1, "tags": 1, "est_sales_90d": 1, "computed_at": 1}):
+        for r in db()[MART].find({"shop_id": {"$in": ma}}, {"_id": 0, "shop_id": 1}):
             dem_moi[r["shop_id"]] = dem_moi.get(r["shop_id"], 0) + 1
-            trung = sorted(set(r.get("tags") or []) & tag_toi)
-            if trung:
-                canh_bao.append({
-                    "shop_id": r["shop_id"], "shop_name": r.get("shop_name"),
-                    "listing_id": r["listing_id"], "title": r.get("title"),
-                    "detected_at": r.get("computed_at"),
-                    "in_my_niche": True, "matched_tags": trung,
-                    "est_sales_90d": r.get("est_sales_90d"),
-                })
-    canh_bao.sort(key=lambda a: -(a.get("est_sales_90d") or 0))
 
     return ok({
         "tracked": [{
@@ -89,12 +77,12 @@ def danh_sach(shop_id: str = CurrentShop):
             "listings_total": dem_moi.get(t["tracked_shop_id"], 0),
         } for t in theo_doi],
         "slots_used": len(theo_doi), "slots_limit": TOI_DA,
-        "alerts": canh_bao[:50],
-        "alerts_total": len(canh_bao),
+        # BR-203 chỉ báo hàng MỚI; dữ liệu mồi không có ngày đăng thật nên không báo, tránh báo cả kho hàng cũ.
+        "alerts": [],
+        "alerts_total": 0,
         "my_niche_tags": sorted(tag_toi),
-        "limitation": ("Dữ liệu mồi không có mốc thời gian đăng listing đáng tin, nên "
-                       "`detected_at` là lúc job chạy chứ KHÔNG phải lúc đối thủ ra hàng. "
-                       "Cảnh báo 'sản phẩm mới trong 7 ngày' chỉ đúng khi nối được sàn thật."),
+        "limitation": ("Dữ liệu mồi không có ngày đăng sản phẩm thật nên không biết hàng nào là mới; "
+                       "cảnh báo hàng mới chỉ có ở shop trên sàn thật."),
     }, _meta(shop_id, len(theo_doi)))
 
 
@@ -147,3 +135,9 @@ def bo(shop_id: str = CurrentShop, body: dict = Body(default={}),
                "slots_used": _kho().count_documents({"shop_id": shop_id, "active": True}),
                "slots_limit": TOI_DA},
               _meta(shop_id, 0))
+
+
+@router.delete("/api/analytics/competitor-tracking/{shopId}", tags=["F36 · Đạt"])
+def bo_theo_duong_dan(shopId: str, shop_id: str = CurrentShop):
+    """Đúng dạng SRS 3.9.5; bản nhận body ở trên giữ lại cho client cũ."""
+    return bo(shop_id=shop_id, body={}, shopId=shopId)

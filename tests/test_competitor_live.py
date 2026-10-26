@@ -318,11 +318,11 @@ def test_f32_shop_that_chi_so_voi_shop_that_va_co_ma_shop():
     assert _ma(san["an"]) not in {c["listing_id"] for c in d["competitors"]}
 
 
-def test_f32_danh_muc_chua_du_doi_thu_thi_chua_du_du_lieu():
+def test_f32_danh_muc_it_doi_thu_van_hien_so_dang_co():
     _, A = _san_live()
     r = f32.competitors(shop_id=A, categoryId="coc-ly")
-    assert r["data"] is None and r["meta"]["status"] == "insufficient_data", r
-    assert "3 sản phẩm" in r["meta"]["reason"] and "Cốc ly" in r["meta"]["reason"]
+    assert r["meta"]["status"] == "ok" and r["data"]["low_sample"] is True, r
+    assert len(r["data"]["competitors"]) == 3, "SRS 3.9.1: dưới 20 đối thủ thì hiện đúng số đang có"
 
 
 def test_f32_shop_moi_tra_y_nhu_truoc():

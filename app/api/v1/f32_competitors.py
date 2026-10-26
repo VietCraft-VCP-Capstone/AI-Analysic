@@ -59,12 +59,10 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
 
     meta = meta_doi_thu(ng, trong_cat[0], scope="category", scope_id=cat, sample_size=len(trong_cat))
 
-    if len(doi_thu) < 5:
-        return insufficient(
-            f"Danh mục {ten_dm.get(cat) or cat} chỉ có {len(doi_thu)} sản phẩm của shop khác, "
-            f"chưa đủ để xếp hạng (cần từ 5)", meta)
-
     doi_thu.sort(key=lambda r: (-r["est_sales_90d"], -(r.get("n_reviews") or 0), r.get("rank_in_cat") or 0))   # BR-188
+    # Chưa có đơn (đang xếp theo số đánh giá) hoặc ít đối thủ thì thứ hạng chưa chắc: không để mặc định "medium".
+    co_don = any(r["est_sales_90d"] for r in doi_thu)
+    meta["quality"]["confidence"] = "medium" if co_don and len(doi_thu) >= TOI_THIEU_PHAN_VI else "low"
     gia_cat = [r["price_vnd"] for r in doi_thu]
     sao_cat = [r["rating_shrunk"] for r in doi_thu if r["rating_shrunk"] is not None]
 
@@ -78,6 +76,8 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
     return ok({
         "category_id": cat,
         "available_categories": cua_toi,
+        # SRS 3.9.1: ít đối thủ vẫn hiện đúng số đang có; dưới 5 thì FE ghi thứ hạng chỉ để tham khảo.
+        "low_sample": len(doi_thu) < TOI_THIEU_PHAN_VI,
         # Danh mục của sàn không có nhãn cứng ở FE như dữ liệu mồi nên trả kèm tên.
         **({"category_names": ten_dm} if ng["live"] else {}),
         "my_listings": [{

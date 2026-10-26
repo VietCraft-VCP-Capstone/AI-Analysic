@@ -28,6 +28,7 @@ K_CO_NGOT = K_BAYESIAN_SHRINKAGE   # cùng hằng co ngót với F29 và build_m
 DA_GIAO = "DELIVERED"
 DANG_BAN = {"status": "PUBLISHED", "is_hidden": {"$ne": True}}   # = PUBLIC_QUERY của BE
 SO_CANH_BAO_TOI_DA = 50
+GIO_VN = timedelta(hours=7)
 
 
 def db_live():
@@ -92,6 +93,9 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
     now = _utc(now)
     tu = now - timedelta(days=CUA_SO_BAN_NGAY)
     bo_qua: Counter = Counter()
+    products = list(products)
+    shop_theo_ma = {_ma(s["_id"]): s for s in shops}
+    chu_cua_sp = {_ma(p.get("_id")): _ma(shop_theo_ma.get(_ma(p.get("shop_id")), {}).get("owner_id")) for p in products}
 
     gia: Dict[str, float] = {}
     for v in variants:
@@ -108,8 +112,12 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
                 or tao is None or not tu <= tao <= now):
             bo_qua["don_khong_tinh"] += 1
             continue
+        nguoi_mua = _ma(o.get("buyer_id"))
         for it in o.get("items") or []:
             pid, sl = _ma(it.get("product_id")), int(it.get("quantity") or 0)
+            if nguoi_mua and nguoi_mua == chu_cua_sp.get(pid):
+                bo_qua["chu_shop_tu_mua"] += 1      # tự mua hàng mình không được tính để leo top
+                continue
             if pid and sl > 0:
                 so_cai[pid] += sl
                 doanh_thu[pid] += sl * (_so(it.get("retail_price")) or 0)
@@ -124,7 +132,6 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
             tong_sao[pid] += sao
 
     yeu_thich: Counter = Counter(pid for w in wishlists for pid in {_ma(x) for x in w.get("product_ids") or []})
-    shop_theo_ma = {_ma(s["_id"]): s for s in shops}
     dm_theo_ma = {_ma(c["_id"]): c for c in categories}
     tag_theo_ma = {_ma(t["_id"]): t for t in tags}
 
@@ -269,7 +276,7 @@ def _doc_nguon(live, now: datetime) -> Dict[str, List[dict]]:
             {"product_id": {"$in": ma_sp}}, {"product_id": 1, "retail_price": 1, "is_active": 1})),
         "orders": list(live["orders"].find(
             {**LOC_DON_THAT, "order_status": DA_GIAO, "created_at": {"$gte": now - timedelta(days=CUA_SO_BAN_NGAY)}},
-            {"order_status": 1, "is_simulated": 1, "created_at": 1,
+            {"order_status": 1, "is_simulated": 1, "created_at": 1, "buyer_id": 1,
              "items.product_id": 1, "items.quantity": 1, "items.retail_price": 1})),
         "reviews": list(live["reviews"].find({"product_id": {"$in": ma_sp}}, {"product_id": 1, "rating": 1})),
         "wishlists": list(live["wishlists"].find({}, {"product_ids": 1})),
@@ -284,10 +291,17 @@ def mo_ta_live(ids: Iterable[str]) -> Dict[str, str]:
     return {str(p["_id"]): p.get("description") or "" for p in db_live()["products"].find({"_id": {"$in": oid}}, {"description": 1})}
 
 
+_QUET: Dict[str, Any] = {"khoa": None, "dong": []}
+
+
 def dong_live(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
-    # shortcut: tính lại mỗi request từ cả sàn; sàn lớn thì cần cache hoặc job đêm.
+    """BR-187: quét sàn mỗi ngày một lần (theo ngày giờ VN); `computed_at` của dòng là giờ quét, không phải giờ mở trang."""
+    # shortcut: kết quả quét nằm trong RAM của tiến trình (nhóm không cho thêm collection); khởi động lại thì quét lại.
     now = now or _bay_gio()
-    return tinh_dong_doi_thu(**_doc_nguon(db_live(), now), now=now)[0]
+    khoa = ((_utc(now) + GIO_VN).date(), db_live, _live.db_live)   # đổi nguồn DB (test vá) thì quét lại
+    if _QUET["khoa"] != khoa:
+        _QUET.update(khoa=khoa, dong=tinh_dong_doi_thu(**_doc_nguon(db_live(), now), now=now)[0])
+    return [dict(r) for r in _QUET["dong"]]
 
 
 class _Bang(list):
@@ -342,15 +356,24 @@ def tuan_ban_theo_shop(shop_ids: List[Any], now: datetime, so_tuan: int = 8) -> 
     tuan = {str(s): [0] * so_tuan for s in shop_ids}
     if not tuan:
         return tuan
+    chu = {str(s["_id"]): _ma(s.get("owner_id"))
+           for s in db_live()["shops"].find({"_id": {"$in": list(shop_ids)}}, {"owner_id": 1})}
     for o in db_live()["orders"].find(
             {**LOC_DON_THAT, "shop_id": {"$in": list(shop_ids)}, "order_status": DA_GIAO,
              "created_at": {"$gte": now - timedelta(weeks=so_tuan)}},
-            {"shop_id": 1, "created_at": 1, "items.quantity": 1}):
+            {"shop_id": 1, "buyer_id": 1, "created_at": 1, "items.quantity": 1}):
+        if o.get("buyer_id") is not None and _ma(o["buyer_id"]) == chu.get(str(o.get("shop_id"))):
+            continue        # chủ shop tự mua không phải tăng tốc thật
         tao = _utc(o.get("created_at"))
         k = so_tuan - 1 - (now - tao).days // 7 if tao else -1
         if 0 <= k < so_tuan and str(o.get("shop_id")) in tuan:
             tuan[str(o["shop_id"])][k] += sum(int(it.get("quantity") or 0) for it in o.get("items") or [])
     return tuan
+
+
+def _danh_muc_chinh(dong_shop: List[dict]) -> Optional[str]:
+    dem = Counter(r["category_name"] for r in dong_shop if r.get("category_name"))
+    return dem.most_common(1)[0][0] if dem else None
 
 
 def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
@@ -370,7 +393,10 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
 
     now = _bay_gio()
     dong = dong_live(now)
-    so_sp = Counter(r["shop_id"] for r in dong)
+    quet_luc = dong[0]["computed_at"] if dong else _iso(now)
+    sp_theo_shop: Dict[str, List[dict]] = defaultdict(list)
+    for r in dong:
+        sp_theo_shop[r["shop_id"]].append(r)
     tag_toi = sorted({t for r in dong if r["shop_id"] == shop_id for t in r["tags"]})
     canh_bao = tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now)
     # AI: chấm mức đe doạ, đe doạ cao lên đầu; cùng điểm thì mới đăng trước.
@@ -387,7 +413,9 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
             "shop_id": m,
             "shop_name": ten.get(m),
             "added_at": None,           # follow của sàn không lưu lúc bắt đầu theo dõi
-            "listings_total": so_sp.get(m, 0),
+            "listings_total": len(sp_theo_shop[m]),
+            "category_name": _danh_muc_chinh(sp_theo_shop[m]),
+            "last_new_listing_at": max((r["created_at"] for r in sp_theo_shop[m] if r.get("created_at")), default=None),
         } for m in ma],
         "slots_used": len(ma),
         "slots_limit": gioi_han,
@@ -396,9 +424,10 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
         "surging": tang_toc,
         "my_niche_tags": tag_toi,
         "tag_names": ten_tag_live(tag_toi + [t for a in canh_bao for t in a["matched_tags"]]),
-        "alerts_computed_at": _iso(now),
-        "limitation": (f"Cảnh báo tính lại mỗi lần mở trang, từ sản phẩm đối thủ đăng trong {CUA_SO_MOI_NGAY} "
-                       "ngày gần nhất. Bỏ theo dõi một shop thì cảnh báo của shop đó cũng không hiện nữa."),
-    }, build_meta(model_version=MODEL, scope="shop", scope_id=shop_id, computed_at=_iso(now),
+        "alerts_computed_at": quet_luc,
+        "limitation": (f"Sàn được quét mỗi ngày một lần; cảnh báo là sản phẩm đối thủ đăng trong {CUA_SO_MOI_NGAY} "
+                       "ngày gần nhất. Bỏ theo dõi một shop thì không nhận cảnh báo mới của shop đó, "
+                       "cảnh báo đã gửi vào mục Thông báo vẫn giữ."),
+    }, build_meta(model_version=MODEL, scope="shop", scope_id=shop_id, computed_at=quet_luc,
                   database=settings.MONGO_DB_LIVE, collection="shop_followers", mode="live",
                   attributed_to_live_shop=True, identity_linked=True, sample_size=len(ma)))

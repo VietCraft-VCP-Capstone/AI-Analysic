@@ -356,6 +356,7 @@ tag từ tiêu đề (quyết định **E22**; bản cũ làm nhầm bài toán)
 GET    → danh sách đang theo dõi + cảnh báo
 POST   {"shop_id":"shp_00042"}   → thêm
 DELETE {"shop_id":"shp_00042"}   → bỏ
+DELETE /{shopId}                 → bỏ (đúng dạng SRS 3.9.5; bản body ở trên giữ cho client cũ)
 ```
 ```json
 {"tracked":[{"shop_id":"shp_00042","shop_name":"...","added_at":"...","new_listings_7d":3}],
@@ -364,7 +365,7 @@ DELETE {"shop_id":"shp_00042"}   → bỏ
 ```
 `BR-201` **tối đa 10 shop** → vượt thì `400 {"error":"tracking_limit_reached","limit":10}`.
 `BR-202` trùng shop → `400 {"error":"already_tracked"}`.
-`BR-203` chỉ báo khi sản phẩm mới rơi vào ngách đang hoạt động.
+`BR-203` chỉ báo khi sản phẩm mới rơi vào ngách đang hoạt động. Dữ liệu mồi không có ngày đăng thật nên `alerts` luôn rỗng.
 `BR-204` bỏ theo dõi **dừng cảnh báo tương lai, không xoá cảnh báo cũ**.
 
 ### F37 · `GET /api/analytics/forecast/revenue?targetId=&window=`
@@ -440,8 +441,13 @@ không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ s
 
 - `meta.source.mode = "live"`, `attributed_to_live_shop = true`, `quality.identity_linked = true`.
 - `category_id` là slug danh mục **cấp 1** của sàn; kèm tên: `category_names` (F32, F34), `segment_name` (F33).
+- BR-187: sàn được quét **mỗi ngày một lần** (theo ngày giờ VN) và giữ trong RAM của tiến trình AI, không thêm bảng.
+  `computed_at` (và `alerts_computed_at` của F36) là giờ quét, không phải giờ mở trang. Khởi động lại AI thì quét lại.
 - F32: mỗi đối thủ kèm `shop_id` để theo dõi ngay trên bảng. `est_sales_90d` = số sản phẩm của đơn
-  `DELIVERED` trong 90 ngày, không tính đơn mô phỏng hay dữ liệu mồi (`seed_ref`).
+  `DELIVERED` trong 90 ngày, không tính đơn mô phỏng, dữ liệu mồi (`seed_ref`) hay đơn **chủ shop tự mua** (`buyer_id`
+  là chủ shop). Cùng luật áp cho doanh thu F33 và số bán theo tuần của `surging`.
+- F32: danh mục ít đối thủ vẫn trả đúng số đang có (SRS 3.9.1), kèm `low_sample: true` khi dưới 5; không còn `insufficient_data`.
+- F32, F33 (cả hai miền): `meta.quality.confidence = "low"` khi chưa có đơn (thứ hạng đang theo số đánh giá) hoặc dưới 5 đối thủ, còn lại `"medium"`.
 - F32, F34: không truyền `categoryId` thì mở **danh mục chính** (danh mục shop có nhiều sản phẩm nhất), áp dụng cả hai miền.
 - `listing_id` của shop thật chính là `product_id` (mở thẳng được trang sức khoẻ sản phẩm F27–F29).
 - F33: trục thiếu dữ liệu là `null`, đứng ngoài min–max; `axes_missing` liệt kê trục thiếu của shop mình.
@@ -451,8 +457,10 @@ không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ s
 - F36: danh sách theo dõi **là follow của sàn** (`shop_followers`), tối đa 10. POST/DELETE của shop thật
   do BE ghi; gọi thẳng module AI thì `400`. Cảnh báo = sản phẩm đối thủ đăng trong 7 ngày, trùng tag hoặc
   danh mục **lá** (`matched_type`, `type_name`; `matched_category` vẫn là cấp 1), có `listed_at`, `tag_names`,
-  `alerts_computed_at`. `added_at` luôn `null`. Bỏ theo dõi thì
-  cảnh báo của shop đó không còn hiện (chưa giữ được BR-204 vì không lưu cảnh báo).
+  `alerts_computed_at`. `tracked[]` có thêm `category_name` (danh mục shop đó bán nhiều nhất) và `last_new_listing_at`
+  (ngày đăng sản phẩm gần nhất). `added_at` luôn `null`. Cảnh báo được BE gửi hằng ngày vào bảng `notifications` có sẵn
+  (`ANALYTICS_ALERT`), nên bỏ theo dõi chỉ dừng cảnh báo mới, cảnh báo đã gửi vẫn còn (BR-204).
+  Bỏ theo dõi theo đường dẫn `/api/analytics/competitor-tracking/{shopId}` (DELETE); bản nhận `shop_id` trong body vẫn giữ.
 - F35 giữ chế độ `derived` so với catalog tham chiếu. Catalog trống thì so giá thật cùng danh mục trên sàn.
 
 ### AI đối thủ (độ giống sản phẩm) — thêm 18/10/2026, chỉ shop thật
@@ -489,13 +497,16 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 
 BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_doi_thu_ke_hoach.py`
 gom các sự thật đã tính ở F32–F36 (đe doạ cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
-từ khoá ≥ 2 sản phẩm giống dùng, khoảng cách tới nhóm bán tốt, đối thủ trực tiếp chưa theo dõi) rồi lập tối đa 5 việc,
-mỗi loại tối đa 2.
+từ khoá ≥ 2 sản phẩm giống dùng, khoảng cách tới nhóm bán tốt, đối thủ trực tiếp chưa theo dõi) rồi lập tối đa 10 việc,
+mỗi loại tối đa 2 (FE chia 5 việc mỗi trang).
 
-`data`: `{source: rules|llm, provider (vd "anthropic/claude-sonnet-5-5") | null, actions[{action, why, link | null}],
+`data`: `{source: rules|llm, provider (vd "anthropic/claude-sonnet-5-5") | null, actions[{action, why, link | null, priority}],
 facts_count, generated_at}`. Có `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` thì mô hình ngôn ngữ viết lại
 câu chữ (`COMPETITOR_BRIEF_MODEL` đổi mô hình Claude); việc nào có con số không nằm trong sự thật bị bỏ, không còn việc
 nào thì dùng kế hoạch theo luật. Lưu đệm 30 phút theo shop, tự làm mới khi sự thật đổi.
+`priority`: `gap` (hàng mới đe doạ cao) · `quan_trong` (giá lệch, đối thủ tăng tốc, hàng mới đe doạ vừa) · `nen_lam`
+(từ khoá, nhóm bán tốt, theo dõi shop); `actions` luôn xếp từ `gap` tới `nen_lam`. Mô hình ngôn ngữ phải ghi `fact` là số
+thứ tự sự thật làm căn cứ cho từng việc; việc không chỉ ra được sự thật bị bỏ.
 
 ---
 
