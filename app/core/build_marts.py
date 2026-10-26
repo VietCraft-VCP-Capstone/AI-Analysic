@@ -13,6 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 from pymongo import MongoClient
 
 from app.config import settings
+from app.core.f30_seed import build_anomaly_event
 from app.core.writer import MART_SCHEMA, finish_model_run, save_model_output, start_model_run
 
 VERSION = "marts-1.0"
@@ -21,10 +22,6 @@ M_BAYES = 50  # docs/BAYES_M_SELECTION.md
 
 # Chỉ số Google Trends dưới mức này thì % tăng không đáng tin (thang 0-100).
 NEN_TOI_THIEU = 5.0
-
-# Chuỗi ngày phải có ít nhất ngần này tỉ lệ ngày CÓ doanh thu thì z-score mới
-# có nghĩa. Dưới ngưỡng, nền của chuỗi là 0 và mọi ngày bán được đều thành đột biến.
-TOI_THIEU_NGAY_CO_BAN = 0.40
 
 
 def _db():
@@ -381,46 +378,47 @@ def build_mart_listing_quality(db) -> List[Dict[str, Any]]:
         g["o"] += r["orders"]
     cr_danh_muc = {c: _phan_tram(g["o"], g["v"]) for c, g in gom.items()}
 
-    ban_ghi = []
-    for lid, r in pheu.items():
-        v2c = _phan_tram(r["carts"], r["views"])
-        c2o = _phan_tram(r["orders"], r["carts"])
-        v2o = _phan_tram(r["orders"], r["views"])
-        moc = cr_danh_muc.get(r["category_id"])
-        chi_so = round(v2o / moc, 2) if (v2o is not None and moc) else None
+    return [{
+        "listing_id": lid,
+        "funnel": {"views": int(r["views"]), "carts": int(r["carts"]), "orders": int(r["orders"])},
+        **chi_so_pheu(r["views"], r["carts"], r["orders"], cr_danh_muc.get(r["category_id"])),
+        "category_id": r["category_id"],
+        "window_from": tu, "window_to": den,
+    } for lid, r in pheu.items()]
 
-        # Khâu yếu nhất: so mỗi bước với chính danh mục, không so hai bước với nhau —
-        # xem->giỏ và giỏ->mua có thang khác hẳn, so thẳng là luôn ra cùng một kết luận.
-        yeu = None
-        if v2c is not None and c2o is not None:
-            yeu = "view_to_cart" if v2c < c2o / 4 else "cart_to_order"
-        elif v2c is not None:
-            yeu = "view_to_cart"
 
-        # BR-179: CHỈ gợi ý khi CR thấp hơn danh mục >= 20%. Không thì mảng rỗng.
-        tips = []
-        if chi_so is not None and chi_so <= 0.8:
-            if yeu == "view_to_cart":
-                tips.append({"issue": f"Chỉ {v2c}% người xem thêm vào giỏ",
-                             "action": "Ảnh đầu tiên nên chụp sản phẩm đang được dùng thật"})
-            else:
-                tips.append({"issue": f"Chỉ {c2o}% người đã thêm giỏ thì đặt hàng",
-                             "action": "Kiểm lại phí vận chuyển và thời gian giao hiển thị ở trang sản phẩm"})
+def chi_so_pheu(views: float, carts: float, orders: float, moc) -> Dict[str, Any]:
+    v2c = _phan_tram(carts, views)
+    c2o = _phan_tram(orders, carts)
+    v2o = _phan_tram(orders, views)
+    chi_so = round(v2o / moc, 2) if (v2o is not None and moc) else None
 
-        ban_ghi.append({
-            "listing_id": lid,
-            "funnel": {"views": int(r["views"]), "carts": int(r["carts"]), "orders": int(r["orders"])},
-            "view_to_cart_pct": v2c,
-            "cart_to_order_pct": c2o,
-            "view_to_order_pct": v2o,
-            "category_avg_pct": moc,
-            "cr_index": chi_so,
-            "weakest_step": yeu,
-            "tips": tips,
-            "category_id": r["category_id"],
-            "window_from": tu, "window_to": den,
-        })
-    return ban_ghi
+    # So từng bước với danh mục, không so hai bước với nhau vì thang khác hẳn.
+    yeu = None
+    if v2c is not None and c2o is not None:
+        yeu = "view_to_cart" if v2c < c2o / 4 else "cart_to_order"
+    elif v2c is not None:
+        yeu = "view_to_cart"
+
+    # BR-179: chỉ gợi ý khi CR thấp hơn danh mục từ 20%.
+    tips = []
+    if chi_so is not None and chi_so <= 0.8:
+        if yeu == "view_to_cart":
+            tips.append({"issue": f"Chỉ {v2c}% người xem thêm vào giỏ",
+                         "action": "Ảnh đầu tiên nên chụp sản phẩm đang được dùng thật"})
+        else:
+            tips.append({"issue": f"Chỉ {c2o}% người đã thêm giỏ thì đặt hàng",
+                         "action": "Kiểm lại phí vận chuyển và thời gian giao hiển thị ở trang sản phẩm"})
+
+    return {
+        "view_to_cart_pct": v2c,
+        "cart_to_order_pct": c2o,
+        "view_to_order_pct": v2o,
+        "category_avg_pct": moc,
+        "cr_index": chi_so,
+        "weakest_step": yeu,
+        "tips": tips,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -438,8 +436,7 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
     if not chat_luong:
         return []
 
-    # Đánh giá với co ngót Bayes: (Σ★ + m·C)/(n + m)
-    # Trước tiên tính C = trung bình toàn sàn (category-level)
+    # Đánh giá co ngót Bayes (Σ★ + m·C)/(n + m), C = trung bình toàn sàn.
     danh_gia_raw = {r["_id"]: r for r in db["reviews"].aggregate([
         {"$group": {"_id": "$listing_id", "n": {"$sum": 1},
                     "sao": {"$avg": {"$toDouble": "$star"}},
@@ -519,8 +516,7 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
         ty_le_con_hang = (con_hang / tong_bien_the * 100) if tong_bien_the else 0
         d_ton = round(min(100.0, ty_le_con_hang), 1)
 
-        # Độ mới: tính từ lần sửa nội dung gần nhất (content_changed_at), không dùng created_at
-        # Nếu không có content_changed_at, dùng updated_at; nếu vẫn không có thì dùng created_at
+        # Độ mới tính từ content_changed_at, thiếu thì lùi về updated_at rồi created_at.
         thoi_gian_sua = l.get("content_changed_at") or l.get("updated_at") or l.get("created_at")
         try:
             if thoi_gian_sua:
@@ -562,10 +558,6 @@ def build_listing_health(db) -> List[Dict[str, Any]]:
 
 
 def _viec_can_lam(db, lid, truc, danh_muc_id, n_anh, con_hang_ty_le, tong_bien_the):
-    """Gợi ý việc cần sửa dựa trên mốc so sánh thực tế (trung vị danh mục).
-
-    Mốc = max(trung vị danh mục, mức sàn). Mức sàn được đặt trong config hoặc mặc định.
-    """
     from statistics import median
 
     viec = []
@@ -611,84 +603,9 @@ def _viec_can_lam(db, lid, truc, danh_muc_id, n_anh, con_hang_ty_le, tong_bien_t
                 "field": "stock_qty"
             })
 
-    # Chuyển đổi chỉ hiển thị để tham khảo (seller không sửa trực tiếp được),
-    # nên KHÔNG sinh việc cần sửa với gain giả — chỉ trỏ sang F28 để xem khâu nào hỏng.
+    # Chuyển đổi chỉ để tham khảo nên không sinh việc cần sửa, chỉ trỏ sang F28.
 
     return sorted(viec, key=lambda v: v["priority"])
-
-
-# ---------------------------------------------------------------------------
-# anomaly_event — ngày doanh thu tụt/vọt bất thường. Nền của F30
-# ---------------------------------------------------------------------------
-
-def build_anomaly_event(db) -> List[Dict[str, Any]]:
-    from app.services.zscore_service import ZScoreService
-
-    chuoi = defaultdict(list)
-    for r in db["listing_daily"].aggregate([
-        {"$group": {"_id": {"s": "$shop_id", "d": "$date"}, "rev": {"$sum": "$revenue_vnd"}}},
-        {"$sort": {"_id.d": 1}},
-    ]):
-        chuoi[r["_id"]["s"]].append((r["_id"]["d"], float(r["rev"])))
-
-    ban_ghi = []
-    bo_qua = {"qua_ngan": 0, "qua_thua": 0, "khong_tin_cay": 0, "loi": 0}
-
-    for shop, diem in chuoi.items():
-        if len(diem) < 60:          # dưới ~2 tháng thì z-score không có nghĩa
-            bo_qua["qua_ngan"] += 1
-            continue
-
-        ngay = [d for d, _ in diem]
-        gia_tri = [v for _, v in diem]
-
-        # CHẶN CHUỖI QUÁ THƯA. Đo thật 21/09: shp_00018 có 297/380 ngày doanh thu
-        # bằng 0 (78%). Trên chuỗi như vậy mọi ngày CÓ bán đều thành "đột biến" —
-        # z-score giả định phần dư phân bố quanh một mức nền, mà ở đây nền là 0.
-        # Chạy bừa cho ra 4.423 cảnh báo trên 80 shop, tỉ lệ 10%, gấp đôi ngưỡng
-        # MAX_ANOMALY_RATE. Cảnh báo sai nhiều thì người bán tắt thông báo, và
-        # tính năng chết hẳn — tệ hơn là không có tính năng.
-        ty_le_khac_0 = sum(1 for v in gia_tri if v) / len(gia_tri)
-        if ty_le_khac_0 < TOI_THIEU_NGAY_CO_BAN:
-            bo_qua["qua_thua"] += 1
-            continue
-
-        try:
-            kq = ZScoreService.analyze(gia_tri, dates=ngay, period=7)
-        except Exception:
-            bo_qua["loi"] += 1
-            continue
-
-        # Chính service đã tự chấm chuỗi này không đáng tin -> KHÔNG ghi gì cả.
-        # Ghi kèm cờ cảnh báo vẫn là ghi: API đọc ra và người bán vẫn thấy.
-        if kq.get("status") == "unreliable_high_rate":
-            bo_qua["khong_tin_cay"] += 1
-            continue
-
-        for p in kq.get("points", []):
-            if not p.get("is_anomaly"):
-                continue
-            i = p["index"]
-            ban_ghi.append({
-                "entity_type": "shop",
-                "entity_id": shop,
-                "event_date": ngay[i],
-                "direction": "drop" if p["score"] < 0 else "spike",
-                "z": round(float(p["score"]), 2),
-                "expected": int(round(float(p.get("trend", 0)) + float(p.get("seasonal", 0)))),
-                "actual": int(round(float(p["value"]))),
-                "severity": ("high" if abs(p["score"]) >= 15 else
-                             "medium" if abs(p["score"]) >= 10 else "low"),
-                "calendar_sensitive": bool(p.get("calendar_sensitive")),
-                # Cờ tin cậy của CẢ CHUỖI, không phải của riêng điểm này — chuỗi ít
-                # chu kỳ thì mọi điểm trên nó đều kém tin, phải nói ra.
-                "confidence": kq.get("status", "ok"),
-                "reliability_note": kq.get("reliability_note"),
-                "cycles_observed": round(float(kq.get("cycles_observed", 0)), 1),
-            })
-    ban_ghi.sort(key=lambda r: (r["event_date"], -abs(r["z"])))
-    print(f"   [anomaly] {len(chuoi)} shop -> bỏ qua: {bo_qua}")
-    return ban_ghi
 
 
 # ---------------------------------------------------------------------------
@@ -800,8 +717,59 @@ def _arima(chuoi: List[float], h: int):
         return None
 
 
-def build_forecast_point(db) -> List[Dict[str, Any]]:
+def du_bao_chuoi(ngay: List[str], y: List[float]):
+    """Dự báo 90 ngày cho một chuỗi doanh thu ngày; None khi lịch sử chưa đủ."""
+    import statistics
     from app.core.metrics import mase
+
+    if len(y) < TOI_THIEU_LICH_SU:
+        return None
+    # Đo trên phần giữ lại, đo trên phần đã học thì mọi mô hình đều "đúng".
+    cat = max(TOI_THIEU_LICH_SU, len(y) - 30)
+    hoc, giu = y[:cat], y[cat:]
+    if len(giu) < 7:
+        return None
+
+    mase_sn = mase(giu, _seasonal_naive(hoc, len(giu)), hoc, period=CHU_KY)
+    ar_giu = _arima(hoc, len(giu))
+    mase_ar = mase(giu, ar_giu[0], hoc, period=CHU_KY) if ar_giu else None
+    dung_arima = mase_ar is not None and mase_ar < mase_sn
+    ten_mo_hinh = "arima" if dung_arima else "seasonal_naive"
+
+    du = _arima(y, HORIZON_MAX) if dung_arima else None
+    if du:
+        tb, lo, hi = du
+    else:
+        tb = _seasonal_naive(y, HORIZON_MAX)
+        sai = [y[i] - y[i - CHU_KY] for i in range(CHU_KY, len(y))]
+        sd = statistics.pstdev(sai) if len(sai) > 1 else 0.0
+        lo = [v - 1.96 * sd for v in tb]
+        hi = [v + 1.96 * sd for v in tb]
+
+    cuoi = datetime.strptime(ngay[-1], "%Y-%m-%d").date()
+    return {
+        "so_sanh": {
+            "chosen": ten_mo_hinh,
+            "holdout_days": len(giu),
+            "seasonal_naive_mase": round(mase_sn, 4),
+            "arima_mase": round(mase_ar, 4) if mase_ar is not None else None,
+            "lstm_mase": None,
+        },
+        "points": [{
+            "forecast_date": (cuoi + timedelta(days=i + 1)).isoformat(),
+            "yhat": max(0.0, round(tb[i], 2)),
+            "lo95": max(0.0, round(lo[i], 2)),
+            "hi95": round(hi[i], 2),
+            "model": ten_mo_hinh,
+            "horizon_days": HORIZON_MAX,
+            "horizon_index": i + 1,
+            "mase": round(mase_ar if dung_arima else mase_sn, 4),
+            "mase_baseline": round(mase_sn, 4),
+        } for i in range(HORIZON_MAX)],
+    }
+
+
+def build_forecast_point(db) -> List[Dict[str, Any]]:
 
     chuoi_shop = defaultdict(list)
     for r in db["listing_daily"].aggregate([
@@ -812,70 +780,12 @@ def build_forecast_point(db) -> List[Dict[str, Any]]:
 
     ban_ghi, bo_qua, so_sanh = [], 0, {}
     for shop, diem in chuoi_shop.items():
-        if len(diem) < TOI_THIEU_LICH_SU:
+        kq = du_bao_chuoi([d for d, _ in diem], [v for _, v in diem])
+        if kq is None:
             bo_qua += 1
             continue
-        ngay = [d for d, _ in diem]
-        y = [v for _, v in diem]
-
-        # Đo trên phần GIỮ LẠI, không đo trên phần đã học — đo trên dữ liệu đã
-        # thấy thì mọi mô hình đều "chính xác" và con số vô nghĩa.
-        cat = max(TOI_THIEU_LICH_SU, len(y) - 30)
-        hoc, giu = y[:cat], y[cat:]
-        if len(giu) < 7:
-            bo_qua += 1
-            continue
-
-        sn_giu = _seasonal_naive(hoc, len(giu))
-        mase_sn = mase(giu, sn_giu, hoc, period=CHU_KY)
-        ar_giu = _arima(hoc, len(giu))
-        mase_ar = mase(giu, ar_giu[0], hoc, period=CHU_KY) if ar_giu else None
-
-        # Chọn mô hình theo SỐ ĐO, không theo ý thích. ARIMA thua mốc ngây thơ thì
-        # dùng mốc ngây thơ và ghi rõ — đó là kết quả hợp lệ, không phải thất bại.
-        dung_arima = mase_ar is not None and mase_ar < mase_sn
-        ten_mo_hinh = "arima" if dung_arima else "seasonal_naive"
-
-        # Bảng so sánh mô hình ghi MỘT LẦN cho mỗi shop, vào model_run.
-        # Gắn cả khối này lên từng dòng dự báo thì 46% dung lượng mart là bản sao
-        # y hệt nhau — đúng cái đã làm cụm Atlas M0 tràn ngày 21/09.
-        so_sanh[shop] = {
-            "chosen": ten_mo_hinh,
-            "holdout_days": len(giu),
-            "seasonal_naive_mase": round(mase_sn, 4),
-            "arima_mase": round(mase_ar, 4) if mase_ar is not None else None,
-            "lstm_mase": None,      # SPEC-03 chưa chốt — để null, KHÔNG bịa số
-        }
-
-        cuoi = datetime.strptime(ngay[-1], "%Y-%m-%d").date()
-        for h in (HORIZON_MAX,):
-            du = _arima(y, h) if dung_arima else None
-            if du:
-                tb, lo, hi = du
-            else:
-                tb = _seasonal_naive(y, h)
-                # Dải tin cậy của mốc ngây thơ: ±1,96 độ lệch chuẩn phần dư trong mẫu.
-                import statistics
-                sai = [y[i] - y[i - CHU_KY] for i in range(CHU_KY, len(y))]
-                sd = statistics.pstdev(sai) if len(sai) > 1 else 0.0
-                lo = [v - 1.96 * sd for v in tb]
-                hi = [v + 1.96 * sd for v in tb]
-
-            for i in range(h):
-                ban_ghi.append({
-                    "entity_type": "shop",
-                    "entity_id": shop,
-                    "forecast_date": (cuoi + timedelta(days=i + 1)).isoformat(),
-                    "yhat": max(0.0, round(tb[i], 2)),
-                    "lo95": max(0.0, round(lo[i], 2)),        # BR-207: kẹp ở 0
-                    "hi95": round(hi[i], 2),
-                    "model": ten_mo_hinh,
-                    "horizon_days": h,
-                    "horizon_index": i + 1,       # thứ tự bước, để API cắt cửa sổ
-                    # Chỉ 2 số trên mỗi dòng; bảng đầy đủ nằm ở model_run.
-                    "mase": round(mase_ar if dung_arima else mase_sn, 4),
-                    "mase_baseline": round(mase_sn, 4),
-                })
+        so_sanh[shop] = kq["so_sanh"]
+        ban_ghi.extend({"entity_type": "shop", "entity_id": shop, **p} for p in kq["points"])
 
     print(f"   [forecast] {len(chuoi_shop)} shop, bỏ qua {bo_qua} vì lịch sử < {TOI_THIEU_LICH_SU} ngày")
     build_forecast_point.so_sanh = so_sanh      # main() ghi kèm vào model_run
@@ -917,7 +827,7 @@ def main() -> int:
 
     for t in ten:
         print(f"── {t}")
-        ban_ghi = JOBS[t](db)
+        ban_ghi = JOBS[t](db, dry_run=a.dry_run) if t == "anomaly_event" else JOBS[t](db)
         print(f"   tính được {len(ban_ghi):,} dòng")
         if ban_ghi:
             mau = ban_ghi[0]

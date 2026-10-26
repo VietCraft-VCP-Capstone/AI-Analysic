@@ -57,21 +57,37 @@ MART_SCHEMA: Dict[str, Dict[str, Any]] = {
         "fields_bat_buoc": ["yhat", "lo95", "hi95", "model", "horizon_days"],
     },
     "anomaly_event": {
-        "key": ["entity_type", "entity_id", "event_date"],
+        "key": ["entity_type", "entity_id", "metric", "event_date"],
         "writes": "F30",
         "reads": "F30",
         "fields": {
+            "metric": "str — views · revenue",
             "direction": "str — drop · spike",
-            "z": "float — điểm z, ngưỡng |z| > 7.0 (KHÔNG phải 2.0 của BR-183, xem SPEC_CHANGES.md)",
-            "expected": "int|None — doanh thu kỳ vọng, VND nguyên",
-            "actual": "int|None — doanh thu thật, VND nguyên",
+            "z": "float — z hiệu chỉnh, ngưỡng |z| > 2.0 (BR-183)",
+            "expected": "int|None — giá trị kỳ vọng (VND nguyên với revenue)",
+            "actual": "int|None — giá trị thật (VND nguyên với revenue)",
             "severity": "str — high · medium · low",
             "calendar_sensitive": "bool — rơi vào dịp lễ/Tết hay không",
-            "confidence": "str — ok · calendar_sensitive · limited_few_cycles · unreliable_high_rate",
-            "reliability_note": "str|None — vì sao chuỗi này đáng tin tới mức đó",
-            "cycles_observed": "float — số chu kỳ mùa vụ quan sát được; dưới 12 thì kém tin",
+            "confidence": "str — ok · low_history",
+            "rule": "str — luật đã kích hoạt cảnh báo",
+            "change_pct": "float|None — thay đổi so với kỳ vọng, theo %",
+            "top_listings": "list — sản phẩm đóng góp nhiều nhất vào biến động",
+            "mode": "str — live · seed_demo",
         },
-        "fields_bat_buoc": ["direction", "z", "severity", "confidence"],
+        "fields_bat_buoc": ["metric", "direction", "z", "severity", "expected", "actual"],
+    },
+    "anomaly_run": {
+        "key": ["entity_type", "entity_id", "run_date"],
+        "writes": "F30",
+        "reads": "F30",
+        "fields": {
+            "status": "str — analysed · skipped",
+            "skip_reason": "str|None — vì sao bỏ qua khi status = skipped",
+            "history_days": "int — số ngày lịch sử đã dùng",
+            "metrics": "dict — theo metric views/revenue: {expected, actual, z}",
+            "mode": "str — live · seed_demo",
+        },
+        "fields_bat_buoc": ["status"],
     },
     "listing_health": {
         "key": ["listing_id", "date"],
@@ -253,7 +269,7 @@ BLOCKED: Dict[str, str] = {
         "Đã thử 21/09: cụm Atlas M0 (512 MB, DÙNG CHUNG CẢ NHÓM) vọt lên 526/512 MB "
         "và CHẶN GHI VỚI TẤT CẢ MỌI NGƯỜI. Phải xoá bảng mới gỡ được.\n"
         "  → 4 cột khoá đã được điền THẲNG vào `listing_daily` bằng "
-        "app/core/backfill_listing_daily_ids.py. F26/F27/F30/F31/F37 đọc trực tiếp "
+        "script một lần backfill_listing_daily_ids.py (đã xoá 21/10, xem git history). F26/F27/F30/F31/F37 đọc trực tiếp "
         "bảng đó, đã có index trên shop_id / category_id / product_type_id / date.\n"
         "  → Cần một bảng gộp thật thì gộp ở ĐỘ MỊN THÔ HƠN, ví dụ (shop_id, date): "
         "80 shop x ~550 ngày = ~44.000 dòng thay vì 796.025."

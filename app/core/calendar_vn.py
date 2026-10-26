@@ -1,7 +1,8 @@
 
+import logging
 import pandas as pd
 import numpy as np
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Union, Dict
 
 # Bảng ngày mùng 1 Tết Nguyên Đán (Dương lịch).
@@ -51,13 +52,11 @@ def days_to_tet(date_val: Union[str, datetime, date, pd.Timestamp]) -> int:
     ts = pd.to_datetime(date_val)
     year = ts.year
 
-    # Tìm ngày Tết gần nhất (so sánh Tết năm trước, năm nay và năm sau)
     candidate_years = [y for y in [year - 1, year, year + 1] if y in TET_DATES]
     if not candidate_years:
         raise ValueError(f"Không tìm thấy năm Tết phù hợp cho ngày {date_val}")
 
     diffs = [(ts - pd.Timestamp(TET_DATES[y])).days for y in candidate_years]
-    # Chọn ngày có khoảng cách tuyệt đối nhỏ nhất
     min_diff = min(diffs, key=abs)
     return int(min_diff)
 
@@ -83,6 +82,88 @@ def get_tet_aligned_series(series: pd.Series) -> pd.DataFrame:
     df["year"] = df["observed_on"].dt.year
     df["days_to_tet"] = df["observed_on"].apply(days_to_tet)
     return df
+
+
+MID_AUTUMN_DATES: Dict[int, str] = {
+    2021: "2021-09-21",
+    2022: "2022-09-10",
+    2023: "2023-09-29",
+    2024: "2024-09-17",
+    2025: "2025-10-06",
+    2026: "2026-09-25",
+    2027: "2027-09-15",
+    2028: "2028-10-03",
+    2029: "2029-09-22",
+    2030: "2030-09-12",
+}
+
+_MISSING_LOGGED: set = set()
+
+ALL_GROUPS = ["fashion", "bags", "shoes", "accessories", "home", "sport"]
+
+
+def _fixed(month: int, day: int):
+    return lambda year: date(year, month, day)
+
+
+def _black_friday(year: int) -> date:
+    first = date(year, 11, 1)
+    thursday = first + timedelta(days=(3 - first.weekday()) % 7 + 21)
+    return thursday + timedelta(days=1)
+
+
+SHOPPING_EVENTS = [
+    {"key": "tet", "name": "Tết Nguyên Đán", "prep_days": 60, "groups": ALL_GROUPS,
+     "date_fn": lambda y: date.fromisoformat(TET_DATES[y])},
+    {"key": "valentine", "name": "Valentine 14/2", "prep_days": 21,
+     "groups": ["fashion", "bags", "accessories"], "date_fn": _fixed(2, 14)},
+    {"key": "8/3", "name": "Quốc tế Phụ nữ 8/3", "prep_days": 21,
+     "groups": ["fashion", "bags", "accessories", "home"], "date_fn": _fixed(3, 8)},
+    {"key": "30/4", "name": "Lễ 30/4 và 1/5", "prep_days": 21,
+     "groups": ["fashion", "shoes", "sport"], "date_fn": _fixed(4, 30)},
+    {"key": "1/6", "name": "Quốc tế Thiếu nhi 1/6", "prep_days": 21,
+     "groups": ["fashion", "shoes", "sport"], "date_fn": _fixed(6, 1)},
+    {"key": "khai_giang", "name": "Khai giảng 5/9", "prep_days": 30,
+     "groups": ["bags", "shoes", "fashion", "sport", "accessories"], "date_fn": _fixed(9, 5)},
+    {"key": "trung_thu", "name": "Tết Trung thu", "prep_days": 30,
+     "groups": ["home", "fashion", "accessories"],
+     "date_fn": lambda y: date.fromisoformat(MID_AUTUMN_DATES[y])},
+    {"key": "20/10", "name": "Phụ nữ Việt Nam 20/10", "prep_days": 21,
+     "groups": ["fashion", "bags", "accessories", "home"], "date_fn": _fixed(10, 20)},
+    {"key": "halloween", "name": "Halloween", "prep_days": 21,
+     "groups": ["fashion", "accessories", "home"], "date_fn": _fixed(10, 31)},
+    {"key": "11/11", "name": "Siêu sale 11/11", "prep_days": 14,
+     "groups": ALL_GROUPS, "date_fn": _fixed(11, 11)},
+    {"key": "black_friday", "name": "Black Friday", "prep_days": 21,
+     "groups": ALL_GROUPS, "date_fn": _black_friday},
+    {"key": "20/11", "name": "Nhà giáo Việt Nam 20/11", "prep_days": 21,
+     "groups": ["fashion", "bags", "accessories", "home"], "date_fn": _fixed(11, 20)},
+    {"key": "12/12", "name": "Siêu sale 12/12", "prep_days": 14,
+     "groups": ALL_GROUPS, "date_fn": _fixed(12, 12)},
+    {"key": "noel", "name": "Giáng Sinh 24/12", "prep_days": 30,
+     "groups": ["fashion", "shoes", "accessories", "home"], "date_fn": _fixed(12, 24)},
+]
+
+
+def upcoming_events(d: date, weeks: int = 12) -> list:
+    d = pd.Timestamp(d).date()
+    end = d + timedelta(weeks=weeks)
+    found = []
+    for ev in SHOPPING_EVENTS:
+        for year in (d.year, d.year + 1):
+            try:
+                when = ev["date_fn"](year)
+            except KeyError:
+                if (ev["key"], year) not in _MISSING_LOGGED:
+                    _MISSING_LOGGED.add((ev["key"], year))
+                    logging.getLogger(__name__).warning(
+                        "Chưa có ngày sự kiện %s cho năm %s", ev["key"], year)
+                continue
+            if d <= when <= end:
+                found.append({"key": ev["key"], "name": ev["name"], "date": when,
+                              "prep_start": when - timedelta(days=ev["prep_days"]),
+                              "groups": list(ev["groups"])})
+    return sorted(found, key=lambda e: e["date"])
 
 
 if __name__ == "__main__":

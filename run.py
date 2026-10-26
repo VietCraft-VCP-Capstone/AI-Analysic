@@ -32,6 +32,18 @@ VENV = GOC / ".venv"
 PY_TOI_THIEU = (3, 10)
 
 # Windows để python.exe trong .venv\Scripts\, Unix để trong .venv/bin/.
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+# Windows để python.exe trong .venv\Scripts\, Unix để trong .venv/bin/.
 # Đây là khác biệt DUY NHẤT giữa hai hệ điều hành trong cả script này.
 WIN = platform.system() == "Windows"
 PY_VENV = VENV / ("Scripts" if WIN else "bin") / ("python.exe" if WIN else "python")
@@ -51,7 +63,13 @@ def muc(n, t): print(f"\n{'='*70}\n  BUOC {n} — {t}\n{'='*70}")
 def chay(cmd, **kw):
     """Gọi lệnh con. Không dùng shell=True: đường dẫn có dấu cách trên Windows
     (vd. C:\\Users\\Nguyen Van A\\) sẽ bị tách sai."""
-    return subprocess.run([str(c) for c in cmd], cwd=GOC, **kw)
+    moi_env = kw.pop("env", os.environ.copy()).copy()
+    moi_env.setdefault("PYTHONIOENCODING", "utf-8")
+    moi_env.setdefault("PYTHONUTF8", "1")
+    if kw.get("text") or kw.get("universal_newlines"):
+        kw.setdefault("encoding", "utf-8")
+        kw.setdefault("errors", "replace")
+    return subprocess.run([str(c) for c in cmd], cwd=GOC, env=moi_env, **kw)
 
 
 # ---------------------------------------------------------------------------

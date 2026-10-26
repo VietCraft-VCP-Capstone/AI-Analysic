@@ -8,7 +8,7 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 
 from app.api.v1._live import la_shop_live
-from app.api.v1._live_guard import THIEU_LUOT_XEM, chan_shop_live, dem_luot_xem_listing_30ngay
+from app.api.v1._live_listing import timeseries_live
 from app.api.v1._mart import cua_so, db, doc_khoang, ngay_moi_nhat, tien, ty_le_chuyen_doi
 from app.api.v1._template import CurrentShop, forbidden, insufficient, mart_not_ready, build_meta, not_found, ok
 
@@ -16,15 +16,10 @@ router = APIRouter()
 
 TOI_THIEU_NGAY = 7
 NGUONG_DOC = 5.0        # BR-178: ±5% mỗi ngày so với mức trung bình
-NGUONG_LUOT_XEM = 100   # §9.2: ≥100 lượt xem/listing/30 ngày
 
 
 def _xu_huong(gia_tri):
-    """Độ dốc hồi quy tuyến tính, quy về % thay đổi mỗi ngày so với mức trung bình.
-
-    Dùng hồi quy chứ không so điểm đầu với điểm cuối: chuỗi ngày rất nhiễu, hai
-    điểm mút có thể là ngày lễ hoặc ngày chết và cho kết luận ngược hẳn.
-    """
+    """Độ dốc hồi quy (% mỗi ngày); dùng hồi quy vì hai điểm mút của chuỗi ngày rất nhiễu."""
     n = len(gia_tri)
     if n < TOI_THIEU_NGAY:
         return "unknown", None
@@ -40,22 +35,20 @@ def _xu_huong(gia_tri):
 
 @router.get("/api/analytics/listings/{id}/timeseries", tags=["F27 · Hiếu"])
 def listing_timeseries(id: str, shop_id: str = CurrentShop, timeRange: str = "30d"):
-    unlock = None
-    if la_shop_live(shop_id):
-        unlock = {"requirement": "lượt xem/listing, 30 ngày", "unit": "lượt xem",
-                  "current": dem_luot_xem_listing_30ngay(id), "target": NGUONG_LUOT_XEM}
-    chan = chan_shop_live(shop_id, THIEU_LUOT_XEM, "product_events", unlock=unlock)
-    if chan is not None:
-        return chan
-
     so_ngay = doc_khoang(timeRange)
+    if la_shop_live(shop_id):
+        kq = timeseries_live(id, shop_id, so_ngay)
+        if not isinstance(kq, tuple):
+            return kq
+        du_lieu, meta = kq
+        return _ket_qua(id, du_lieu, meta, False)
 
     l = db()["listings"].find_one({"listing_id": id},
                                   {"_id": 0, "shop_id": 1, "title": 1, "category_id": 1})
     if l is None:
         not_found("listing")
     if l.get("shop_id") != shop_id:
-        forbidden()                                  # BR-177
+        forbidden()
 
     moi_nhat = ngay_moi_nhat({"listing_id": id})
     if moi_nhat is None:
@@ -80,7 +73,6 @@ def listing_timeseries(id: str, shop_id: str = CurrentShop, timeRange: str = "30
     chuoi = [{"date": r["date"], "views": int(r["views"]), "carts": int(r["add_to_carts"]),
               "orders": int(r["orders"]), "revenue_vnd": tien(r["revenue_vnd"])} for r in rows]
 
-    # Trung vị danh mục cùng kỳ, để người bán biết mình so với mặt bằng.
     trung_vi = list(db()["listing_daily"].aggregate([
         {"$match": {"category_id": l.get("category_id"), "date": {"$gte": tu, "$lte": den}}},
         {"$group": {"_id": {"d": "$date", "l": "$listing_id"}, "v": {"$sum": "$views"}}},
@@ -88,16 +80,25 @@ def listing_timeseries(id: str, shop_id: str = CurrentShop, timeRange: str = "30
         {"$sort": {"_id": 1}},
     ]))
 
+    return _ket_qua(id, {
+        "title": l.get("title"), "category_id": l.get("category_id"), "from": tu, "to": den,
+        "series": chuoi,
+        "category_median": [{"date": r["_id"], "views": round(r["views"], 1)} for r in trung_vi],
+    }, meta, True)
+
+
+def _ket_qua(id, d, meta, neo_ngay_cuoi):
+    chuoi = d["series"]
     xu_xem, doc_xem = _xu_huong([c["views"] for c in chuoi])
     xu_don, doc_don = _xu_huong([c["orders"] for c in chuoi])
 
     return ok({
         "listing_id": id,
-        "title": l.get("title"),
-        "category_id": l.get("category_id"),
-        "from": tu, "to": den, "anchored_to_latest_data": True,
+        "title": d["title"],
+        "category_id": d["category_id"],
+        "from": d["from"], "to": d["to"], "anchored_to_latest_data": neo_ngay_cuoi,
         "series": chuoi,
-        "category_median": [{"date": r["_id"], "views": round(r["views"], 1)} for r in trung_vi],
+        "category_median": d["category_median"],
         "totals": {
             "views": sum(c["views"] for c in chuoi),
             "carts": sum(c["carts"] for c in chuoi),

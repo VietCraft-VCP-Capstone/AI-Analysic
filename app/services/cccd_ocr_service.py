@@ -8,6 +8,7 @@ import numpy as np
 
 logger = logging.getLogger("cccd_ocr")
 
+# ── Lazy-load EasyOCR reader (tránh load model nặng khi import) ──────────
 _reader = None
 
 
@@ -19,6 +20,9 @@ def _get_reader():
         logger.info("EasyOCR reader initialized (vi + en, CPU)")
     return _reader
 
+
+# ── Mã tỉnh/thành phố hợp lệ theo cấu trúc số CCCD (12 số) ─────────────
+# 3 số đầu = mã tỉnh, theo Quyết định 2345/QĐ-BCA ngày 03/06/2021
 VALID_PROVINCE_CODES = {
     "001", "002", "004", "006", "008", "010", "011", "012", "014", "015",
     "017", "019", "020", "022", "024", "025", "026", "027", "030", "031",
@@ -29,16 +33,11 @@ VALID_PROVINCE_CODES = {
     "094", "095", "096",
 }
 
-# 1. XÁC THỰC SỐ CCCD
-def validate_cccd_number(raw: str) -> Dict[str, Any]:
-    """Kiểm tra cấu trúc số CCCD 12 số theo quy chuẩn Bộ Công an.
 
-    Cấu trúc: PPP G YY XXXXXX
-      - PPP: mã tỉnh/thành phố (3 số)
-      - G: giới tính + thế kỷ (0/1 = nam/nữ sinh 1900-1999, 2/3 = nam/nữ sinh 2000+)
-      - YY: 2 số cuối năm sinh
-      - XXXXXX: số ngẫu nhiên (6 số)
-    """
+# ═══════════════════════════════════════════════════════════════════════════
+# 1. XÁC THỰC SỐ CCCD
+# ═══════════════════════════════════════════════════════════════════════════
+def validate_cccd_number(raw: str) -> Dict[str, Any]:
     digits = re.sub(r"\D", "", raw)
     result: Dict[str, Any] = {
         "is_valid": False,
@@ -74,10 +73,12 @@ def validate_cccd_number(raw: str) -> Dict[str, Any]:
         result["is_valid"] = True
 
     return result
-    
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 2. KIỂM TRA CHẤT LƯỢNG ẢNH
+# ═══════════════════════════════════════════════════════════════════════════
 def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
-    """Kiểm tra chất lượng ảnh CCCD: độ phân giải, mờ (blur), độ sáng."""
     import cv2
 
     h, w = img_array.shape[:2]
@@ -93,10 +94,11 @@ def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
         "warnings": [],
     }
 
+    # Phát hiện mờ: dùng Laplacian variance
     gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY) if len(img_array.shape) == 3 else img_array
     blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
     result["blur_score"] = round(blur_score, 2)
-    result["is_blurry"] = blur_score < 50.0 
+    result["is_blurry"] = blur_score < 50.0  # Ngưỡng: < 50 = mờ
 
     if result["is_blurry"]:
         result["warnings"].append("Ảnh bị mờ (blur). Vui lòng chụp lại rõ nét hơn.")
@@ -104,6 +106,7 @@ def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
     if not result["is_resolution_ok"]:
         result["warnings"].append(f"Độ phân giải quá thấp ({w}×{h}). Cần tối thiểu 400×250 pixel.")
 
+    # Kiểm tra độ sáng trung bình
     brightness = float(np.mean(gray))
     result["brightness"] = round(brightness, 2)
     if brightness < 40:
@@ -115,14 +118,12 @@ def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
 
     return result
 
-
-# 3. PHÁT HIỆN CHỤP LẠI TỪ MÀN HÌNH (Moiré Pattern)
 def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
-    """Phát hiện ảnh chụp lại từ màn hình bằng phân tích tần số FFT."""
     import cv2
 
     gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY) if len(img_array.shape) == 3 else img_array
 
+    # FFT để tìm moiré pattern (sọc màn hình)
     f_transform = np.fft.fft2(gray.astype(float))
     f_shift = np.fft.fftshift(f_transform)
     magnitude = np.log1p(np.abs(f_shift))
@@ -144,7 +145,6 @@ def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
         if is_screen_capture else None,
     }
 
-# 4. PHÁT HIỆN BỐ CỤC CCCD (Layout Detection)
 FRONT_KEYWORDS = [
     "CĂN CƯỚC", "CÔNG DÂN", "CITIZEN", "CARD",
     "Họ và tên", "Full name", "Sinh", "Date of birth",
@@ -152,20 +152,24 @@ FRONT_KEYWORDS = [
     "Quê quán", "Place of origin", "Nơi thường trú",
     "Place of residence", "Có giá trị đến", "Date of expiry",
     "Số", "No",
+    # CCCD gắn chip mới
     "CĂN CƯỚC", "IDENTITY",
 ]
 
 BACK_KEYWORDS = [
+    # Có dấu (chuẩn)
     "Đặc điểm nhận dạng", "Personal identification",
     "Ngày", "tháng", "năm",
     "CỤC TRƯỞNG", "GIÁM ĐỐC",
     "CỤC CẢNH SÁT", "CẢNH SÁT",
     "QUẢN LÝ HÀNH CHÍNH", "TRẬT TỰ XÃ HỘI",
+    # Không dấu — EasyOCR thường trả về dạng này
     "DAC DIEM NHAN DANG", "NHAN DANG",
     "CUC TRUONG", "GIAM DOC",
     "CUC CANH SAT", "CANH SAT",
     "QUAN LY HANH CHINH", "TRAT TU XA HOI",
     "CONG AN", "CÔNG AN",
+    # CCCD gắn chip mới — mặt sau
     "CONG HOA XA HOI", "CỘNG HÒA XÃ HỘI",
     "VIET NAM", "VIỆT NAM",
 ]
@@ -181,54 +185,53 @@ def detect_cccd_layout(ocr_texts: List[str], side: str = "front") -> Dict[str, A
         if kw.upper() in combined:
             matched.append(kw)
 
+    # Mặt sau có ít text hơn mặt trước → chỉ cần 2 keyword
     min_matches = 2 if side == "back" else 3
     is_valid = len(matched) >= min_matches
 
     return {
         "side": side,
         "keywords_found": len(matched),
-        "keywords_matched": matched[:10],
+        "keywords_matched": matched[:10],  # giới hạn output
         "is_layout_valid": is_valid,
         "warning": f"Ảnh không giống CCCD {'mặt trước' if side == 'front' else 'mặt sau'}. "
                    f"Chỉ phát hiện {len(matched)} từ khóa đặc trưng (cần ≥ {min_matches})."
         if not is_valid else None,
     }
 
-# 5. TRÍCH XUẤT THÔNG TIN TỪ OCR (Parsing)
-
 def _clean_text(text: str) -> str:
-    """Loại bỏ ký tự thừa, chuẩn hóa khoảng trắng."""
     return re.sub(r"\s+", " ", text).strip()
 
 
 def _find_value_after(texts: List[str], label_patterns: List[str]) -> Optional[str]:
-    """Tìm giá trị xuất hiện sau label (trên cùng dòng hoặc dòng kế tiếp).
-
-    EasyOCR thường tách label và value thành 2 text block riêng biệt,
-    ví dụ: ["Họ và tên / Full name", "NGUYỄN VĂN A"].
-    Hàm này thử cả 2 cách: cùng dòng và dòng kế tiếp.
-    """
+    # ── Cách 1: Tìm theo dòng riêng lẻ (ưu tiên vì chính xác hơn) ──
     for i, text in enumerate(texts):
         for pattern in label_patterns:
             if re.search(pattern, text, re.IGNORECASE):
+                # Thử lấy value trên cùng dòng (sau label)
                 same_line_match = re.search(pattern + r"[:\s]*(.+)", text, re.IGNORECASE)
                 if same_line_match:
                     value = _clean_text(same_line_match.group(1))
+                    # Lọc bỏ label phụ dính vào (ví dụ: "/ Full name")
                     for remove_pat in label_patterns:
                         value = re.sub(remove_pat, "", value, flags=re.IGNORECASE).strip()
+                    # Loại bỏ dấu phân cách thừa
                     value = re.sub(r"^[/\-:|\s]+", "", value).strip()
                     value = re.sub(r"[/\-:|\s]+$", "", value).strip()
                     if value and len(value) > 1 and not re.match(r"^[\W\d]+$", value):
                         return value
 
+                # Cách 2: Value nằm ở dòng kế tiếp (OCR tách block)
                 if i + 1 < len(texts):
                     next_value = _clean_text(texts[i + 1])
+                    # Loại bỏ label phụ
                     for remove_pat in label_patterns:
                         next_value = re.sub(remove_pat, "", next_value, flags=re.IGNORECASE).strip()
                     next_value = re.sub(r"^[/\-:|\s]+", "", next_value).strip()
                     if next_value and len(next_value) > 1 and not re.match(r"^[\W\d]+$", next_value):
                         return next_value
 
+    # ── Fallback: Tìm trên combined text (cách cũ) ──
     combined = "\n".join(texts)
     for pattern in label_patterns:
         match = re.search(pattern + r"[:\s]*(.+)", combined, re.IGNORECASE)
@@ -248,6 +251,7 @@ def _extract_12_digit_number(texts: List[str]) -> Optional[str]:
     match = re.search(r"\b(\d{12})\b", combined)
     if match:
         return match.group(1)
+    # Thử tìm chuỗi số dài nhất gần 12 ký tự
     all_digits = re.findall(r"\d{9,14}", combined)
     for d in all_digits:
         cleaned = d[:12]
@@ -275,11 +279,6 @@ def _extract_date(texts: List[str], label_patterns: List[str]) -> Optional[str]:
 
 
 def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
-    """Trích xuất thông tin từ kết quả OCR mặt trước CCCD.
-
-    Trả về: số CCCD, họ tên, ngày sinh, giới tính, quốc tịch, quê quán,
-    nơi thường trú, ngày hết hạn.
-    """
     texts = [item[1] for item in ocr_results]
     full_text = "\n".join(texts)
 
@@ -295,7 +294,9 @@ def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
         "raw_texts": texts,
     }
 
+    # Số CCCD (12 số)
     result["id_number"] = _extract_12_digit_number(texts)
+
 
     STOP_LABELS = re.compile(
         r"(Sinh|Date of birth|Gi[ớo]i t[ií]nh|Sex|Qu[ốo]c t[ịi]ch|Nationality|"
@@ -313,14 +314,17 @@ def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
         if not found_name_label:
             if NAME_LABEL.search(text):
                 found_name_label = True
+                # Kiểm tra nếu tên dính ngay trên cùng dòng (sau label)
                 after_label = NAME_LABEL.sub("", text)
                 after_label = re.sub(r"[/\-:|\.\s]+", " ", after_label).strip()
                 if after_label and len(after_label) > 1 and not re.match(r"^[\W\d]+$", after_label):
                     name_parts.append(after_label)
         else:
+            # Đã tìm thấy label → gom các block tiếp theo là tên
             block = text.strip()
             if STOP_LABELS.search(block):
-                break
+                break  # Gặp label khác → dừng
+            # Bỏ qua block chỉ có ký tự đặc biệt hoặc số thuần
             cleaned_block = re.sub(r"[/\-:|\.\s]+", "", block)
             if cleaned_block and not re.match(r"^\d+$", cleaned_block):
                 name_parts.append(block)
@@ -330,6 +334,7 @@ def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
         full_name = re.split(r"(?:Sinh|Date|Gi[ớo]i|Sex|Nam|N[ữu])", full_name, flags=re.IGNORECASE)[0]
         result["full_name"] = _clean_text(full_name).upper()
     else:
+        # Fallback: dùng _find_value_after cũ
         name = _find_value_after(texts, [
             r"Họ và tên", r"Ho và tên", r"Ho va ten", r"Full name", r"Họ\s*va\s*tên",
         ])
@@ -337,6 +342,7 @@ def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
             name = re.split(r"(?:Sinh|Date|Gi[ớo]i|Sex|Nam|N[ữu])", name, flags=re.IGNORECASE)[0]
             result["full_name"] = _clean_text(name).upper()
 
+    # Ngày sinh
     result["date_of_birth"] = _extract_date(texts, [
         r"Ngày[,\s]*tháng[,\s]*năm\s*sinh",
         r"Sinh",
@@ -344,6 +350,7 @@ def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
         r"Ngay sinh",
     ])
 
+    # Giới tính
     gender_text = _find_value_after(texts, [r"Giới tính", r"Sex", r"Gioi tinh"])
     if gender_text:
         upper = gender_text.upper()
@@ -352,14 +359,18 @@ def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
         elif "NỮ" in upper or "NU" in upper or "FEMALE" in upper:
             result["gender"] = "Nữ"
 
+    # Quốc tịch
     nationality = _find_value_after(texts, [r"Quốc tịch", r"Nationality", r"Quoc tich"])
     if nationality:
         result["nationality"] = _clean_text(nationality)
+
+    # Quê quán
     origin = _find_value_after(texts, [r"Quê quán", r"Place of origin", r"Que quan"])
     if origin:
         origin = re.split(r"(?:Nơi thường trú|Place of residence)", origin, flags=re.IGNORECASE)[0]
         result["place_of_origin"] = _clean_text(origin)
 
+    # Nơi thường trú
     residence = _find_value_after(texts, [
         r"Nơi thường trú",
         r"Place of residence",
@@ -369,6 +380,7 @@ def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
         residence = re.split(r"(?:Có giá trị|Date of expiry)", residence, flags=re.IGNORECASE)[0]
         result["place_of_residence"] = _clean_text(residence)
 
+    # Ngày hết hạn
     result["date_of_expiry"] = _extract_date(texts, [
         r"Có giá trị đến",
         r"Date of expiry",
@@ -393,6 +405,7 @@ def parse_back_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
         "raw_texts": texts,
     }
 
+    # Đặc điểm nhận dạng
     ident = _find_value_after(texts, [
         r"Đặc điểm nhận dạng",
         r"Personal identification",
@@ -401,9 +414,14 @@ def parse_back_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
     if ident:
         result["personal_identification"] = _clean_text(ident)
 
+    # Ngày cấp: tìm pattern "Ngày DD tháng MM năm YYYY"
+    # EasyOCR thường mất dấu tiếng Việt → cần regex linh hoạt
     date_patterns = [
+        # Có dấu: "Ngày 15 tháng 03 năm 2021"
         r"[Nn]g[àa]y\s*(\d{1,2})\s*th[áa]ng\s*(\d{1,2})\s*n[ăa]m\s*(\d{4})",
+        # Không dấu: "Ngay 15 thang 03 nam 2021"
         r"[Nn]ga?y\s*(\d{1,2})\s*tha?ng\s*(\d{1,2})\s*na?m\s*(\d{4})",
+        # Chỉ số: "15/03/2021" hoặc "15-03-2021" (tìm date format trên mặt sau)
         r"(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})",
     ]
     for dp in date_patterns:
@@ -413,7 +431,9 @@ def parse_back_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
             result["issue_date"] = f"{d.zfill(2)}/{m.zfill(2)}/{y}"
             break
 
+    # Nơi cấp — so sánh cả có dấu lẫn không dấu (EasyOCR hay mất dấu)
     full_upper = full_text.upper()
+    # Chuẩn hóa bỏ dấu để so sánh
     _DIACRITICS_MAP = str.maketrans(
         "ÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬĐÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ",
         "AAAAAAAAAAAAAAAAADEEEEEEEEEEEIIIIIOOOOOOOOOOOOOOOOOUUUUUUUUUUUYYYYY"
@@ -423,6 +443,7 @@ def parse_back_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
     if "CUC TRUONG" in normalized or "CUC CANH SAT" in normalized:
         result["issuing_authority"] = "Cục Cảnh sát QLHC về TTXH"
     elif "GIAM DOC" in normalized:
+        # Tìm tên công an tỉnh
         ca_match = re.search(r"C[OÔ]NG AN\s+(.+?)(?:\n|$)", full_text, re.IGNORECASE)
         if not ca_match:
             ca_match = re.search(r"CONG AN\s+(.+?)(?:\n|$)", full_text, re.IGNORECASE)
@@ -435,17 +456,32 @@ def parse_back_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
 
 
 def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
-    """Quét ảnh CCCD: OCR + kiểm tra chất lượng + xác thực giả/thật.
 
-    Args:
-        image_bytes: Nội dung file ảnh (bytes)
-        side: "front" = mặt trước, "back" = mặt sau
-
-    Returns:
-        Dict chứa: ocr_data, verification (kết quả xác thực)
-    """
+    import io
     import cv2
+    from PIL import Image
 
+    Image.MAX_IMAGE_PIXELS = 16_000_000
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as pil_img:
+            pw, ph = pil_img.size
+            if (pw * ph > 16_000_000) or max(pw, ph) > 4096:
+                return {
+                    "success": False,
+                    "error": f"Kích thước ảnh quá lớn ({pw}x{ph} px, vượt giới hạn an toàn 16 Megapixels / 4096px). Vui lòng thu nhỏ ảnh trước khi tải lên.",
+                    "ocr_data": None,
+                    "verification": None,
+                }
+    except Exception as img_err:
+        logger.warning(f"[CCCD OCR Security] Kiểm tra header ảnh thất bại hoặc nghi ngờ Decompression Bomb: {img_err}")
+        return {
+            "success": False,
+            "error": "Ảnh không hợp lệ, bị hỏng hoặc kích thước giải mã vượt giới hạn an toàn.",
+            "ocr_data": None,
+            "verification": None,
+        }
+
+    # Decode ảnh an toàn bằng OpenCV
     nparr = np.frombuffer(image_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -457,24 +493,40 @@ def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
             "verification": None,
         }
 
+    # Tự động co tỷ lệ nếu kích thước vượt 2048px để tối ưu FFT và EasyOCR
+    h, w = img.shape[:2]
+    if max(h, w) > 2048:
+        scale = 2048.0 / max(h, w)
+        new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+        logger.info(f"[CCCD OCR] Ảnh độ phân giải cao ({w}x{h}), tự động resize về ({new_w}x{new_h}) để tối ưu CPU/RAM.")
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    # ── Bước 1: Kiểm tra chất lượng ảnh ──────────────────────────────────
     quality = check_image_quality(img)
 
+    # ── Bước 2: Phát hiện chụp lại từ màn hình ───────────────────────────
     screen_check = detect_screen_capture(img)
 
+    # ── Bước 3: OCR bằng EasyOCR ─────────────────────────────────────────
     reader = _get_reader()
     ocr_results = reader.readtext(img)
     texts = [item[1] for item in ocr_results]
 
+    # ── Bước 4: Phát hiện bố cục CCCD ────────────────────────────────────
     layout = detect_cccd_layout(texts, side=side)
 
+    # ── Bước 5: Trích xuất thông tin ─────────────────────────────────────
     if side == "front":
         ocr_data = parse_front_cccd(ocr_results)
     else:
         ocr_data = parse_back_cccd(ocr_results)
 
+    # ── Bước 6: Xác thực số CCCD (nếu mặt trước) ────────────────────────
     id_validation = None
     if side == "front" and ocr_data.get("id_number"):
         id_validation = validate_cccd_number(ocr_data["id_number"])
+
+    # ── Bước 7: Tổng hợp kết quả xác thực ────────────────────────────────
     checks = {
         "image_quality_ok": quality["is_resolution_ok"] and not quality["is_blurry"] and quality["is_brightness_ok"],
         "layout_detected": layout["is_layout_valid"],
@@ -501,8 +553,9 @@ def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
     if id_validation and id_validation.get("errors"):
         warnings.extend(id_validation["errors"])
 
-    is_likely_authentic = confidence >= 0.6 and layout["is_layout_valid"]
+    is_valid_format_and_quality = confidence >= 0.6 and layout["is_layout_valid"]
 
+    # Loại bỏ raw_texts khỏi response (quá dài)
     ocr_data_clean = {k: v for k, v in ocr_data.items() if k != "raw_texts"}
 
     return {
@@ -510,8 +563,11 @@ def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
         "side": side,
         "ocr_data": ocr_data_clean,
         "verification": {
-            "is_likely_authentic": is_likely_authentic,
-            "confidence_score": confidence,
+            "is_valid_format_and_quality": is_valid_format_and_quality,
+            "is_likely_authentic": is_valid_format_and_quality,  # Giữ alias để tương thích ngược
+            "confidence_score": int(round(confidence * 100)),
+            "confidence_ratio": confidence,
+            "disclaimer": "Kết quả OCR chỉ hỗ trợ trích xuất thông tin tự động và kiểm tra chất lượng ảnh. Không có giá trị pháp lý thay thế xác minh danh tính từ cơ quan Nhà nước.",
             "checks": checks,
             "warnings": warnings,
             "details": {

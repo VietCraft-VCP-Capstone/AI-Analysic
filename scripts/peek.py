@@ -1,18 +1,3 @@
-#!/usr/bin/env python
-"""
-peek.py — Nhìn nhanh vào một bảng MongoDB: có bao nhiêu dòng, cột nào, mẫu ra sao.
-
-Gần như task nào cũng mở đầu bằng "Bước 1 — xác nhận bằng số". Đây là công cụ cho
-bước đó. Nó TỰ TÌM bảng trong cả ba database nên không phải nhớ bảng nào nằm đâu.
-
-    python scripts/peek.py listing_daily
-    python scripts/peek.py orders --limit 5
-    python scripts/peek.py mart_listing_daily --limit 2
-
-Bảng không có thì nó LIỆT KÊ bảng đang có ở cả ba database — sai tên là thấy ngay,
-không phải đoán.
-"""
-
 import os
 import sys
 import json

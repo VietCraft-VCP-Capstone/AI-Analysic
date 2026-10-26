@@ -20,8 +20,6 @@ THU_VI = {1: "Thứ Hai", 2: "Thứ Ba", 3: "Thứ Tư", 4: "Thứ Năm",
 
 @router.get("/api/analytics/shop/categories/revenue", tags=["F31 · Hiếu"])
 def category_revenue(shop_id: str = CurrentShop, timeRange: str = "30d"):
-    # Shop thật trên sàn đọc đơn hàng thật (F31 chỉ cần `orders`, không cần
-    # product_events/lượt xem) — không đọc mart Olist mồi. Xem _live_category_revenue.py.
     if la_shop_live(shop_id):
         return category_revenue_live(shop_id, timeRange)
 
@@ -49,7 +47,6 @@ def category_revenue(shop_id: str = CurrentShop, timeRange: str = "30d"):
     ten_loai = {p["product_type_id"]: p.get("name_vi") for p in
                 db()["vc_product_type"].find({}, {"product_type_id": 1, "name_vi": 1})}
 
-    # Khung giờ đọc từ mart riêng — xem ghi chú trong build_mart_shop_hour().
     khung = list(db()["mart_shop_hour"].find({"shop_id": shop_id}, {"_id": 0})
                  .sort("orders", -1))
     dinh = khung[0] if khung else None
@@ -73,8 +70,6 @@ def category_revenue(shop_id: str = CurrentShop, timeRange: str = "30d"):
             "orders": dinh["orders"],
             "note": f"{dinh['share_pct']}% đơn của shop rơi vào khung này",
         },
-        # Khung giờ tính trên TOÀN BỘ lịch sử đơn, không cắt theo timeRange: cắt 30
-        # ngày thì mỗi ô heatmap chỉ còn vài đơn và nhịp giờ trở thành nhiễu.
         "heatmap_window": "toàn bộ lịch sử đơn hàng",
         "limitation": ("Nhịp giờ/thứ kế thừa từ phân phối Olist (Brazil) trong dữ liệu mồi, "
                        "CHƯA phản ánh thói quen người mua Việt Nam."),

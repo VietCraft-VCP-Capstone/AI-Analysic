@@ -263,17 +263,41 @@ Trọng số phải **cộng đúng 1.0** — cổng ra kiểm.
 Listing chưa có đánh giá → `rating_shrunk: null`, **không mặc định 4.0 sao**.
 
 ### F30 · `GET /api/notifications/alerts`
+BE phơi cùng một handler ở `/api/notifications/alerts` (SRS) và `/api/seller/analytics/alerts` (FE insights).
+Tham số `period` ∈ `7d` · `30d` · `90d` · `all` (mặc định `90d`).
 ```json
-{"alerts":[{"listing_id":"lst_000123","date":"2026-09-18","direction":"drop",
-            "z":-10.6,"expected":1940000,"actual":520000,
-            "severity":"high","calendar_sensitive":false,
-            "confidence":"ok"}]}
+{"data":{"shop_id":"66f1…","period":"30d",
+  "alerts":[{"id":"66f1…:revenue:2026-10-20","date":"2026-10-20","metric":"revenue",
+             "direction":"drop","rule":"daily","z":-2.84,"expected":1940000,"actual":520000,
+             "change_pct":-73.2,"severity":"low","calendar_sensitive":false,"confidence":"ok",
+             "top_listings":[{"listing_id":"live_66f2…","title":"Áo thun XYZ",
+                              "expected":900000,"actual":0,"change_pct":-100.0}]}],
+  "total":1,"shop_was_analysed":true,"skip_reason":null,"limitation":null,
+  "threshold":{"z":2.0,"min_change_pct":30,"min_change_vnd":100000,
+               "min_expected":{"views":5,"revenue":1},"weekly_cap":3}},
+ "meta":{"computed_at":"2026-10-21T00:30:05Z","model_version":"f30-nb-1.0","scope":"shop", "…":"…"},
+ "error":null}
 ```
-⚠️ **Ngưỡng là `|z| > 7.0`, KHÔNG phải 2.0 như `BR-183`.** Nhóm đo thực nghiệm: ngưỡng
-2.0 cho **7,38% báo động giả**, ngưỡng 7.0 còn **0,6%**. Code đúng hơn SRS — đã ghi
-lệch vào `docs/SPEC_CHANGES.md` và phải sửa SRS.
-`confidence` nhận `ok` · `calendar_sensitive` · `limited_few_cycles` · `unreliable_high_rate`.
-`BR-184` chỉ gửi email khi người bán bật "Cảnh báo hiệu suất".
+- `metric` ∈ `views` · `revenue`. `expected`/`actual`: VND nguyên nếu `revenue`, lượt xem nếu `views`.
+- `rule` ∈ `daily` (một ngày lệch) · `zero_run` (nhiều ngày liền bằng 0; `date` là ngày cuối).
+- `confidence` ∈ `ok` · `low_history` (lịch sử 28–55 ngày).
+- `skip_reason` ∈ `null` · `chua_chay` · `qua_ngan` · `khong_co_san_pham` · `loi`;
+  `shop_was_analysed = (skip_reason == null)`. `limitation` là câu tiếng Việt tương ứng.
+- `meta.computed_at` lấy từ `anomaly_run` mới nhất **của chính shop**.
+
+`BR-183` Cảnh báo khi |z| > 2.0, z là z hiệu chỉnh: phân phối dự báo một bước (NegBin, 28 ngày
+trước t, hệ số thứ trong tuần), `z = Φ⁻¹(F(y−1) + ½P(y))`. Điều kiện đủ ghi ở phụ lục BR-183.
+`BR-184` Email chỉ gửi khi người bán bật "Cảnh báo hiệu suất" (mặc định tắt); thông báo trong
+app gửi khi cột "Ứng dụng" của mục đó bật (mặc định bật).
+Kênh: batch 07:30 GMT+7 → `Notification{type: ANALYTICS_ALERT}` → Socket.IO `notification_received`.
+Socket rớt: lần tải trang sau FE gọi REST `/api/notifications` và `/unread-count`.
+Lỗi tải (MSG134): badge im lặng, `console.warn`.
+
+Lỗi: `400 invalid_param` (period sai) · `401 unauthorized` · `503 mart_not_ready` (shop mẫu, mart rỗng).
+
+Trigger nội bộ (không cho FE): POST `/api/internal/f30/run`, chỉ nhận header `X-Gateway-Secret`.
+Body `{"run_date": "YYYY-MM-DD"?, "backfill_days": 0..90}`; trả `data.events` = cảnh báo của
+`run_date` (mặc định hôm qua GMT+7) kèm `shop_id`, cùng hình dạng phần tử `alerts`.
 
 ### F31 · `GET /api/analytics/shop/categories/revenue`
 ```json
@@ -292,14 +316,16 @@ Khi sàn có đủ đơn thật, job đổi `mode` thành `live` và nhãn tự 
 ### F32 · `GET /api/analytics/competitors?categoryId=`
 ```json
 {"category_id":"apparel",
- "my_listings":[{"listing_id":"lst_000123","price_vnd":237000,"rank_in_cat":17}],
+ "my_listings":[{"listing_id":"lst_000123","price_vnd":237000,"n_reviews":12,"favorite_count":30,"rank_in_cat":17}],
  "competitors":[{"rank":1,"listing_id":"lst_004821","shop_name":"...","price_vnd":198000,
                  "est_sales_90d":214,"rating_shrunk":4.7,"n_reviews":88,
                  "favorite_count":1204}],
  "my_position":{"price_percentile":92,"rating_percentile":41}}
 ```
-`BR-188` **top 20 xếp theo `est_sales_90d` giảm dần**. `BR-189` loại shop của chính
-người bán khỏi bảng xếp hạng, nhưng vẫn hiện riêng ở `my_listings`.
+`BR-188` **top 20 xếp theo `est_sales_90d` giảm dần, hoà thì theo `n_reviews` giảm dần**. `BR-189` loại shop của chính
+người bán khỏi bảng xếp hạng, nhưng vẫn hiện riêng ở `my_listings` (có `n_reviews`, `favorite_count` để vẽ chồng).
+`price_percentile`, `rating_percentile`: phân vị mid-rank so với sản phẩm của **shop khác** cùng danh mục;
+dưới 5 sản phẩm để so thì `null`.
 `BR-186` dropdown danh mục chỉ liệt kê danh mục người bán có ≥ 1 listing.
 
 ### F33 · `GET /api/analytics/shop-comparison`
@@ -307,10 +333,13 @@ người bán khỏi bảng xếp hạng, nhưng vẫn hiện riêng ở `my_lis
 {"segment":"apparel",
  "axes":["listing_count","avg_rating","response_speed","avg_price","product_diversity"],
  "me":[62,78,45,55,71],
- "competitors":[{"shop_id":"shp_00042","shop_name":"...","values":[88,82,90,61,84]}]}
+ "competitors":[{"shop_id":"shp_00042","shop_name":"...","values":[88,82,90,61,84]}],
+ "neutral_axes":["avg_price"],"ranked_by":"revenue"}
 ```
 `BR-190` phân khúc xác định **tự động** = danh mục chiếm tỉ trọng lớn nhất.
-`BR-191` 5 shop = top 5 theo doanh thu ước tính. `BR-192` chuẩn hoá min–max về 0–100.
+`BR-191` 5 shop = top 5 theo doanh thu ước tính; hoà thì theo số đánh giá, `ranked_by = "reviews"` khi doanh thu đều 0.
+`BR-192` chuẩn hoá min–max về 0–100 trên **đúng shop mình và 5 đối thủ**. Trục giá trung tính (`neutral_axes`):
+100 là đắt nhất, không phải tốt hơn. Không trả doanh thu của từng đối thủ.
 `BR-193` cần shop có **≥ 5 listing đã đăng**, không thì `insufficient_data`.
 
 ### F34 · `GET /api/analytics/tag-gap?categoryId=`
@@ -351,6 +380,7 @@ tag từ tiêu đề (quyết định **E22**; bản cũ làm nhầm bài toán)
 GET    → danh sách đang theo dõi + cảnh báo
 POST   {"shop_id":"shp_00042"}   → thêm
 DELETE {"shop_id":"shp_00042"}   → bỏ
+DELETE /{shopId}                 → bỏ (đúng dạng SRS 3.9.5; bản body ở trên giữ cho client cũ)
 ```
 ```json
 {"tracked":[{"shop_id":"shp_00042","shop_name":"...","added_at":"...","new_listings_7d":3}],
@@ -359,7 +389,7 @@ DELETE {"shop_id":"shp_00042"}   → bỏ
 ```
 `BR-201` **tối đa 10 shop** → vượt thì `400 {"error":"tracking_limit_reached","limit":10}`.
 `BR-202` trùng shop → `400 {"error":"already_tracked"}`.
-`BR-203` chỉ báo khi sản phẩm mới rơi vào ngách đang hoạt động.
+`BR-203` chỉ báo khi sản phẩm mới rơi vào ngách đang hoạt động. Dữ liệu mồi không có ngày đăng thật nên `alerts` luôn rỗng.
 `BR-204` bỏ theo dõi **dừng cảnh báo tương lai, không xoá cảnh báo cũ**.
 
 ### F37 · `GET /api/analytics/forecast/revenue?targetId=&window=`
@@ -428,6 +458,80 @@ collection `banned_keywords` trên sàn live. Chưa lọc thì không được b
 `BR-215` **tối đa 5 khuyến nghị**.
 Shop mới chưa có lịch sử → trả khuyến nghị chung toàn sàn, `scope: "platform"`.
 
+### Shop thật ở F32 · F33 · F34 · F36 — thêm 17/10/2026
+
+Shop id là ObjectId của sàn thì 4 endpoint **tính tại chỗ từ DB sàn** (`app/api/v1/_competitor_live.py`),
+không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ so với shop thật. Hình dạng `data` giữ nguyên, khác biệt:
+
+- `meta.source.mode = "live"`, `attributed_to_live_shop = true`, `quality.identity_linked = true`.
+- `category_id` là slug danh mục **cấp 1** của sàn; kèm tên: `category_names` (F32, F34), `segment_name` (F33).
+- BR-187: sàn được quét **mỗi ngày một lần** (theo ngày giờ VN) và giữ trong RAM của tiến trình AI, không thêm bảng.
+  `computed_at` (và `alerts_computed_at` của F36) là giờ quét, không phải giờ mở trang. Khởi động lại AI thì quét lại.
+- F32: mỗi đối thủ kèm `shop_id` để theo dõi ngay trên bảng. `est_sales_90d` = số sản phẩm của đơn
+  `DELIVERED` trong 90 ngày, không tính đơn mô phỏng, dữ liệu mồi (`seed_ref`) hay đơn **chủ shop tự mua** (`buyer_id`
+  là chủ shop). Cùng luật áp cho doanh thu F33 và số bán theo tuần của `surging`.
+- F32: danh mục ít đối thủ vẫn trả đúng số đang có (SRS 3.9.1), kèm `low_sample: true` khi dưới 5; không còn `insufficient_data`.
+- F32, F33 (cả hai miền): `meta.quality.confidence = "low"` khi chưa có đơn (thứ hạng đang theo số đánh giá) hoặc dưới 5 đối thủ, còn lại `"medium"`.
+- F32, F34: không truyền `categoryId` thì mở **danh mục chính** (danh mục shop có nhiều sản phẩm nhất), áp dụng cả hai miền.
+- `listing_id` của shop thật chính là `product_id` (mở thẳng được trang sức khoẻ sản phẩm F27–F29).
+- F33: trục thiếu dữ liệu là `null`, đứng ngoài min–max; `axes_missing` liệt kê trục thiếu của shop mình.
+  Mỗi đối thủ kèm `raw` (số thật từng trục, cùng đơn vị `me_raw`) để FE so "bạn vs nhóm" bằng số thật.
+- F34: thêm `tag_names` (mã tag -> tên, gồm cả tag của shop mình) và `leader_tags`
+  (`[{tag_id, used_by, mine}]`, tối đa 12 tag nhóm dẫn đầu hay dùng).
+- F36: danh sách theo dõi **là follow của sàn** (`shop_followers`), tối đa 10. POST/DELETE của shop thật
+  do BE ghi; gọi thẳng module AI thì `400`. Cảnh báo = sản phẩm đối thủ đăng trong 7 ngày, trùng tag hoặc
+  danh mục **lá** (`matched_type`, `type_name`; `matched_category` vẫn là cấp 1), có `listed_at`, `tag_names`,
+  `alerts_computed_at`. `tracked[]` có thêm `category_name` (danh mục shop đó bán nhiều nhất) và `last_new_listing_at`
+  (ngày đăng sản phẩm gần nhất). `added_at` luôn `null`. Cảnh báo được BE gửi hằng ngày vào bảng `notifications` có sẵn
+  (`ANALYTICS_ALERT`), nên bỏ theo dõi chỉ dừng cảnh báo mới, cảnh báo đã gửi vẫn còn (BR-204).
+  Bỏ theo dõi theo đường dẫn `/api/analytics/competitor-tracking/{shopId}` (DELETE); bản nhận `shop_id` trong body vẫn giữ.
+- F35 giữ chế độ `derived` so với catalog tham chiếu. Catalog trống thì so giá thật cùng danh mục trên sàn.
+
+### AI đối thủ (độ giống sản phẩm) — thêm 18/10/2026, chỉ shop thật
+
+Bộ máy `app/api/v1/_doi_thu_ai.py`: TF-IDF (tên + từ khoá có dấu, mô tả nhẹ hơn, cụm ký tự của tên) và độ giống
+cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải có ít nhất một từ hiếm chung hoặc giống ≥ 0,35.
+Đo chất lượng bằng script đo riêng, không nằm trong repo.
+
+- F32 `my_listings[].direct_rivals`: `[{product_id, shop_id, shop_name, title, price_vnd, est_sales_90d,
+  similarity (0–1), near_identical, reasons[]}]`, tối đa 5. Liệt kê từ độ giống 0,15; `near_identical` khi ≥ 0,35.
+  Hai ngưỡng đo trên 17.000 tin Shopee Product Matching chưa dùng để chỉnh: ở 0,15 bắt được 79% hàng cùng sản phẩm
+  trong top 5; từ 0,35 thì 73% kết quả đúng là cùng sản phẩm. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity}]`,
+  tối đa 3 shop trùng nhiều sản phẩm của mình nhất.
+- F35 (khi đã chọn `productId`) `ai_price`: `{suggested_vnd, low_vnd, high_vnd, confidence: high|medium|low,
+  rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
+  `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 8 sản phẩm giống nhất, pha với mặt
+  bằng cùng loại theo `rival_weight`.
+- F36 `alerts[].threat`: `{score 0–100, level high|medium|low, similarity, matched_product_id, matched_title,
+  price_gap_pct (> 0 là đối thủ rẻ hơn), shop_strength, near_identical}`. Điểm = độ giống với sản phẩm khớp nhất của mình (đủ 0,35,
+  tức gần như cùng sản phẩm, là tối đa) × sức mạnh shop đối thủ (doanh số 90 ngày so với shop lớn nhất) × áp lực giá (rẻ hơn, tối đa +50%).
+  Cảnh báo xếp theo `threat.score` giảm dần. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z}]` —
+  shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3,5 so với 7 tuần trước (cần ≥ 4 tuần có đơn). Ngưỡng 3,5 chọn
+  trên số bán theo tuần của người bán Olist năm 2017 (báo nhầm ≤ 2%); chấm trên 2018: báo nhầm 1,2%, 55% cảnh báo là tăng tốc thật.
+- F34 `per_product`: `[{product_id, title, suggestions[{tag_id, score, used_by, better_sellers, popular_in_type}]}]`.
+  Gợi ý lai: 0,7 theo sản phẩm giống (độ giống × độ bán chạy) + 0,3 theo độ phổ biến cùng loại.
+- F33 `strategic_groups`: `{k, silhouette, clear (≥ 0,25), features[], axes{x, y}, groups[{id, label, size,
+  avg_price_vnd, avg_revenue_90d_vnd}], points[{shop_id, shop_name, x, y, group, me}], my_group, best_group (null
+  khi sàn chưa có đơn), gaps[{feature, name, mine, theirs}], method}` hoặc `null` kèm `strategic_groups_reason`
+  (cần ≥ 6 shop có giá). KMeans trên 5 thông số chuẩn hoá z (giá, điểm sao, thời gian trả lời, số sản phẩm, doanh thu;
+  giá/số sản phẩm/doanh thu lấy log), k = 2–5 theo silhouette; PCA 2 chiều, trục tăng theo thông số chính.
+  `gaps` chỉ nêu điểm đáng học theo nhóm bán tốt (đánh giá cao hơn, trả lời nhanh hơn, nhiều mẫu hơn; giá để tham khảo).
+
+### Kế hoạch tuần này · `/api/analytics/competitor-brief` (GET, ngoài bảng 16 endpoint) — thêm 18/10/2026, chỉ shop thật
+
+BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_doi_thu_ke_hoach.py`
+gom các sự thật đã tính ở F32–F36 (đe doạ cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
+từ khoá ≥ 2 sản phẩm giống dùng, khoảng cách tới nhóm bán tốt, đối thủ trực tiếp chưa theo dõi) rồi lập tối đa 10 việc,
+mỗi loại tối đa 2 (FE chia 5 việc mỗi trang).
+
+`data`: `{source: rules|llm, provider (vd "anthropic/claude-sonnet-5-5") | null, actions[{action, why, link | null, priority}],
+facts_count, generated_at}`. Có `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` thì mô hình ngôn ngữ viết lại
+câu chữ (`COMPETITOR_BRIEF_MODEL` đổi mô hình Claude); việc nào có con số không nằm trong sự thật bị bỏ, không còn việc
+nào thì dùng kế hoạch theo luật. Lưu đệm 30 phút theo shop, tự làm mới khi sự thật đổi.
+`priority`: `gap` (hàng mới đe doạ cao) · `quan_trong` (giá lệch, đối thủ tăng tốc, hàng mới đe doạ vừa) · `nen_lam`
+(từ khoá, nhóm bán tốt, theo dõi shop); `actions` luôn xếp từ `gap` tới `nen_lam`. Mô hình ngôn ngữ phải ghi `fact` là số
+thứ tự sự thật làm căn cứ cho từng việc; việc không chỉ ra được sự thật bị bỏ.
+
 ---
 
 ## 5. Ba việc FE làm được NGAY, không cần chờ BE
@@ -451,7 +555,7 @@ Mục này trước đây tên là *"Chỗ chưa chốt — Đạt quyết"*. Đ
 | 2 | Bọc `{data, meta}` hay trải phẳng? | **Bọc** `{"data":…, "meta":…, "error":null}` | FE đọc một chỗ cho cả 16 màn hình. Cài trong `app/api/v1/_template.py` — import là đúng, không phải nhớ |
 | 2b | `meta` có đủ 8 trường con ở mọi endpoint? | **Có**, nhưng `status` chỉ còn **một** chỗ | `_template.build_meta()` tự sinh nên chi phí bằng 0. Xem bảng quy đổi bên dưới |
 | 3 | F30 đi đường nào? | `GET /api/notifications/alerts` — **theo SRS** | FE sàn đã trỏ theo SRS. Nhất quán thua tương thích |
-| 4 | WebSocket cho F30? | **Không làm trong phạm vi này.** Giữ polling | Chưa ai nhận, và không có trong 50 task. Ghi vào mục Hạn chế (QA-06) chứ không im lặng bỏ |
+| 4 | WebSocket cho F30? | **Có** (21/10/2026, đảo quyết định 21/09). Dùng gateway Socket.IO sẵn có, sự kiện 
 | 5 | `mart_listing_quality` / `mart_competitor` có `date` trong khoá? | **Không.** Giữ `["listing_id"]` | 5.000 listing × 365 ngày = 1,8 triệu dòng trên cụm M0 512 MB **dùng chung cả nhóm**. Lịch sử điểm đã nằm ở `listing_health` (khoá có `date`); hai bảng này là **ảnh chụp hiện tại** của phần đầu vào. Lý do đầy đủ ghi ngay trong `writer.MART_SCHEMA` |
 
 ### `status` chỉ nằm một chỗ: `meta.status`

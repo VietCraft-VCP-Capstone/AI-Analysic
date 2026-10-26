@@ -1,16 +1,3 @@
-"""
-_live_overview.py — Tổng quan shop (F26) tính từ ĐƠN HÀNG THẬT trên sàn.
-
-Tách khỏi `f26_shop_overview.py` để đường dữ liệu mồi không bị đụng tới: hai đường đọc
-hai nguồn khác nhau, gộp vào một hàm là mỗi lần sửa một đường lại có nguy cơ làm hỏng
-đường kia.
-
-Điều quan trọng nhất ở đây: **lượt xem và tỉ lệ chuyển đổi trả `null`**, không trả 0.
-Sàn chưa bật theo dõi hành vi người mua (`product_events` chưa tồn tại) nên không có
-lượt xem. Trả 0 lượt xem thì tỉ lệ chuyển đổi thành 0% và người bán sẽ tưởng không ai
-xem hàng của mình, trong khi thật ra là chưa đo.
-"""
-
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,12 +7,11 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.api.v1._live import _so, db_live
-from app.api.v1._mart import phan_tram_thay_doi, tien
+from app.api.v1._live import LOC_SP_THAT, _so, db_live
+from app.api.v1._live_data import DON_HOP_LE, GIO_VN, _tien_don, ngay_vn, su_kien
+from app.api.v1._mart import phan_tram_thay_doi, tien, ty_le_chuyen_doi
 from app.api.v1._template import build_meta, insufficient, ok
 
-# Chỉ tính đơn đã trả tiền. Đơn PENDING chưa chắc thành doanh thu, gộp vào là khoe số
-# chưa có; đơn REFUNDED đã trả lại tiền.
 TRANG_THAI_TINH_TIEN = ["PAID"]
 SO_TOP_PRODUCT = 5
 
@@ -46,43 +32,130 @@ def _don_cua_shop(shop_id: str) -> List[Dict[str, Any]]:
     except Exception:
         return []
     return list(db_live()["orders"].find(
-        {"shop_id": oid, "payment_status": {"$in": TRANG_THAI_TINH_TIEN}},
+        {"shop_id": oid, "payment_status": {"$in": TRANG_THAI_TINH_TIEN}, **DON_HOP_LE},
         {"created_at": 1, "items": 1, "financial_breakdown": 1, "order_hour_of_week": 1},
     ))
 
 
-def _tien_don(don: Dict[str, Any]) -> int:
-    """Doanh thu một đơn. Ưu tiên tổng đã chốt, không có thì cộng từng dòng hàng."""
-    fb = don.get("financial_breakdown") or {}
-    for khoa in ("subtotal", "total", "grand_total"):
-        v = _so(fb.get(khoa))
-        if v and v > 0:
-            return int(v)
-    tong = 0.0
-    for it in don.get("items") or []:
-        gia = _so(it.get("retail_price")) or 0
-        tong += gia * int(it.get("quantity") or 1)
-    return int(tong)
+def _luot_xem(shop_id: str) -> List[str]:
+    from bson import ObjectId  # noqa: PLC0415
+
+    try:
+        ids = [p["_id"] for p in db_live()["products"].find({"shop_id": ObjectId(shop_id), **LOC_SP_THAT}, {"_id": 1})]
+    except Exception:
+        return []
+    tu = datetime.now(timezone.utc) - timedelta(days=400)
+    return [n for n in (ngay_vn(e.get("created_at")) for e in su_kien(ids, tu) if e["event_type"] == "view") if n]
 
 
-def overview_live(shop_id: str, so_ngay: int, time_range: str):
-    """Tổng quan shop từ đơn thật. Lượt xem để null vì sàn chưa có theo dõi hành vi."""
+def overview_live(shop_id: str, so_ngay: int, time_range: str, to_date: Optional[str] = None):
+    """Tổng quan shop từ đơn và lượt xem thật."""
     don = _don_cua_shop(shop_id)
+    xem = _luot_xem(shop_id)
 
     meta = build_meta(model_version="live-overview-1.0", scope="shop", scope_id=shop_id,
                       database="vietcraft", collection="orders", mode="live",
                       attributed_to_live_shop=True, sample_size=len(don),
                       identity_linked=True, confidence="high" if len(don) >= 20 else "low")
 
-    if not don:
+    if not don and not xem:
         return insufficient(
-            "Shop bạn chưa có đơn hàng nào đã thanh toán, nên chưa có số để tổng quan. "
-            "Số liệu sẽ hiện ngay khi có đơn đầu tiên.", meta)
+            "Shop bạn chưa có đơn hàng đã thanh toán hay lượt xem nào, nên chưa có số để tổng quan. "
+            "Số liệu sẽ hiện ngay khi có lượt xem hoặc đơn đầu tiên.", meta)
 
-    ngay_don = sorted(n for n in (_ngay(d.get("created_at")) for d in don) if n)
-    moi_nhat = ngay_don[-1]
+    if time_range == "year":
+        if to_date:
+            try:
+                den_dt = datetime.fromisoformat(to_date).replace(tzinfo=GIO_VN)
+                anchored = True
+            except Exception:
+                den_dt = datetime.now(GIO_VN)
+                anchored = False
+        else:
+            den_dt = datetime.now(GIO_VN)
+            anchored = False
 
-    den = datetime.fromisoformat(moi_nhat).replace(tzinfo=timezone.utc)
+        nam_moc = den_dt.year
+        cac_nam_don = {int(_ngay(d.get("created_at"))[:4]) for d in don if _ngay(d.get("created_at"))}
+        cac_nam_xem = {int(n[:4]) for n in xem if len(n) >= 4}
+        tat_ca_nam = cac_nam_don | cac_nam_xem | {nam_moc}
+
+        nam_dau = min(nam_moc - 2, min(tat_ca_nam)) if tat_ca_nam else nam_moc - 2
+        danh_sach_nam = sorted(list(range(nam_dau, nam_moc + 1)))
+
+        series = []
+        for y in danh_sach_nam:
+            prefix = f"{y}"
+            don_y = [d for d in don if (_ngay(d.get("created_at")) or "").startswith(prefix)]
+            xem_y_count = sum(1 for n in xem if n.startswith(prefix))
+            dt_y = sum(_tien_don(d) for d in don_y)
+            series.append({
+                "date": str(y),
+                "views": xem_y_count,
+                "orders": len(don_y),
+                "revenue_vnd": tien(dt_y),
+            })
+
+        prefix_nay = f"{nam_moc}"
+        prefix_truoc = f"{nam_moc - 1}"
+
+        don_nay = [d for d in don if (_ngay(d.get("created_at")) or "").startswith(prefix_nay)]
+        don_truoc = [d for d in don if (_ngay(d.get("created_at")) or "").startswith(prefix_truoc)]
+        xem_nay_count = sum(1 for n in xem if n.startswith(prefix_nay))
+        xem_truoc_count = sum(1 for n in xem if n.startswith(prefix_truoc))
+
+        dt_nay = sum(_tien_don(d) for d in don_nay)
+        dt_truoc = sum(_tien_don(d) for d in don_truoc)
+
+        theo_sp: Dict[str, Dict[str, Any]] = {}
+        for d in don_nay:
+            for it in d.get("items") or []:
+                pid = str(it.get("product_id") or "")
+                if not pid:
+                    continue
+                o = theo_sp.setdefault(pid, {"listing_id": pid, "title": it.get("title") or pid,
+                                             "orders": 0, "revenue_vnd": 0})
+                o["orders"] += 1
+                o["revenue_vnd"] += int((_so(it.get("retail_price")) or 0) * int(it.get("quantity") or 1))
+
+        return ok({
+            "range": "year",
+            "from": f"{nam_moc}-01-01",
+            "to": f"{nam_moc}-12-31" if nam_moc < datetime.now(GIO_VN).year else den_dt.date().isoformat(),
+            "anchored_to_latest_data": anchored,
+            "compare_from": f"{nam_moc - 1}-01-01",
+            "compare_to": f"{nam_moc - 1}-12-31",
+            "kpi": {
+                "views": {"value": xem_nay_count, "pop_pct": phan_tram_thay_doi(xem_nay_count, xem_truoc_count)},
+                "orders": {"value": len(don_nay), "pop_pct": phan_tram_thay_doi(len(don_nay), len(don_truoc))},
+                "revenue_vnd": {"value": tien(dt_nay), "pop_pct": phan_tram_thay_doi(dt_nay, dt_truoc)},
+                "conversion_pct": {
+                    "value": ty_le_chuyen_doi(len(don_nay), xem_nay_count),
+                    "pop_pct": phan_tram_thay_doi(
+                        ty_le_chuyen_doi(len(don_nay), xem_nay_count) or 0,
+                        ty_le_chuyen_doi(len(don_truoc), xem_truoc_count) or 0,
+                    ),
+                },
+            },
+            "series": series,
+            "top_products": sorted(theo_sp.values(), key=lambda x: -x["revenue_vnd"])[:SO_TOP_PRODUCT],
+            "recent_feedback": [],
+            "orders_all_time": len(don),
+            "limitation": "Số thật của shop: so sánh tổng kết giữa các năm (đơn đã thanh toán và lượt xem đã lọc bot).",
+        }, meta)
+
+    # Mặc định khoảng thời gian kết thúc ở thời gian hiện tại
+    if to_date:
+        try:
+            den = datetime.fromisoformat(to_date).replace(tzinfo=GIO_VN)
+            anchored = True
+        except Exception:
+            den = datetime.now(GIO_VN)
+            anchored = False
+    else:
+        den = datetime.now(GIO_VN)
+        anchored = False
+
     tu = den - timedelta(days=so_ngay - 1)
     tu_truoc = tu - timedelta(days=so_ngay)
     den_truoc = tu - timedelta(days=1)
@@ -92,11 +165,11 @@ def overview_live(shop_id: str, so_ngay: int, time_range: str):
         return [d for d in don if (_ngay(d.get("created_at")) or "") >= a and (_ngay(d.get("created_at")) or "") <= b]
 
     ky_nay, ky_truoc = trong(tu, den), trong(tu_truoc, den_truoc)
+    xem_nay = [n for n in xem if tu.date().isoformat() <= n <= den.date().isoformat()]
+    xem_truoc = len([n for n in xem if tu_truoc.date().isoformat() <= n <= den_truoc.date().isoformat()])
     dt_nay = sum(_tien_don(d) for d in ky_nay)
     dt_truoc = sum(_tien_don(d) for d in ky_truoc)
 
-    # Chuỗi theo ngày: điền đủ mọi ngày trong cửa sổ, ngày không có đơn là 0 đơn —
-    # đây là 0 THẬT (không bán được gì), khác với lượt xem là chưa đo.
     theo_ngay: Dict[str, Dict[str, int]] = {}
     for i in range(so_ngay):
         k = (tu + timedelta(days=i)).date().isoformat()
@@ -123,24 +196,21 @@ def overview_live(shop_id: str, so_ngay: int, time_range: str):
         "range": time_range,
         "from": tu.date().isoformat(),
         "to": den.date().isoformat(),
-        "anchored_to_latest_data": True,
+        "anchored_to_latest_data": anchored,
         "compare_from": tu_truoc.date().isoformat(),
         "compare_to": den_truoc.date().isoformat(),
         "kpi": {
-            # Lượt xem CHƯA ĐO ĐƯỢC. null, không phải 0.
-            "views": {"value": None, "pop_pct": None},
+            "views": {"value": len(xem_nay), "pop_pct": phan_tram_thay_doi(len(xem_nay), xem_truoc)},
             "orders": {"value": len(ky_nay), "pop_pct": phan_tram_thay_doi(len(ky_nay), len(ky_truoc))},
             "revenue_vnd": {"value": tien(dt_nay), "pop_pct": phan_tram_thay_doi(dt_nay, dt_truoc)},
-            "conversion_pct": {"value": None, "pop_pct": None},
+            "conversion_pct": {"value": ty_le_chuyen_doi(len(ky_nay), len(xem_nay)),
+                               "pop_pct": phan_tram_thay_doi(ty_le_chuyen_doi(len(ky_nay), len(xem_nay)) or 0,
+                                                             ty_le_chuyen_doi(len(ky_truoc), xem_truoc) or 0)},
         },
-        "series": [{"date": k, "views": None, "orders": v["orders"], "revenue_vnd": v["revenue_vnd"]}
+        "series": [{"date": k, "views": xem_nay.count(k), "orders": v["orders"], "revenue_vnd": v["revenue_vnd"]}
                    for k, v in sorted(theo_ngay.items())],
         "top_products": sorted(theo_sp.values(), key=lambda x: -x["revenue_vnd"])[:SO_TOP_PRODUCT],
         "recent_feedback": [],
         "orders_all_time": len(don),
-        "limitation": (
-            "Đơn hàng và doanh thu là số THẬT của shop bạn, chỉ tính đơn đã thanh toán. "
-            "Lượt xem và tỉ lệ chuyển đổi để trống vì sàn chưa bật theo dõi hành vi người "
-            "mua, không phải vì bằng 0. Hai chỉ số đó sẽ tự hiện khi tính năng theo dõi lên sóng."
-        ),
+        "limitation": "Số thật của shop: đơn đã thanh toán và lượt xem đã lọc bot, trùng lặp, chủ shop.",
     }, meta)

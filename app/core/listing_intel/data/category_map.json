@@ -1,0 +1,38 @@
+{
+  "vietcraft": {
+    "Váy Đầm": "fashion",
+    "Áo thun": "fashion",
+    "Quần dài": "fashion",
+    "Áo khoác": "fashion",
+    "Jacket": "fashion",
+    "Áo Lông": "fashion",
+    "Set áo váy": "fashion",
+    "quần": "fashion",
+    "Sweater": "fashion",
+    "Leather": "fashion",
+    "Vải len": "fashion",
+    "Trang trí": "home",
+    "Ly tách": "home",
+    "Nhà cửa": "home",
+    "Tranh ảnh": "home",
+    "Túi": "bags",
+    "Giày dép": "shoes",
+    "Phụ kiện": "accessories",
+    "Trang sức": "accessories",
+    "Áo quần bóng đá": "sport"
+  },
+  "tiki23": {
+    "men_bags": "bags",
+    "women_bags": "bags",
+    "backpacks_suitcases": "bags",
+    "men_shoes": "shoes",
+    "women_shoes": "shoes",
+    "fashion_accessories": "accessories"
+  },
+  "tiki26": {
+    "thoi-trang-nam": "fashion",
+    "thoi-trang-nu": "fashion",
+    "do-gia-dung": "home",
+    "the-thao-da-ngoai": "sport"
+  }
+}

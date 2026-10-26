@@ -1,0 +1,185 @@
+{
+ "model_version": "health-ml-1.1",
+ "name": "Gradient boosting, bản chạy trên VietCraft",
+ "features": [
+  "log_sales_90d",
+  "log_sales_180d",
+  "days_since_last",
+  "log_price_rel",
+  "freight_ratio",
+  "photos",
+  "description_length",
+  "name_length",
+  "log_reviews",
+  "rating",
+  "low_star_share",
+  "log_seller_sales",
+  "log_seller_listings",
+  "seller_rating",
+  "seller_ship_days",
+  "log_weight",
+  "log_volume"
+ ],
+ "groups": {
+  "history": [
+   "log_sales_90d",
+   "log_sales_180d",
+   "days_since_last"
+  ],
+  "price": [
+   "log_price",
+   "log_price_rel",
+   "freight_ratio"
+  ],
+  "content": [
+   "photos",
+   "description_length",
+   "name_length"
+  ],
+  "reviews": [
+   "log_reviews",
+   "rating",
+   "low_star_share"
+  ],
+  "seller": [
+   "log_seller_sales",
+   "log_seller_listings",
+   "seller_rating",
+   "seller_late_rate",
+   "seller_ship_days"
+  ],
+  "physical": [
+   "log_weight",
+   "log_volume"
+  ]
+ },
+ "actionable": {
+  "photos": 1,
+  "description_length": 1,
+  "name_length": 1,
+  "log_price_rel": -1,
+  "seller_ship_days": -1
+ },
+ "horizon_days": 90,
+ "trained_on": "Olist (Brazil), mốc 2017-07-01, 2017-08-01, 2017-09-01, 2017-10-01, 2018-01-01",
+ "sklearn": "1.9.1",
+ "test": {
+  "roc_auc": 0.761,
+  "auc_ci95": [
+   0.747,
+   0.774
+  ],
+  "pr_auc": 0.508,
+  "within_cat_auc": 0.755,
+  "top20_hit": 0.488,
+  "base_rate": 0.205
+ },
+ "test_baselines": {
+  "Ngẫu nhiên": {
+   "roc_auc": 0.507,
+   "auc_ci95": [
+    0.496,
+    0.516
+   ],
+   "pr_auc": 0.21,
+   "within_cat_auc": 0.509,
+   "top20_hit": 0.21,
+   "base_rate": 0.205
+  },
+  "health-1.0 (luật hiện tại)": {
+   "roc_auc": 0.517,
+   "auc_ci95": [
+    0.495,
+    0.545
+   ],
+   "pr_auc": 0.224,
+   "within_cat_auc": 0.536,
+   "top20_hit": 0.243,
+   "base_rate": 0.205
+  },
+  "Bán nhiều 90 ngày qua": {
+   "roc_auc": 0.73,
+   "auc_ci95": [
+    0.72,
+    0.741
+   ],
+   "pr_auc": 0.426,
+   "within_cat_auc": 0.726,
+   "top20_hit": 0.473,
+   "base_rate": 0.205
+  },
+  "Đơn gần nhất": {
+   "roc_auc": 0.734,
+   "auc_ci95": [
+    0.722,
+    0.744
+   ],
+   "pr_auc": 0.418,
+   "within_cat_auc": 0.731,
+   "top20_hit": 0.446,
+   "base_rate": 0.205
+  }
+ },
+ "delta_vs_best_baseline": {
+  "vs": "Đơn gần nhất",
+  "auc": 0.027,
+  "ci95": [
+   0.016,
+   0.04
+  ]
+ },
+ "group_lift": {
+  "history": 0.0671,
+  "price": -0.0021,
+  "content": 0.0011,
+  "reviews": 0.0017,
+  "seller": 0.0004,
+  "physical": 0.0028
+ },
+ "importance": {
+  "days_since_last": 0.0969,
+  "log_seller_sales": 0.0276,
+  "log_seller_listings": 0.0206,
+  "log_reviews": 0.0155,
+  "log_sales_90d": 0.0132,
+  "log_weight": 0.0063,
+  "log_volume": 0.0026,
+  "name_length": 0.0024,
+  "log_sales_180d": 0.0022,
+  "rating": 0.0012,
+  "freight_ratio": 0.001,
+  "photos": 0.0004,
+  "low_star_share": 0.0004,
+  "seller_ship_days": 0.0003,
+  "seller_rating": 0.0001,
+  "log_price_rel": -0.0,
+  "description_length": -0.0005
+ },
+ "quantiles": {
+  "photos": [
+   1.0,
+   2.0,
+   3.0
+  ],
+  "description_length": [
+   322.0,
+   567.0,
+   950.0
+  ],
+  "name_length": [
+   41.0,
+   51.0,
+   57.0
+  ],
+  "log_price_rel": [
+   -0.5703,
+   0.0,
+   0.5809
+  ],
+  "seller_ship_days": [
+   8.6933,
+   10.3414,
+   11.9066
+  ]
+ }
+}

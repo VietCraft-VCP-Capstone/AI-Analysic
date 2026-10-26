@@ -1,0 +1,913 @@
+{
+ "judged_on": "2026-10-21 (li-1.1)",
+ "rule": "một cặp là đúng khi người tìm từ khoá đó sẽ muốn thấy sản phẩm này",
+ "sample": "20 cặp mỗi dải cos, seed 0, chỉ tiêu đề tiki26 không khớp chữ với từ khoá nào",
+ "labels_source": "nhãn từng cặp được dựng lại ở li-1.5 từ biên bản chấm tay li-1.1 (các cặp đúng được nêu tên); khớp đúng số đếm theo dải của biên bản: chặt 1/100, nới 4/100, 0/13 cặp chung token",
+ "literal_check": {
+  "n": 20,
+  "correct": 20,
+  "note": "biên bản li-1.1; từng cặp không được lưu"
+ },
+ "pairs": [
+  {
+   "title": "Áo kiểu nữ đũi form rộng thêu hoa trẻ trung, chất đũi mềm mát Haint Boutique",
+   "keyword": "áo bóng đá việt nam",
+   "cos": 0.803,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Lò Xo Kim Loại Gắn Nút Nới Rộng Cổ áo Cổ Tay Áo Quần Jean Nam Nữ Nút Trơn Đen Đồng Không May Legaxi",
+   "keyword": "áo đôi",
+   "cos": 0.803,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "3 cuộn (1kg) túi đựng rác đen, bao rác tự phân hủy sinh học - size trung 55x65 cm",
+   "keyword": "áo vintage",
+   "cos": 0.804,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Băng đô thể thao thấm mồ hôi AOLIKES A-2116 Widening elastic sposts hairband",
+   "keyword": "cốc in hình",
+   "cos": 0.804,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "đồ bộ mặc nhà cao cấp chất lụa hàn",
+   "keyword": "quà tặng thầy cô",
+   "cos": 0.806,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Bộ 2 Thanh ray trượt ngăn kéo tủ cho thợ làm tủ, đóng tủ - Loại giảm chấn",
+   "keyword": "áo đồng phục",
+   "cos": 0.811,
+   "overlap": true,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "[LOẠI TỐT - HÀNG CAO CẤP] Thảm Tập Yoga 8mm, Tập Gym dộ dày 5-8mm 2 Lớp không mùi chống trơn trượt - Chính hãng dododios",
+   "keyword": "áo local brand",
+   "cos": 0.812,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Bảng chống đẩy, Dụng cụ hít đất đa năng, RH003 - RH006 - RH009 hỗ trợ đồ chống đẩy có vạch chia bài tập gym thể thao trong nhà",
+   "keyword": "áo gia đình",
+   "cos": 0.812,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Bình Nước Cầm Tay Chống Vỡ Có Lưới Lọc  350 /550/800ML Bình Nước Thể Thao Kiểu Dáng Đơn Giản Hiện Đại - HÀNG CHÍNH HÃNG MINIIN",
+   "keyword": "trang trí tết",
+   "cos": 0.815,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "BG Bóng tập thăng bằng BALANCE BALL YOGA/GYM cao cấp 46cm và 58cmx20 (hàng nhập khẩu)",
+   "keyword": "áo phông nam",
+   "cos": 0.816,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Chân váy xếp ly kèm khoen thời trang",
+   "keyword": "áo hoodie",
+   "cos": 0.821,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Vỏ gối ôm cotton tici Lidaco kích thước 35x100cm",
+   "keyword": "áo thun thể thao",
+   "cos": 0.821,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Baciami-Đầm Sơ Mi Tay Dài Phôm Rộng",
+   "keyword": "trang trí noel",
+   "cos": 0.822,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Bộ Tạ Tay 1kg Bọc Cao Su Trơn Lõi Thép Cao Cấp Chính Hãng Đại Nam Sport (Tổng 2kg)-Giao Màu Ngẫu Nhiên",
+   "keyword": "áo lớp",
+   "cos": 0.823,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần lót nữ su trơn lưng cao Sister Hood 628 – Co giãn 4 chiều, không viền, siêu mịn (Size L | XL | XXL)",
+   "keyword": "áo thun",
+   "cos": 0.827,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Dành cho mọi dòng xe đạp Giá đỡ điện thoại /máy tính bảng cho xe đạp tập thể dục tại nhà",
+   "keyword": "áo nhóm",
+   "cos": 0.835,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Mài Dao Đỏ Zwilling J.A.Henckels",
+   "keyword": "quà tặng người yêu",
+   "cos": 0.842,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "[KoSuyTu] Dụng Cụ Lấy Ráy Tai Có Camera Nội Soi Full HD – Kết Nối Điện Thoại - Đèn LED Chiếu Sáng, An Toàn Cho Cả Gia Đình",
+   "keyword": "áo phông nữ",
+   "cos": 0.845,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "QUẦN SHORT THUN",
+   "keyword": "móc khóa",
+   "cos": 0.848,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Đồ bộ nữ, đồ ngủ mặc nhà lửng cổ vuông phối ren F21 tay cánh tiên vải lanh BL161 họa tiết dễ thương size 45-70kg",
+   "keyword": "áo thun thể thao",
+   "cos": 0.848,
+   "overlap": false,
+   "band": "[0.8, 0.85)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần lót nam thun lạnh",
+   "keyword": "áo gia đình",
+   "cos": 0.852,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Cầu Lông Ống A Ngắn HT OAN",
+   "keyword": "áo vintage",
+   "cos": 0.854,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Bộ Bàn Chơi BiDa , Bàn Bi-a Mini Chơi Tại Nhà PaKaSa - Hàng Chính Hãng",
+   "keyword": "áo anime",
+   "cos": 0.854,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": " Áo khoác dù nam 2 lớp SAM ANGELS - M098",
+   "keyword": "áo thun thể thao",
+   "cos": 0.856,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ĐẦU TUÝP WADFOW (NHIỀU KÍCH THƯỚC) - HÀNG CHÍNH HÃNG",
+   "keyword": "lì xì tết",
+   "cos": 0.857,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần tây nam Khatoco Q1M528R1-INNA308-2503-1",
+   "keyword": "cốc quà tặng",
+   "cos": 0.858,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "QUẸT MỒI BẾP CỒN - màu ngẫu nhiên ",
+   "keyword": "túi tote",
+   "cos": 0.86,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "đồ bộ mặc nhà,đồ bộ mặc nhà đẹp ảnh thật 100%, chất lụa hàn",
+   "keyword": "áo bóng đá việt nam",
+   "cos": 0.861,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo kiểu nữ, áo phông in họa tiết hoa thời trang Haint Boutique,kín đáo,điệu đà,4 màu thanh nhã ALe18",
+   "keyword": "áo thun",
+   "cos": 0.862,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 1,
+   "lenient": 1
+  },
+  {
+   "title": "áo nữ - đũi xước tơ cổ tàu cho người đến dưới 80kg (A25)",
+   "keyword": "túi tote",
+   "cos": 0.863,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "MÁY RỬA XE PIN ÁP LỰC MẠNH HÀNG CHUẨN",
+   "keyword": "áo phông nam",
+   "cos": 0.864,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Núm Xoay Trợ Lực Ô Tô Cao Cấp – Xoay 360° Mượt, Không Kẹt, Không Rít",
+   "keyword": "áo đôi",
+   "cos": 0.864,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo len Gile nam, áo gilê công sở nam đẹp LNA29",
+   "keyword": "áo kpop",
+   "cos": 0.865,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần Kaki Khatoco nam (tặng kèm 1 với thời trang)",
+   "keyword": "áo gia đình",
+   "cos": 0.866,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Giàn Xà Đơn,Xà Kép Thiết Bị Tập Luyện Máy Tập Tổng Hợp Tay Vai Bụng BG DB-001 CHIN- Đen (hàng nhập khẩu)",
+   "keyword": "quà tặng bạn thân",
+   "cos": 0.871,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "BỘ LINH KIỆN THAY THẾ CHO PHÍCH BƠM 2 LÍT VÀ 2,5 LÍT RẠNG ĐÔNG",
+   "keyword": "quà sinh nhật",
+   "cos": 0.872,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Găng tay xốp 100 cái/hộp THP Tuyền Hưng  Phú - Hàng chĩnh hãng",
+   "keyword": "quà lưu niệm",
+   "cos": 0.873,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần short Kaki Khatoco (30-37) sale 290k ( giá tem 378k)",
+   "keyword": "áo oversize",
+   "cos": 0.876,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Khoác Nam",
+   "keyword": "trang trí tết",
+   "cos": 0.876,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần học sinh cho bé gái cấp 1 - cấp 2",
+   "keyword": "áo lớp",
+   "cos": 0.878,
+   "overlap": false,
+   "band": "[0.85, 0.88)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Váy ngủ lụa phối ren cực sexy",
+   "keyword": "áo phông nữ",
+   "cos": 0.882,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Vành Bóng Rổ + Lưới Size 30,35.40(Màu Cam)",
+   "keyword": "cốc in hình",
+   "cos": 0.882,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần jean nam Q62 (Xanh nhạt)",
+   "keyword": "áo oversize",
+   "cos": 0.883,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Bộ đồ nam, sét đồ nam thời trang One28",
+   "keyword": "quà tết",
+   "cos": 0.884,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần Biển Nam",
+   "keyword": "quà sinh nhật",
+   "cos": 0.884,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo sơ mi dài tay Khatoco (S-2XL)",
+   "keyword": "áo nhóm",
+   "cos": 0.885,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo lót ren đệm dày",
+   "keyword": "áo gia đình",
+   "cos": 0.886,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo sơ mi nam tay dài form suông Khatoco A1MD568T1-CNCR319-2504-D công nghệ NANO mới",
+   "keyword": "áo oversize",
+   "cos": 0.887,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần tây nam Khatoco(29-37)",
+   "keyword": "áo nhóm",
+   "cos": 0.888,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Đầm nữ dự tiệc tay sát nách 88",
+   "keyword": "áo thun thể thao",
+   "cos": 0.891,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Nơ Cổ Bobo",
+   "keyword": "áo gia đình",
+   "cos": 0.891,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo đũi nam thời trang đẹp",
+   "keyword": "túi tote",
+   "cos": 0.891,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO SỌC BỤI BỤI FORM RỘNG",
+   "keyword": "áo thun",
+   "cos": 0.891,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 1
+  },
+  {
+   "title": "ÁO KHOÁC DÙ",
+   "keyword": "áo oversize",
+   "cos": 0.892,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo croptop nữ",
+   "keyword": "áo vintage",
+   "cos": 0.892,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "SET THẾ THAO NAM NĂNG ĐỘNG",
+   "keyword": "áo đồng phục",
+   "cos": 0.893,
+   "overlap": true,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo sơ mi đũi trơn ngắn tay nam phối cúc đơn giản tinh tế, thanh lịch",
+   "keyword": "áo phông nam",
+   "cos": 0.894,
+   "overlap": true,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần lót gợi cảm Hàn Quốc",
+   "keyword": "áo phông nữ",
+   "cos": 0.897,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Khoác Nam",
+   "keyword": "áo bóng đá việt nam",
+   "cos": 0.899,
+   "overlap": true,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Vành Bóng Rổ + Lưới Size 30,35.40(Màu Cam)",
+   "keyword": "áo nhóm",
+   "cos": 0.9,
+   "overlap": false,
+   "band": "[0.88, 0.9)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Polo nam Novelty Regular fit Cool Feeling ĐH01",
+   "keyword": "in áo thun",
+   "cos": 0.902,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo sơ mi nam Khatoco sale 374k ( giá tem 468k)",
+   "keyword": "áo oversize",
+   "cos": 0.902,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Đồ bộ cao cấp mặc nhà xinh",
+   "keyword": "áo bóng đá việt nam",
+   "cos": 0.903,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO KHOÁC NỈ NAM 02",
+   "keyword": "áo thun",
+   "cos": 0.903,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO KHOÁC NAM 08",
+   "keyword": "in áo thun",
+   "cos": 0.903,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO LÁ BRA HỌC SINH CHẤT COTTON MÁT KHÔNG MÚT TỪ 8-13 TUỔI DƯỚI 50KG DÀNH CHO NỮ",
+   "keyword": "áo phông nữ",
+   "cos": 0.904,
+   "overlap": true,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Nơ Cổ Bobo",
+   "keyword": "áo thun thể thao",
+   "cos": 0.905,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Đầm dự tiệc thắt eo sang trọng",
+   "keyword": "áo tết",
+   "cos": 0.905,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Quần tây nam có ly Khatoco Q1M528R1-INXA306-2503-1",
+   "keyword": "cốc in hình",
+   "cos": 0.906,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO LÓT  NGỰC MÚT DÀY KHÔNG GỌNG",
+   "keyword": "áo đôi",
+   "cos": 0.908,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "SET THẾ THAO NAM NĂNG ĐỘNG",
+   "keyword": "quà tặng người yêu",
+   "cos": 0.908,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "bộ nữ chất liệu đũi, full size từ 35kg đến 95kg (T43)",
+   "keyword": "áo phông nam",
+   "cos": 0.909,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Khoác Nam Có Nón",
+   "keyword": "áo anime",
+   "cos": 0.909,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO NGỰC SU THÔNG HƠI SIÊU ĐẸP SIZE 36-42 DÀNH CHO NỮ",
+   "keyword": "áo phông nữ",
+   "cos": 0.91,
+   "overlap": true,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo kiểu tay tầng xinh xắn",
+   "keyword": "in áo thun",
+   "cos": 0.911,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo ba lỗ nam tập gym, sự thoải mái và phong cách đơn giản",
+   "keyword": "áo phông nam",
+   "cos": 0.913,
+   "overlap": true,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO KHOÁC NỈ NAM 02",
+   "keyword": "áo phông nam",
+   "cos": 0.916,
+   "overlap": true,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO KHOÁC NAM 08",
+   "keyword": "áo đồng phục",
+   "cos": 0.918,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "đồ bộ mặc nhà cao cấp",
+   "keyword": "áo thun thể thao",
+   "cos": 0.919,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "đồ bộ mặc nhà cao cấp",
+   "keyword": "áo thun thể thao",
+   "cos": 0.919,
+   "overlap": false,
+   "band": "[0.9, 0.92)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo nữ thun co giãn cổ tim",
+   "keyword": "áo thun thể thao",
+   "cos": 0.92,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 1
+  },
+  {
+   "title": "đồ bộ mặc nhà cao cấp",
+   "keyword": "áo đồng phục",
+   "cos": 0.92,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Năm sinh đẹp hiếm",
+   "keyword": "áo gia đình",
+   "cos": 0.922,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo khoác nam đẹp NMT16",
+   "keyword": "áo phông nam",
+   "cos": 0.925,
+   "overlap": true,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "áo kiểu nữ - hoạ tiết hoa cực nổi, dễ mix đồ - hàng VNXK A17",
+   "keyword": "áo phông nữ",
+   "cos": 0.925,
+   "overlap": true,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Khoác Nam",
+   "keyword": "áo nhóm",
+   "cos": 0.925,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "đồ bộ mặc nhà chất thô hàn",
+   "keyword": "áo đồng phục",
+   "cos": 0.926,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo khoác phao nam hà nội NAP09",
+   "keyword": "áo phông nam",
+   "cos": 0.926,
+   "overlap": true,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Năm sinh đẹp hiếm",
+   "keyword": "quà tết",
+   "cos": 0.927,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO KHOÁC NAM 08",
+   "keyword": "áo phông nữ",
+   "cos": 0.928,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo phao nam công sở trẻ trung NAP37",
+   "keyword": "áo phông nữ",
+   "cos": 0.931,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "BỘ THỂ THAO NAM NĂNG ĐỘNG",
+   "keyword": "áo nhóm",
+   "cos": 0.932,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo Khoác Nam",
+   "keyword": "áo phông nữ",
+   "cos": 0.934,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo kiểu bo ly thời trang",
+   "keyword": "áo đồng phục",
+   "cos": 0.937,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo kiểu bo ly thời trang",
+   "keyword": "áo lớp",
+   "cos": 0.937,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO NGẮN TAY VẠT NGANG",
+   "keyword": "áo thun",
+   "cos": 0.938,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 1
+  },
+  {
+   "title": "Năm sinh đẹp hiếm",
+   "keyword": "áo phông nam",
+   "cos": 0.939,
+   "overlap": true,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "ÁO NƠ BÊN",
+   "keyword": "áo đôi",
+   "cos": 0.942,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "Áo kiểu bo ly thời trang",
+   "keyword": "in áo thun",
+   "cos": 0.942,
+   "overlap": false,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  },
+  {
+   "title": "áo kiểu nữ - chất liệu đũi xước tơ phù hợp cho mọi lứa tuổi đến dưới 85kg (A25)",
+   "keyword": "áo phông nữ",
+   "cos": 0.955,
+   "overlap": true,
+   "band": "[0.92, 1.01)",
+   "strict": 0,
+   "lenient": 0
+  }
+ ]
+}

@@ -45,10 +45,12 @@ ENDPOINTS: List[Dict[str, Any]] = [
 DA_LAM: Dict[str, str] = {
     "F26": "app.api.v1.f26_shop_overview",
     "F28": "app.api.v1.f28_conversion",
+    "F29-LI": "app.api.v1.f29_intel",
     "F29": "app.api.v1.f29_health",
     "F30": "app.api.v1.f30_alerts",
     "F31": "app.api.v1.f31_category_revenue",
     "F32": "app.api.v1.f32_competitors",
+    "F32-brief": "app.api.v1.f32_competitor_brief",
     "F34": "app.api.v1.f34_tag_gap",
     "F27": "app.api.v1.f27_listing_timeseries",
     "F33": "app.api.v1.f33_shop_comparison",
@@ -60,10 +62,6 @@ DA_LAM: Dict[str, str] = {
     "F40": "app.api.v1.f40_radar",
     "F41": "app.api.v1.f41_recommendations",
 }
-
-
-# ---------------------------------------------------------------------------
-# HAI CHỖ HỢP ĐỒNG TỰ MÂU THUẪN — đã chốt ở đây, ghi lại để không ai chốt ngược
 
 
 def _chua_co_so(ep: Dict[str, Any]) -> None:

@@ -1,25 +1,3 @@
-"""
-_live.py — Đọc dữ liệu SÀN THẬT (database `vietcraft`) cho các endpoint phân tích.
-
-Vì sao cần file này: mart được đánh khoá bằng mã shop của dữ liệu mồi (`shp_00017`),
-còn shop thật trên sàn là ObjectId 24 ký tự. Gửi mã shop thật vào mart thì không khớp
-dòng nào, và mọi màn hình sẽ trống mà không nói được vì sao.
-
-Hai miền dùng HAI TỪ VỰNG khác nhau, đo ngày 28/09:
-
-    | Thứ           | Sàn thật `vietcraft`              | Mart (dữ liệu mồi)          |
-    |---------------|-----------------------------------|-----------------------------|
-    | loại sản phẩm | READY_TO_SHIP / POD_TEMPLATE      | tshirt_men, mug_11oz, ...   |
-    |               | (đó là CÁCH GIAO, không phải phôi)| 138 mã loại phôi            |
-    | danh mục      | chữ tự do: "Thời trang", "Gốm sứ" | apparel, drinkware, ...     |
-    | giá           | product_variants.retail_price     | price_vnd                   |
-
-`LIVE_ANALYTICS_IDENTITY_CONTRACT` cấm nối hai miền bằng tiêu đề hay vị trí mà không có
-bảng ánh xạ tường minh. File này chính là bảng ánh xạ đó, và nó nói rõ mức tin cậy:
-mỗi sản phẩm mang theo `type_source` cho biết mã loại phôi đến từ đâu (người bán chọn,
-máy đoán từ tiếng Việt, máy đoán từ tiếng Anh, hay không đoán được).
-"""
-
 import re
 import sys
 from pathlib import Path
@@ -29,36 +7,24 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from pymongo.read_preferences import ReadPreference
+
 from app.api.v1._mart import client_dung_chung
 from app.config import settings
-
-# ---------------------------------------------------------------------------
-# NHẬN DẠNG SHOP
-# ---------------------------------------------------------------------------
 
 _OBJECT_ID = re.compile(r"^[0-9a-fA-F]{24}$")
 
 
 def la_shop_live(shop_id: str) -> bool:
-    """Mã shop của sàn thật là ObjectId 24 ký tự hex; mã dữ liệu mồi là `shp_00017`."""
     return bool(_OBJECT_ID.match(shop_id or ""))
 
 
 def db_live():
-    """Handle tới database sàn thật. Chỉ ĐỌC — module phân tích không ghi vào sàn."""
-    return client_dung_chung()[settings.MONGO_DB_LIVE]
+    client = client_dung_chung()
+    if hasattr(client, "get_database"):
+        return client.get_database(settings.MONGO_DB_LIVE, read_preference=ReadPreference.SECONDARY_PREFERRED)
+    return client[settings.MONGO_DB_LIVE]
 
-
-# ---------------------------------------------------------------------------
-# ĐOÁN LOẠI PHÔI TỪ TÊN SẢN PHẨM
-#
-# Bộ phân loại có sẵn (`build_catalog.classify_blueprint`) chỉ hiểu tiếng Anh vì nó
-# được viết cho tiêu đề Printify. Đo trên 31 sản phẩm thật của sàn: đoán được 10.
-# Phần còn lại là tên tiếng Việt, nên cần bảng từ khoá tiếng Việt đặt TRƯỚC.
-#
-# Thứ tự trong bảng có ý nghĩa: mục cụ thể đứng trước mục chung, vì "áo khoác" phải
-# thắng "áo", và "bộ ly" phải thắng "ly".
-# ---------------------------------------------------------------------------
 
 TU_KHOA_VI: List[tuple] = [
     # Đồ uống
@@ -104,14 +70,7 @@ THU_CONG_KHONG_CO_PHOI = re.compile(
 )
 
 
-# Dấu hiệu hàng THỦ CÔNG. Khác `THU_CONG_KHONG_CO_PHOI` ở chỗ: bảng kia nói "món này
-# không có phôi POD nào", còn bảng này nói "món này làm thủ công" dù vẫn ánh xạ được sang
-# một loại phôi gần đúng.
-#
-# Vì sao cần tách: "Bộ Ấm Chén Sa Thạch Men Hỏa Biến" ánh xạ sang `mug_11oz` (đúng là đồ
-# uống), nhưng so giá nó với phôi cốc in công nghiệp rồi kết luận "cao hơn hầu hết" là
-# sai về bản chất — một bộ ấm chén gốm thủ công và một cái cốc in không cùng loại hàng.
-# Cờ này để giao diện cảnh báo, thay vì đưa ra phán xét sai.
+# Dấu hiệu hàng thủ công
 DAU_HIEU_THU_CONG = re.compile(
     r"thủ công|handmade|hand-made|gốm|sứ\b|sa thạch|bát tràng|men lam|men tro|men hỏa biến|"
     r"xà cừ|da bò|da sáp|dệt tay|thêu tay|thêu hoạ|thêu họa|đan tay|khâu tay|mộc\b|"
@@ -121,19 +80,7 @@ DAU_HIEU_THU_CONG = re.compile(
 
 
 def doan_loai_phoi(title: str, tags: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Đoán mã loại phôi từ tên sản phẩm thật.
-
-    Trả về `{"product_type_id", "source", "handmade_hint"}` với `source` ∈
-      `vi`        đoán từ từ khoá tiếng Việt
-      `en`        đoán từ bộ phân loại tiêu đề Printify
-      `handmade`  là đồ thủ công, không có loại phôi POD tương ứng
-      `unknown`   không đoán được
-    `handmade_hint` bật khi tên sản phẩm có dấu hiệu hàng thủ công, KỂ CẢ khi đã đoán ra
-    loại phôi — lúc đó mặt bằng POD chỉ để tham khảo, không dùng để kết luận.
-
-    Người gọi PHẢI phơi `source` ra ngoài: một mã loại phôi do máy đoán không có cùng
-    độ tin cậy với một mã do người bán tự chọn.
-    """
+    """Đoán mã loại phôi từ tên sản phẩm thật."""
     text = " ".join([title or ""] + list(tags or []))
     low = text.lower()
     thu_cong = bool(DAU_HIEU_THU_CONG.search(low))
@@ -150,8 +97,6 @@ def doan_loai_phoi(title: str, tags: Optional[List[str]] = None) -> Dict[str, An
         if pt:
             return {"product_type_id": pt, "source": "en", "handmade_hint": thu_cong}
     except Exception:
-        # Bộ phân loại tiếng Anh là phần TÔ THÊM. Nó lỗi thì vẫn còn bảng tiếng Việt
-        # bên trên, nên không được làm cả endpoint sập.
         pass
 
     if THU_CONG_KHONG_CO_PHOI.search(low):
@@ -159,25 +104,9 @@ def doan_loai_phoi(title: str, tags: Optional[List[str]] = None) -> Dict[str, An
     return {"product_type_id": None, "source": "unknown", "handmade_hint": thu_cong}
 
 
-# ---------------------------------------------------------------------------
-# BỘ LỌC DỮ LIỆU GIẢ (Seed)
-#
-# Mọi dữ liệu phân tích để lại trong DB, chỉ lọc khi đọc. Bộ lọc này đặt ở một
-# chỗ duy nhất và dùng chung cho mọi endpoint đọc dữ liệu sàn thật.
-#
-# "Dữ liệu giả" = bản ghi do `link-seed-shop-to-seller.js` bơm vào hoặc do script
-# test tạo ra. Nhận biết bằng `seed_ref` (sản phẩm) hoặc `is_simulated` (đơn).
-# ---------------------------------------------------------------------------
-
-LOC_SP_THAT = {"seed_ref": {"$exists": False}}
-"""Bộ lọc sản phẩm thật: giữ lại chỉ sản phẩm KHÔNG có seed_ref."""
-
+LOC_SP_THAT = {"seed_ref": {"$exists": False}, "is_hidden": {"$ne": True}}
 LOC_DON_THAT = {"seed_ref": {"$exists": False}, "is_simulated": {"$ne": True}}
-"""Bộ lọc đơn thật: giữ lại chỉ đơn vừa KHÔNG có seed_ref VỪA không phải is_simulated."""
 
-# ---------------------------------------------------------------------------
-# ĐỌC SẢN PHẨM THẬT CỦA MỘT SHOP
-# ---------------------------------------------------------------------------
 
 def _so(x: Any) -> Optional[float]:
     """Decimal128 của Mongo sang float. Giá trên sàn lưu dạng Decimal128."""
