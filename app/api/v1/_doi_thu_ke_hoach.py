@@ -5,9 +5,10 @@ import time
 import urllib.request
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-TOI_DA_VIEC = 5
+TOI_DA_VIEC = 10      # trang chia 5 việc mỗi trang, trang đầu vẫn là 5 việc gấp nhất
 MOI_LOAI = 2          # mỗi loại việc tối đa 2 dòng để kế hoạch không toàn một việc
 CACHE_GIAY = 1800
+THU_TU_MUC = {"gap": 0, "quan_trong": 1, "nen_lam": 2}
 MO_HINH_CLAUDE = os.getenv("COMPETITOR_BRIEF_MODEL", "claude-sonnet-5-5")
 
 
@@ -74,6 +75,13 @@ def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: D
     return su
 
 
+def _muc(f: Dict[str, Any]) -> str:
+    """Mức ưu tiên hiện trên trang: hàng mới đe doạ cao là gấp; giá lệch, tăng tốc, đe doạ vừa là quan trọng."""
+    if f["kind"] == "de_doa" and f.get("level") == "high":
+        return "gap"
+    return "quan_trong" if f["kind"] in ("de_doa", "gia", "tang_toc") else "nen_lam"
+
+
 def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Kế hoạch sinh theo luật từ sự thật, ưu tiên: đe doạ cao > giá lệch > đối thủ tăng tốc > từ khoá > nhóm > theo dõi."""
     thu_tu = {"de_doa": 0, "gia": 1, "tang_toc": 2, "tu_khoa": 3, "nhom": 4, "theo_doi": 5}
@@ -113,6 +121,7 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             viec.append({"action": f"Theo dõi {f['shop']}",
                          "why": f"Shop này có hàng giống {f['overlap']} sản phẩm của bạn nhất.",
                          "link": f"/seller/competitors/{f['shop_id']}"})
+        viec[-1]["priority"] = _muc(f)      # thứ tự xếp ở trên đã đi từ gấp tới nên làm
         if len(viec) == TOI_DA_VIEC:
             break
     return viec
@@ -120,11 +129,11 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def _loi_nhac(su: List[Dict[str, Any]]) -> str:
     return ("Bạn là trợ lý cho người bán mới trên sàn thương mại điện tử VietCraft. Dưới đây là các SỰ THẬT đã được hệ "
-            "thống tính sẵn về đối thủ của shop (JSON). Hãy viết tối đa 5 việc nên làm trong tuần này, xếp việc quan "
-            "trọng nhất lên đầu, bằng tiếng Việt dễ hiểu, không dùng thuật ngữ. CHỈ dùng con số có trong dữ liệu, "
-            "không suy ra số mới, không bịa. Trả về DUY NHẤT một JSON dạng "
-            '{"actions":[{"action":"việc cần làm","why":"vì sao, có số liệu"}]}.\n\nSỰ THẬT:\n'
-            + json.dumps(su, ensure_ascii=False))
+            f"thống tính sẵn về đối thủ của shop (JSON). Hãy viết tối đa {TOI_DA_VIEC} việc nên làm trong tuần này, xếp "
+            "việc quan trọng nhất lên đầu, bằng tiếng Việt dễ hiểu, không dùng thuật ngữ. CHỈ dùng con số có trong dữ liệu, "
+            "không suy ra số mới, không bịa. Mỗi việc ghi `fact` là số thứ tự của sự thật làm căn cứ. Trả về DUY NHẤT "
+            'một JSON dạng {"actions":[{"fact":0,"action":"việc cần làm","why":"vì sao, có số liệu"}]}.\n\nSỰ THẬT:\n'
+            + json.dumps([{"fact": i, **f} for i, f in enumerate(su)], ensure_ascii=False))
 
 
 def _goi(url: str, body: Dict, headers: Dict[str, str], lay: Callable[[Dict], str]) -> Optional[str]:
@@ -173,10 +182,14 @@ def loc_viec_llm(van_ban: str, su: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     for v in viec[:TOI_DA_VIEC]:
         if not isinstance(v, dict) or not v.get("action"):
             continue
+        i = v.get("fact")
+        # Không chỉ ra được sự thật làm căn cứ thì không biết mức ưu tiên, và cũng không chắc là có căn cứ: bỏ.
+        if not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < len(su):
+            continue
         cau = f"{v.get('action', '')} {v.get('why', '')}"
         if all(n in cho_phep for n in _so(cau)):
-            ra.append({"action": str(v["action"]), "why": str(v.get("why") or ""), "link": None})
-    return ra
+            ra.append({"action": str(v["action"]), "why": str(v.get("why") or ""), "link": None, "priority": _muc(su[i])})
+    return sorted(ra, key=lambda x: THU_TU_MUC[x["priority"]])
 
 
 _CACHE: Dict[str, Tuple[float, str, Dict[str, Any]]] = {}
