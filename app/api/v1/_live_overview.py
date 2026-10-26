@@ -63,6 +63,87 @@ def overview_live(shop_id: str, so_ngay: int, time_range: str, to_date: Optional
             "Shop bạn chưa có đơn hàng đã thanh toán hay lượt xem nào, nên chưa có số để tổng quan. "
             "Số liệu sẽ hiện ngay khi có lượt xem hoặc đơn đầu tiên.", meta)
 
+    if time_range == "year":
+        if to_date:
+            try:
+                den_dt = datetime.fromisoformat(to_date).replace(tzinfo=GIO_VN)
+                anchored = True
+            except Exception:
+                den_dt = datetime.now(GIO_VN)
+                anchored = False
+        else:
+            den_dt = datetime.now(GIO_VN)
+            anchored = False
+
+        nam_moc = den_dt.year
+        cac_nam_don = {int(_ngay(d.get("created_at"))[:4]) for d in don if _ngay(d.get("created_at"))}
+        cac_nam_xem = {int(n[:4]) for n in xem if len(n) >= 4}
+        tat_ca_nam = cac_nam_don | cac_nam_xem | {nam_moc}
+
+        nam_dau = min(nam_moc - 2, min(tat_ca_nam)) if tat_ca_nam else nam_moc - 2
+        danh_sach_nam = sorted(list(range(nam_dau, nam_moc + 1)))
+
+        series = []
+        for y in danh_sach_nam:
+            prefix = f"{y}"
+            don_y = [d for d in don if (_ngay(d.get("created_at")) or "").startswith(prefix)]
+            xem_y_count = sum(1 for n in xem if n.startswith(prefix))
+            dt_y = sum(_tien_don(d) for d in don_y)
+            series.append({
+                "date": str(y),
+                "views": xem_y_count,
+                "orders": len(don_y),
+                "revenue_vnd": tien(dt_y),
+            })
+
+        prefix_nay = f"{nam_moc}"
+        prefix_truoc = f"{nam_moc - 1}"
+
+        don_nay = [d for d in don if (_ngay(d.get("created_at")) or "").startswith(prefix_nay)]
+        don_truoc = [d for d in don if (_ngay(d.get("created_at")) or "").startswith(prefix_truoc)]
+        xem_nay_count = sum(1 for n in xem if n.startswith(prefix_nay))
+        xem_truoc_count = sum(1 for n in xem if n.startswith(prefix_truoc))
+
+        dt_nay = sum(_tien_don(d) for d in don_nay)
+        dt_truoc = sum(_tien_don(d) for d in don_truoc)
+
+        theo_sp: Dict[str, Dict[str, Any]] = {}
+        for d in don_nay:
+            for it in d.get("items") or []:
+                pid = str(it.get("product_id") or "")
+                if not pid:
+                    continue
+                o = theo_sp.setdefault(pid, {"listing_id": pid, "title": it.get("title") or pid,
+                                             "orders": 0, "revenue_vnd": 0})
+                o["orders"] += 1
+                o["revenue_vnd"] += int((_so(it.get("retail_price")) or 0) * int(it.get("quantity") or 1))
+
+        return ok({
+            "range": "year",
+            "from": f"{nam_moc}-01-01",
+            "to": f"{nam_moc}-12-31" if nam_moc < datetime.now(GIO_VN).year else den_dt.date().isoformat(),
+            "anchored_to_latest_data": anchored,
+            "compare_from": f"{nam_moc - 1}-01-01",
+            "compare_to": f"{nam_moc - 1}-12-31",
+            "kpi": {
+                "views": {"value": xem_nay_count, "pop_pct": phan_tram_thay_doi(xem_nay_count, xem_truoc_count)},
+                "orders": {"value": len(don_nay), "pop_pct": phan_tram_thay_doi(len(don_nay), len(don_truoc))},
+                "revenue_vnd": {"value": tien(dt_nay), "pop_pct": phan_tram_thay_doi(dt_nay, dt_truoc)},
+                "conversion_pct": {
+                    "value": ty_le_chuyen_doi(len(don_nay), xem_nay_count),
+                    "pop_pct": phan_tram_thay_doi(
+                        ty_le_chuyen_doi(len(don_nay), xem_nay_count) or 0,
+                        ty_le_chuyen_doi(len(don_truoc), xem_truoc_count) or 0,
+                    ),
+                },
+            },
+            "series": series,
+            "top_products": sorted(theo_sp.values(), key=lambda x: -x["revenue_vnd"])[:SO_TOP_PRODUCT],
+            "recent_feedback": [],
+            "orders_all_time": len(don),
+            "limitation": "Số thật của shop: so sánh tổng kết giữa các năm (đơn đã thanh toán và lượt xem đã lọc bot).",
+        }, meta)
+
     # Mặc định khoảng thời gian kết thúc ở thời gian hiện tại
     if to_date:
         try:

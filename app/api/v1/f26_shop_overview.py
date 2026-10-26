@@ -30,6 +30,79 @@ def shop_overview(shop_id: str = CurrentShop, timeRange: str = "30d", to: Option
     if la_shop_live(shop_id):
         return overview_live(shop_id, so_ngay, timeRange, to_date=to)
 
+    if timeRange == "year":
+        moi_nhat = ngay_moi_nhat({"shop_id": shop_id})
+        if moi_nhat is None:
+            mart_not_ready("listing_daily")
+        nam_moc = int(to[:4]) if to and len(to) >= 4 else int(moi_nhat[:4])
+        nam_dau = nam_moc - 2
+        danh_sach_nam = [str(y) for y in range(nam_dau, nam_moc + 1)]
+        records = list(db()["listing_daily"].aggregate([
+            {"$match": {"shop_id": shop_id}},
+            {"$project": {
+                "year": {"$substr": ["$date", 0, 4]},
+                "views": "$views", "orders": "$orders", "revenue_vnd": "$revenue_vnd",
+            }},
+            {"$group": {
+                "_id": "$year",
+                "views": {"$sum": "$views"},
+                "orders": {"$sum": "$orders"},
+                "revenue_vnd": {"$sum": "$revenue_vnd"},
+            }},
+            {"$sort": {"_id": 1}}
+        ]))
+        theo_nam = {r["_id"]: r for r in records}
+        series = [
+            {
+                "date": y,
+                "views": int(theo_nam.get(y, {}).get("views", 0)),
+                "orders": int(theo_nam.get(y, {}).get("orders", 0)),
+                "revenue_vnd": tien(theo_nam.get(y, {}).get("revenue_vnd", 0)),
+            }
+            for y in danh_sach_nam
+        ]
+        nay_rec = theo_nam.get(str(nam_moc), {})
+        truoc_rec = theo_nam.get(str(nam_moc - 1), {})
+        dt_nay = tien(nay_rec.get("revenue_vnd", 0))
+        dt_truoc = tien(truoc_rec.get("revenue_vnd", 0))
+        ord_nay = int(nay_rec.get("orders", 0))
+        ord_truoc = int(truoc_rec.get("orders", 0))
+        view_nay = int(nay_rec.get("views", 0))
+        view_truoc = int(truoc_rec.get("views", 0))
+
+        top_kq = list(db()["listing_daily"].aggregate([
+            {"$match": {"shop_id": shop_id, "date": {"$regex": f"^{nam_moc}"}}},
+            {"$group": {"_id": "$listing_id", "revenue_vnd": {"$sum": "$revenue_vnd"}, "orders": {"$sum": "$orders"}}},
+            {"$sort": {"revenue_vnd": -1}},
+            {"$limit": SO_TOP_PRODUCT},
+            {"$lookup": {"from": "listings", "localField": "_id", "foreignField": "listing_id", "as": "l"}},
+            {"$project": {"revenue_vnd": 1, "orders": 1, "title": {"$first": "$l.title"}}},
+        ]))
+        meta = _meta(shop_id, f"{nam_moc}-01-01", f"{nam_moc}-12-31", len(series))
+        return ok({
+            "range": "year",
+            "from": f"{nam_moc}-01-01",
+            "to": f"{nam_moc}-12-31",
+            "anchored_to_latest_data": True,
+            "compare_from": f"{nam_moc - 1}-01-01",
+            "compare_to": f"{nam_moc - 1}-12-31",
+            "kpi": {
+                "views": {"value": view_nay, "pop_pct": phan_tram_thay_doi(view_nay, view_truoc)},
+                "orders": {"value": ord_nay, "pop_pct": phan_tram_thay_doi(ord_nay, ord_truoc)},
+                "revenue_vnd": {"value": dt_nay, "pop_pct": phan_tram_thay_doi(dt_nay, dt_truoc)},
+                "conversion_pct": {
+                    "value": ty_le_chuyen_doi(ord_nay, view_nay),
+                    "pop_pct": phan_tram_thay_doi(ty_le_chuyen_doi(ord_nay, view_nay) or 0,
+                                                  ty_le_chuyen_doi(ord_truoc, view_truoc) or 0),
+                },
+            },
+            "series": series,
+            "top_products": [{"listing_id": t["_id"], "title": t.get("title"),
+                              "orders": int(t["orders"]), "revenue_vnd": tien(t["revenue_vnd"])}
+                             for t in top_kq],
+            "recent_feedback": [],
+        }, meta)
+
     moi_nhat = ngay_moi_nhat({"shop_id": shop_id})
     if moi_nhat is None:
         mart_not_ready("listing_daily")
