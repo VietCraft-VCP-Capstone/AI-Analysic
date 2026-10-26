@@ -17,7 +17,6 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.api.v1._template import che_do_xac_thuc
 from app.api.v1.analytics_routes import gan_vao as gan_analytics
-from app.api.v1.anomaly import router as anomaly_router
 from app.api.v1.cccd_ocr import router as cccd_ocr_router
 from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
 
@@ -68,7 +67,23 @@ async def lifespan(app: FastAPI):
         ra("  [OK] Gateway BE san: BAT (AI_GATEWAY_SECRET). BE goi kem X-Shop-Id da xac thuc.")
     else:
         ra("  [!]  Gateway BE san: TAT. Dat AI_GATEWAY_SECRET giong ben BE de san goi duoc.")
+    try:
+        from app.core.listing_intel import embedder
+        if embedder.available():
+            ra(f"  [OK] Listing Intel: model ONNX san sang o {embedder.MODEL_DIR}")
+        else:
+            ra(f"  [!!] Listing Intel: THIEU model ONNX o {embedder.MODEL_DIR} (LI_MODEL_DIR).")
+            ra("       Truc anh, thi truong va khop tu khoa chay rut gon. Tai: python -m scripts.li.fetch_models")
+    except Exception as e:
+        ra(f"  [!] Listing Intel: khong kiem duoc model ONNX: {type(e).__name__}")
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
+
+    try:
+        from app.core.f29.price_suggest import MODEL_PATH, _load
+        _load(MODEL_PATH)
+        ra("  [OK] F29 price model: da nap san vao bo nho (warm-up).")
+    except Exception as e:
+        ra(f"  [!] F29 price model khong warm-up duoc: {type(e).__name__}: {e}")
 
     try:
         from app.core.f29_scheduler import start_scheduler
@@ -193,7 +208,6 @@ def read_ready():
 TRANG_THAI_F = gan_analytics(app)
 
 # Include routes
-app.include_router(anomaly_router, prefix=f"{settings.API_V1_STR}/anomaly", tags=["Anomaly Detection"])
 app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", tags=["CCCD OCR & Verification"])
 app.include_router(smart_suggestion_router)
 

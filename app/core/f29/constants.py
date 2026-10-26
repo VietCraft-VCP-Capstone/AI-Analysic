@@ -1,35 +1,8 @@
-MODEL_VERSION = "health-1.0"
-
-WEIGHTS = {
-    "conversion": 0.30,
-    "rating": 0.25,
-    "content": 0.20,
-    "inventory": 0.15,
-    "freshness": 0.10,
-}
-
-MIN_IMAGES = 5
-MIN_DESCRIPTION_LENGTH = 150
-MIN_TAGS_APPROVED = 3
+MODEL_VERSION = "health-2.2"
 
 MIN_TITLE_LENGTH = 20
 MAX_TITLE_LENGTH = 120
 
-K_BAYESIAN_SHRINKAGE = 50
-
-FRESHNESS_FULL_SCORE_DAYS = 90
-FRESHNESS_ZERO_SCORE_DAYS = 365
-
-CONVERSION_WINDOW_DAYS = 30
-MIN_VIEWS_CONVERSION = 100
-MIN_CONVERSION_PEERS = 5
-CR_INDEX_CAP = 2.0
-
-LOW_TRAFFIC_MIN_AGE_DAYS = 14
-LOW_CONVERSION_SCORE = 40.0
-
 MIN_CATEGORY_SAMPLE = 8
 
-MIN_STOCK_RATIO_PCT = 80.0
-
-EFFORT = {"images": 1, "description": 2, "tags": 1, "stock": 3}
+EFFORT = {"image": 1, "tags": 1, "material": 1, "description": 2, "price": 2, "review": 3}

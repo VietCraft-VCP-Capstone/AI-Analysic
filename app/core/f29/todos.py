@@ -1,74 +1,34 @@
-from datetime import datetime, timezone
+import threading
+import time
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from app.api.v1._live import LOC_SP_THAT
-from app.core.f29.constants import (
-    EFFORT,
-    LOW_CONVERSION_SCORE,
-    LOW_TRAFFIC_MIN_AGE_DAYS,
-    MIN_CATEGORY_SAMPLE,
-    MIN_DESCRIPTION_LENGTH,
-    MIN_IMAGES,
-    MIN_STOCK_RATIO_PCT,
-    MIN_TAGS_APPROVED,
-)
-from app.core.f29.scoring import (
-    category_key,
-    content_axis_score,
-    content_component_scores,
-    count_approved_tags,
-    count_pending_tags,
-    median_or,
-    to_float,
-    total_score,
-)
+from app.core.f29.constants import EFFORT, MIN_CATEGORY_SAMPLE
+from app.core.f29.factors import desc_words
+from app.core.f29.scoring import count_approved_tags, to_float
+
+PRICE_SOURCE = {"category": "trong cùng danh mục", "group": "trong cùng nhóm hàng", "tiki": "trên Tiki",
+                "model": "cho sản phẩm tương tự"}
+PEER_STATS_TTL = 900
+_peer_stats_cache: dict = {}
+_peer_stats_lock = threading.Lock()
 
 
-def build_sales_warnings(product: Dict[str, Any], detail: Dict[str, Any], conversion: Optional[float],
-                         now: datetime) -> List[Dict[str, Any]]:
-    ra: List[Dict[str, Any]] = []
-    tao = product.get("created_at")
-    if isinstance(tao, datetime) and tao.tzinfo is None:
-        tao = tao.replace(tzinfo=timezone.utc)
-    xem, gio, don = detail.get("views_30d", 0), detail.get("carts_30d", 0), detail.get("orders_30d", 0)
-    can = detail.get("min_views", 0)
+def clear_peer_stats_cache() -> None:
+    with _peer_stats_lock:
+        _peer_stats_cache.clear()
 
-    if isinstance(tao, datetime) and (now - tao).days >= LOW_TRAFFIC_MIN_AGE_DAYS and xem < can:
-        ra.append({
-            "type": "warning",
-            "field": "title",
-            "message": (f"30 ngày qua chỉ có {xem} lượt xem, ít người tìm thấy sản phẩm. Nên đưa từ khoá khách "
-                        "hay tìm vào tên, đặt ảnh rõ nhất lên đầu và gắn đủ tag đúng sản phẩm."),
-            "current_value": xem,
-            "target": can,
-            "impact": 0,
-        })
 
-    if conversion is not None and conversion <= LOW_CONVERSION_SCORE and xem:
-        v2c, c2o = gio / xem, (don / gio if gio else None)
-        if c2o is None or v2c < c2o / 4:
-            field, message = "variants.retail_price", (
-                f"Nhiều người xem nhưng chỉ {v2c * 100:.1f}% thêm vào giỏ, tỉ lệ mua thấp hơn mức chung. "
-                "Nên xem lại giá, ảnh đầu tiên và mô tả kích thước, chất liệu.")
-        else:
-            field, message = "shipping", (
-                f"Khách thêm giỏ nhưng chỉ {c2o * 100:.1f}% đặt mua, tỉ lệ mua thấp hơn mức chung. "
-                "Nên kiểm tra phí vận chuyển, thời gian giao và tồn kho từng phân loại.")
-        ra.append({
-            "type": "warning",
-            "field": field,
-            "message": message,
-            "current_value": round((detail.get("conversion_rate") or 0) * 100, 2),
-            "target": round((detail.get("baseline_rate") or 0) * 100, 2),
-            "impact": 0,
-        })
-    return ra
+def _vnd(amount: float) -> str:
+    return f"{amount:,.0f}".replace(",", ".") + "đ"
 
 
 def build_warnings(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     warnings: List[Dict[str, Any]] = []
 
-    if len(product.get("images") or []) == 0:
+    imgs = product.get("images")
+    n_imgs = len(imgs) if isinstance(imgs, list) else (1 if isinstance(imgs, str) and imgs.strip() else 0)
+    if n_imgs == 0:
         warnings.append({
             "type": "warning",
             "field": "images",
@@ -86,7 +46,7 @@ def build_warnings(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> L
                 "type": "warning",
                 "field": "variants.retail_price",
                 "message": (
-                    f"Giá bán ({retail:,.0f}đ) thấp hơn giá vốn ({cost:,.0f}đ) ở ít nhất "
+                    f"Giá bán ({_vnd(retail)}) thấp hơn giá vốn ({_vnd(cost)}) ở ít nhất "
                     "một biến thể — đang bán lỗ."
                 ),
                 "current_value": retail,
@@ -107,7 +67,6 @@ def build_warnings(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> L
             "impact": 0,
         })
 
-
     return warnings
 
 
@@ -117,100 +76,95 @@ def tag_message(n_approved: int, n_pending: int, target: int) -> str:
 
 
 def content_peer_stats(live_db, cat_key: Optional[Any], pending_tag_ids: FrozenSet = frozenset()) -> Tuple[List[int], List[int], List[int], bool]:
+    now = time.monotonic()
+    cache_key = str(cat_key)
+    with _peer_stats_lock:
+        hit = _peer_stats_cache.get(cache_key)
+        if hit and now - hit["at"] < PEER_STATS_TTL:
+            return hit["value"]
+
     products_coll = live_db["products"]
     fields = {"images": 1, "description": 1, "tags": 1, "tag_ids": 1}
 
     peers: List[Dict[str, Any]] = []
     used_category = False
     if cat_key is not None:
-        peers = list(products_coll.find({**LOC_SP_THAT, "category_ids.0": cat_key}, fields))
+        peers = list(products_coll.find({**LOC_SP_THAT, "categories.0": cat_key}, fields))
+        if not peers:
+            peers = list(products_coll.find({**LOC_SP_THAT, "category_ids.0": cat_key}, fields))
         if len(peers) >= MIN_CATEGORY_SAMPLE:
             used_category = True
 
     if not used_category:
         peers = list(products_coll.find(LOC_SP_THAT, fields))
 
-    n_images = [len(p.get("images") or []) for p in peers]
-    desc_lens = [len((p.get("description") or "")) for p in peers]
+    def _count_img(p):
+        raw = p.get("images")
+        if isinstance(raw, list):
+            return len(raw)
+        if isinstance(raw, str) and raw.strip():
+            return 1
+        return 0
+
+    def _desc_len(p):
+        return desc_words(p.get("description"))
+
+    n_images = [_count_img(p) for p in peers]
+    desc_lens = [_desc_len(p) for p in peers]
     n_tags = [count_approved_tags(p, pending_tag_ids) for p in peers]
-    return n_images, desc_lens, n_tags, used_category
+    res = (n_images, desc_lens, n_tags, used_category)
+    with _peer_stats_lock:
+        _peer_stats_cache[cache_key] = {"value": res, "at": now}
+    return res
 
 
-def build_todos(
-    live_db,
-    product: Dict[str, Any],
-    axes: Dict[str, Optional[float]],
-    n_images: int,
-    desc_len: int,
-    n_tags: int,
-    inventory_ratio_pct: Optional[float],
-    pending_tag_ids: FrozenSet = frozenset(),
-) -> List[Dict[str, Any]]:
-    current_total = total_score(axes)
-    if current_total is None:
-        return []
+def _popular(row: Dict[str, Any]) -> str:
+    s = row.get("suggestion")
+    return f" · Tham khảo giá sản phẩm tương tự: {_vnd(s['low'])}–{_vnd(s['high'])}" if s else ""
 
-    img_peers, desc_peers, tag_peers, _ = content_peer_stats(live_db, category_key(product), pending_tag_ids)
 
-    moc_anh = max(int(round(median_or(img_peers, MIN_IMAGES))), MIN_IMAGES)
-    moc_mo_ta = max(int(round(median_or(desc_peers, MIN_DESCRIPTION_LENGTH))), MIN_DESCRIPTION_LENGTH)
-    moc_tag = max(int(round(median_or(tag_peers, MIN_TAGS_APPROVED))), MIN_TAGS_APPROVED)
+def _message(row: Dict[str, Any]) -> str:
+    key, value, target = row["key"], row["value"], row["target"]
+    if key == "image":
+        return f"Thêm {int(target - value)} ảnh (đang có {value}/{int(target)})"
+    if key == "description":
+        return f"Viết thêm {int(target - value)} từ ({value}/{int(target)})"
+    if key == "tags":
+        return tag_message(value, row["pending"], int(target))
+    if key == "material":
+        return "Ghi rõ chất liệu (ví dụ: cotton, len, gốm…) vào ô Chất liệu"
+    if key == "review":
+        if not value:
+            return f"Chưa có đánh giá nào, mời khách đã mua để lại đánh giá (tối đa +{int(row['weight'])} điểm)"
+        return f"Tỉ lệ đánh giá tốt {round(row['n_good'] / value * 100)}%, tiếp tục chăm sóc khách để giữ đánh giá tốt"
+    if not value:
+        return "Chưa có giá bán cho biến thể nào" + _popular(row)
+    ref = row["reference"]
+    if value < ref["price"]:
+        pct = round((1 - value / ref["price"]) * 100)
+        return f"Giá thấp hơn mức giữa {pct}%, có thể đang bán rẻ quá" + _popular(row)
+    return (f"Giá cao hơn {round((value / ref['price'] - 1) * 100)}% so với mức giữa "
+            f"{PRICE_SOURCE[ref['source']]} ({_vnd(ref['price'])})") + _popular(row)
 
-    candidates: List[Dict[str, Any]] = []
 
-    def _gain_from_content_override(**overrides) -> float:
-        vals = {"n_images": n_images, "desc_len": desc_len, "n_tags": n_tags}
-        vals.update(overrides)
-        comps = content_component_scores(vals["n_images"], vals["desc_len"], vals["n_tags"])
-        new_content = round(content_axis_score(comps), 1)
-        new_total = total_score({**axes, "content": new_content})
-        if new_total is None:
-            return 0.0
-        return round(max(0.0, new_total - current_total), 1)
+def _impact(row: Dict[str, Any]) -> float:
+    key = row.get("key")
+    if key == "review":
+        val = row.get("value") or 0
+        n_good = row.get("n_good", 0)
+        p0 = row.get("p0")
+        m = row.get("m")
+        if p0 is not None and m is not None:
+            new_sub = (n_good + 1 + m * p0) / (val + 1 + m) * 100.0
+            new_points = round(row["weight"] * new_sub / 100.0, 1)
+            return round(new_points - row["points"], 1)
+    return round(row["weight"] - row["points"], 1)
 
-    if n_images < moc_anh:
-        gain = _gain_from_content_override(n_images=moc_anh)
-        if gain > 0:
-            candidates.append({
-                "type": "todo", "field": "images",
-                "message": f"Thêm {moc_anh - n_images} ảnh (đang có {n_images})",
-                "current_value": n_images, "target": moc_anh,
-                "impact": gain, "_effort": EFFORT["images"],
-            })
 
-    if desc_len < moc_mo_ta:
-        gain = _gain_from_content_override(desc_len=moc_mo_ta)
-        if gain > 0:
-            candidates.append({
-                "type": "todo", "field": "description",
-                "message": f"Viết mô tả dài hơn ({desc_len}/{moc_mo_ta} ký tự)",
-                "current_value": desc_len, "target": moc_mo_ta,
-                "impact": gain, "_effort": EFFORT["description"],
-            })
-
-    if n_tags < moc_tag:
-        gain = _gain_from_content_override(n_tags=moc_tag)
-        if gain > 0:
-            candidates.append({
-                "type": "todo", "field": "tags",
-                "message": tag_message(n_tags, count_pending_tags(product, pending_tag_ids), moc_tag),
-                "current_value": n_tags, "target": moc_tag,
-                "impact": gain, "_effort": EFFORT["tags"],
-            })
-
-    if inventory_ratio_pct is not None and inventory_ratio_pct < MIN_STOCK_RATIO_PCT:
-        new_inventory = round(min(100.0, MIN_STOCK_RATIO_PCT), 1)
-        new_total = total_score({**axes, "inventory": new_inventory})
-        gain = round(max(0.0, (new_total - current_total) if new_total is not None else 0.0), 1)
-        if gain > 0:
-            candidates.append({
-                "type": "todo", "field": "stock_quantity",
-                "message": f"Nhập thêm hàng: {inventory_ratio_pct:.0f}% phân loại còn hàng",
-                "current_value": round(inventory_ratio_pct, 1), "target": MIN_STOCK_RATIO_PCT,
-                "impact": gain, "_effort": EFFORT["stock"],
-            })
-
-    candidates.sort(key=lambda c: c["impact"] / c["_effort"], reverse=True)
-    for c in candidates:
-        c.pop("_effort", None)
-    return candidates
+def build_todos(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    todos = [{
+        "type": "todo", "code": r["key"], "field": r["key"], "message": _message(r),
+        "current_value": r["value"], "target": r["target"], "impact": _impact(r),
+    } for r in rows if r["sub_score"] < 100 and _impact(r) > 0]
+    todos.sort(key=lambda t: (-t["impact"], EFFORT[t["code"]]))
+    return todos

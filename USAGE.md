@@ -391,3 +391,17 @@ run dự án
 ```
 .venv/bin/python -m uvicorn app.main:app --port 8000 --reload
 ```
+---
+
+## 10. Listing Intelligence khi deploy
+
+| Việc | Cách chạy | Ghi chú |
+|---|---|---|
+| Model ONNX SigLIP2 (394 MB) | `python -m scripts.li.fetch_models` | Ghim revision HF và sha256, tải vào file `.part` rồi mới đổi tên. Dockerfile đã chạy lệnh này lúc build, `LI_MODEL_DIR=/opt/vietcraft-li/siglip2-base-patch16-224`. Thiếu model thì banner khởi động báo `[!!] Listing Intel` và mọi response có `meta.degraded`. |
+| Ghi điểm và embedding | tự động | `store.py` chỉ ghi vào Mongo local (127.0.0.1). Với Atlas, mọi lần ghi bị bỏ qua và log `refusing write`; trang danh sách vẫn hiện điểm vừa tính trong request (tối đa 20 sản phẩm mỗi lượt), nhưng mỗi lượt xem phải tính lại. Index tạo ở luồng nền, mỗi tiến trình một lần, lỗi index không chặn ghi. |
+| Dữ liệu trend | tự động | Đọc `trend_interest` (weekly) từ `MONGODB_URI` của app, hoặc `LI_TREND_MONGO_URI` nếu đặt. Tên DB lấy từ `LI_TREND_DB` (mặc định `data-collection`). Không có dữ liệu thì đọc `vc-data` (máy dev), rồi tới `model/reference/trend_weekly.json`. Kết quả, kể cả rỗng, được cache 1 giờ. |
+| Snapshot trend | `python -m scripts.li.trend_snapshot` | Ghi lại `trend_weekly.json` từ Mongo đang cấu hình. Chạy trên máy dev (Mongo local) để lấy đúng dữ liệu lúc train. |
+| Job tuần `li_weekly_trends` | thứ Hai 03:00 | Cần `trendspy`. Chỉ ghi Mongo local. Google thường trả 429 cho IP server (lần chạy thật gần nhất lưu 0 dòng). Nguồn trend thật cho Atlas là GitHub Action `.github/workflows/collect.yml` (2 lần/ngày, dữ liệu daily, danh sách từ khoá khác). Cần thêm 15 từ khoá LI và bước weekly vào Action đó. |
+| So với listing cùng nhóm | tự động | Lấy tối đa 300 sản phẩm cập nhật gần nhất mỗi nhóm. Chỉ số của từng peer được cache trong tiến trình 15 phút, theo `(product_id, updated_at, ngày)`. |
+
+Chạy một worker uvicorn và một replica (scheduler chạy trong tiến trình), RAM tối thiểu 3 GB.

@@ -1,0 +1,44 @@
+{
+ "n_val": 507,
+ "configs": 241,
+ "model": {
+  "cols": "all",
+  "params": {
+   "max_depth": 4,
+   "min_samples_leaf": 40,
+   "l2_regularization": 1.0,
+   "max_iter": 10
+  },
+  "auc": 0.593,
+  "ci95": [
+   0.541,
+   0.661
+  ],
+  "shifts": {
+   "JPEG q70": 0.0,
+   "sáng +10%": 0.0,
+   "tối -10%": 0.0
+  },
+  "max_shift": 0.0,
+  "p90_shift": 33.75,
+  "n_distinct": 226
+ },
+ "formula": {
+  "name": "c8_rel_sharp_flags_0.05",
+  "median_shift": {
+   "JPEG q70": 2.75,
+   "sáng +10%": 4.66,
+   "tối -10%": 1.19
+  },
+  "p90_shift": {
+   "JPEG q70": 9.9,
+   "sáng +10%": 13.26,
+   "tối -10%": 5.75
+  },
+  "auc": 0.489,
+  "ci95": [
+   0.381,
+   0.578
+  ]
+ }
+}
