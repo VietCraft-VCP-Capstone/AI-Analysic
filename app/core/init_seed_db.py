@@ -50,9 +50,13 @@ def ensure_model_indexes(db) -> dict:
 
     # 4. anomaly_event — Cảnh báo bất thường
     c_ano = db["anomaly_event"]
-    c_ano.create_index([("entity_type", ASCENDING), ("entity_id", ASCENDING), ("event_date", ASCENDING)])
+    c_ano.create_index([("entity_type", ASCENDING), ("entity_id", ASCENDING), ("metric", ASCENDING), ("event_date", ASCENDING)])
     c_ano.create_index([("severity", ASCENDING)])
     created["anomaly_event"] = [idx["name"] for idx in c_ano.list_indexes()]
+
+    c_run = db["anomaly_run"]
+    c_run.create_index([("entity_type", ASCENDING), ("entity_id", ASCENDING), ("run_date", ASCENDING)])
+    created["anomaly_run"] = [idx["name"] for idx in c_run.list_indexes()]
 
     # 5. niche_score — Điểm cơ hội ngách theo ngày
     c_niche = db["niche_score"]
