@@ -70,3 +70,5 @@ data/seed_out/*
 
 !qc/.gitkeep
 vc-data/
+*.onnx
+*.part

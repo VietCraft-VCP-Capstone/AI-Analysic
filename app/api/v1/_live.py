@@ -7,6 +7,8 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from pymongo.read_preferences import ReadPreference
+
 from app.api.v1._mart import client_dung_chung
 from app.config import settings
 
@@ -14,13 +16,14 @@ _OBJECT_ID = re.compile(r"^[0-9a-fA-F]{24}$")
 
 
 def la_shop_live(shop_id: str) -> bool:
-    """Mã shop của sàn thật là ObjectId 24 ký tự hex; mã dữ liệu mồi là `shp_00017`."""
     return bool(_OBJECT_ID.match(shop_id or ""))
 
 
 def db_live():
-    """Handle tới database sàn thật. Chỉ ĐỌC — module phân tích không ghi vào sàn."""
-    return client_dung_chung()[settings.MONGO_DB_LIVE]
+    client = client_dung_chung()
+    if hasattr(client, "get_database"):
+        return client.get_database(settings.MONGO_DB_LIVE, read_preference=ReadPreference.SECONDARY_PREFERRED)
+    return client[settings.MONGO_DB_LIVE]
 
 
 TU_KHOA_VI: List[tuple] = [

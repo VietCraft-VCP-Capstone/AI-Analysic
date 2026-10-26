@@ -9,8 +9,9 @@ from PIL import Image
 from tokenizers import Tokenizer
 
 MODEL_ID = "onnx-community/siglip2-base-patch16-224-ONNX"
+_LOCAL_DIR = Path(__file__).resolve().parents[4] / "ai-data-train-prod" / "models" / "siglip2-base-patch16-224"
 MODEL_DIR = Path(
-    os.environ.get("LI_MODEL_DIR", "~/.cache/vietcraft-li/siglip2-base-patch16-224")
+    os.environ.get("LI_MODEL_DIR") or (_LOCAL_DIR if _LOCAL_DIR.exists() else "~/.cache/vietcraft-li/siglip2-base-patch16-224")
 ).expanduser()
 FILES = ("onnx/vision_model_int8.onnx", "onnx/text_model_int8.onnx", "tokenizer.json")
 IMAGE_SIZE = 224
