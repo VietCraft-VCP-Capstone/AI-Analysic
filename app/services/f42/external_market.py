@@ -10,7 +10,6 @@ import pandas as pd
 
 from app.services.f42.vi_text import clean_tokens, normalize_nfc, strip_accents
 
-# Đường dẫn đến bộ dữ liệu data-li Tiki & thư mục Model
 TIKI_CLEAN_DIR = Path(__file__).resolve().parents[4] / "data-li" / "data-li" / "clean"
 TIKI23_PATH = TIKI_CLEAN_DIR / "tiki23.parquet"
 TIKI26_PATH = TIKI_CLEAN_DIR / "tiki26.parquet"
@@ -20,7 +19,6 @@ CAT_MODEL_PATH = MODEL_DIR / "category_classifier.joblib"
 PRICE_MODEL_PATH = MODEL_DIR / "pricing_quantile_model.joblib"
 LIFT_JSON_PATH = MODEL_DIR / "top_selling_lift.json"
 
-# Ánh xạ tên danh mục tiếng Việt sang nhóm dữ liệu Tiki
 GROUP_KEYWORDS: Dict[str, List[str]] = {
     "bags": ["túi", "balo", "ví", "bóp", "cặp", "tote", "bag", "leather"],
     "shoes": ["giày", "dép", "guốc", "sandal", "sneaker", "ủng"],
@@ -32,16 +30,10 @@ GROUP_KEYWORDS: Dict[str, List[str]] = {
 
 
 class ExternalMarketProvider:
-    """
-    Cung cấp dữ liệu thị trường bên ngoài và các mô hình Machine Learning
-    (Category Classifier & Quantile Regressors) huấn luyện trên 45.000 sản phẩm TMĐT.
-    """
-
     _cached_prices_by_group: Dict[str, List[float]] = {}
     _cached_top_titles_by_group: Dict[str, List[str]] = {}
     _is_loaded: bool = False
 
-    # ML Artifacts
     _cat_artifact: Optional[Dict[str, Any]] = None
     _price_artifact: Optional[Dict[str, Any]] = None
     _lift_dict: Optional[Dict[str, List[Dict[str, Any]]]] = None
@@ -55,7 +47,6 @@ class ExternalMarketProvider:
         cls._cached_top_titles_by_group = {g: [] for g in GROUP_KEYWORDS}
 
         try:
-            # 1. Nạp tiki23 (accessories, bags, shoes)
             if TIKI23_PATH.exists():
                 df23 = pd.read_parquet(TIKI23_PATH, columns=["group", "price", "title", "top25", "split"])
                 df23_train = df23[df23["split"] == "train"] if "split" in df23.columns else df23
@@ -70,7 +61,6 @@ class ExternalMarketProvider:
                             top_df["title"].dropna().astype(str).tolist()[:100]
                         )
 
-            # 2. Nạp tiki26 (fashion, sport, home)
             if TIKI26_PATH.exists():
                 df26 = pd.read_parquet(TIKI26_PATH, columns=["group", "price", "title", "top25", "split"])
                 df26_train = df26[df26["split"] == "train"] if "split" in df26.columns else df26
@@ -85,7 +75,6 @@ class ExternalMarketProvider:
                             top_df["title"].dropna().astype(str).tolist()[:100]
                         )
 
-            # 3. Nạp ML models nếu tồn tại
             if CAT_MODEL_PATH.exists():
                 cls._cat_artifact = joblib.load(CAT_MODEL_PATH)
 
@@ -102,10 +91,8 @@ class ExternalMarketProvider:
 
     @classmethod
     def match_group(cls, category_name: str, title: str = "") -> str:
-        """Nhận diện nhóm ngành hàng kết hợp ML Category Classifier + Quy tắc từ khóa."""
         cls._load_data_if_needed()
 
-        # Thử bằng ML Classifier trước nếu có title
         if title and cls._cat_artifact:
             try:
                 vec = cls._cat_artifact["vectorizer"]
@@ -123,7 +110,6 @@ class ExternalMarketProvider:
             except Exception:
                 pass
 
-        # Fallback bằng từ khóa
         text = f"{normalize_nfc(category_name)} {normalize_nfc(title)}".lower()
         text_no_acc = strip_accents(text)
 

@@ -1,7 +1,3 @@
-"""Tầng 2: Generative AI (LLM Service) kết hợp với số liệu khai phá Data-Mining
-để đào sâu các sản phẩm cụ thể đang hot và có tiềm năng bùng nổ theo mùa vụ.
-"""
-
 import json
 import os
 import re

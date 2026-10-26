@@ -13,6 +13,7 @@ from app.services.f42.schemas import (
     MetaResult,
     PricingResult,
     SuggestionRequest,
+    TagItem,
     TagResult,
     UnifiedSuggestionResponse,
 )
@@ -23,7 +24,7 @@ _cached_categories: List[Dict[str, Any]] = []
 _cached_categories_ts: float = 0.0
 _cached_banned: Set[str] = set()
 _cached_banned_ts: float = 0.0
-CACHE_TTL = 300.0  # 5 phút
+CACHE_TTL = 300.0
 
 
 def _get_mongo_client() -> Optional[MongoClient]:
@@ -90,7 +91,6 @@ def _build_full_seo_description_text(
     desc_obj: Any,
     tags: List[str]
 ) -> str:
-    """Ghép bài mô tả chuẩn giao diện cho Frontend."""
     intro = getattr(desc_obj, "intro", "") or ""
     specs = getattr(desc_obj, "specs", []) or []
     highlights = getattr(desc_obj, "highlights", []) or []
@@ -124,8 +124,6 @@ def _build_full_seo_description_text(
 
 
 class F42Orchestrator:
-    """Bộ điều phối toàn diện cho F42 Smart Suggestion."""
-
     @classmethod
     def execute(
         cls,
@@ -135,7 +133,6 @@ class F42Orchestrator:
         start_time = time.time()
         db_live = None if db_live_override is False else (db_live_override if db_live_override is not None else _get_live_db())
 
-        # 1. Khám phá categories & banned
         categories = _get_categories(db_live)
         banned = _get_banned_keywords(db_live)
 
@@ -147,7 +144,6 @@ class F42Orchestrator:
         target_margin = req.get_target_margin()
         extra_attr = req.extra_attributes or ""
 
-        # --- KHỐI 1: CONTEXT RESOLVER ---
         try:
             resolver = ContextResolver(categories)
             category_res = resolver.resolve(
@@ -166,12 +162,10 @@ class F42Orchestrator:
         effective_category_id = category_res.resolved_id
         effective_category_name = category_res.resolved_name or "Mỹ nghệ & Đời sống"
 
-        # --- KHỐI 2: PRICING ENGINE ---
         try:
             prices = fetch_prices_from_db(effective_category_id, db_live)
             is_external_benchmark = False
 
-            # Nếu sàn nội bộ chưa có đủ mẫu (dưới 5 sản phẩm), tham chiếu Model ML & dataset TMĐT Tiki
             if len(prices) < 5:
                 ml_band = ExternalMarketProvider.predict_price_band_ml(title_input, effective_category_name) if title_input else None
                 if ml_band and ml_band[1] > 0:
@@ -233,10 +227,8 @@ class F42Orchestrator:
                 explanation="Chưa thể phân tích mức giá thị trường lúc này."
             )
 
-        # --- KHỐI 3: TAG MINING ---
         try:
             tag_res = fetch_tags_from_db(effective_category_id, db_live, banned)
-            # Bổ sung các cụm từ có Lift cao từ nhóm bán chạy Top 25
             lifted_items = ExternalMarketProvider.get_lifted_keywords(effective_category_name, title_input, top_n=6)
             for item in lifted_items:
                 kw = item.get("keyword", "")
@@ -245,12 +237,10 @@ class F42Orchestrator:
         except Exception:
             tag_res = TagResult(items=[], basis="popular_tags_internal", sample_size=0)
 
-        # Danh sách tag string
         suggested_tags_list = [item.tag for item in tag_res.items]
         if material_in and material_in.lower() not in [t.lower() for t in suggested_tags_list]:
             suggested_tags_list.insert(0, material_in)
 
-        # --- KHỐI 4: CONTENT GENERATION (TITLES & DESCRIPTION) ---
         try:
             content_res = generate_content(
                 user_title=title_input or effective_category_name,
@@ -271,7 +261,6 @@ class F42Orchestrator:
         elapsed_ms = int((time.time() - start_time) * 1000)
         meta_res = MetaResult(elapsed_ms=elapsed_ms, cache_hit=False)
 
-        # --- CHUYỂN ĐỔI BACKWARD-COMPATIBILITY CHO FRONTEND ---
         suggested_titles_list = [t.text for t in content_res.titles]
         if not suggested_titles_list:
             suggested_titles_list = [title_input or effective_category_name]
@@ -290,7 +279,7 @@ class F42Orchestrator:
                 "high": pricing_res.suggested_range.high,
                 "premium": int(pricing_res.suggested_range.high * 1.25)
             },
-            "market_sample_count": pricing_res.sample_size_after_outlier_filter,  # SỐ MẪU THẬT, KHÔNG HASH
+            "market_sample_count": pricing_res.sample_size_after_outlier_filter,
             "summary": pricing_res.explanation
         }
 
@@ -319,7 +308,6 @@ class F42Orchestrator:
             tags=tag_res,
             content=content_res,
             meta=meta_res,
-            # Backward compatibility fields
             category_detected=effective_category_name,
             product_type=req.product_type or "general",
             noun=title_input.split()[0].title() if title_input else "Sản Phẩm",

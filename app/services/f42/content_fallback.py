@@ -26,26 +26,16 @@ def generate_fallback_content(
     extra_attributes: str = "",
     tier_label: str = ""
 ) -> ContentResult:
-    """
-    Tạo nội dung niêm yết fallback an toàn khi LLM offline hoặc không có API key.
-    Tuyệt đối không bịa đặt chứng nhận hay chất liệu ngoài input.
-    """
     clean_title = normalize_nfc(user_title or "Sản phẩm thủ công mỹ nghệ").strip()
     clean_cat = normalize_nfc(category_name or "Mỹ nghệ & Đời sống").strip()
     clean_mat = normalize_nfc(material).strip()
     
-    # 1. Sinh đúng 5 tiêu đề theo 5 angle khác nhau
     mat_part = f" chất liệu {clean_mat}" if clean_mat else ""
     
-    # Góc 1: Balanced (Cân bằng, chuẩn SEO sàn)
     t1 = f"{clean_title}{mat_part} - Phong cách trang nhã hiện đại"
-    # Góc 2: Material (Nhấn vào chất liệu hoặc tính tự nhiên)
     t2 = f"{clean_title} ({clean_mat}) - Gia công tỉ mỉ độ bền cao" if clean_mat else f"{clean_title} - Kiểu dáng thanh lịch tiện dụng hàng ngày"
-    # Góc 3: Function (Công năng đời sống)
     t3 = f"{clean_title} cao cấp - Phù hợp sử dụng tiện ích và trang trí"
-    # Góc 4: Style (Phong cách thẩm mỹ)
     t4 = f"{clean_title} tinh tế - Điểm nhấn ấn tượng cho không gian sống"
-    # Góc 5: Technical (Quy cách tiêu chuẩn)
     t5 = f"{clean_title} tiêu chuẩn - Hoàn thiện sắc nét xuất xứ rõ ràng"
 
     titles = [
@@ -56,7 +46,6 @@ def generate_fallback_content(
         TitleItem(text=_pad_title_to_length(t5), angle="technical"),
     ]
 
-    # 2. Sinh mô tả
     intro = (
         f"{clean_title} thuộc nhóm {clean_cat}, được thiết kế với phong cách hài hòa, "
         f"chú trọng vào tính ứng dụng và độ hoàn thiện chi tiết. "

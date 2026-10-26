@@ -39,7 +39,6 @@ class SuggestionRequest(BaseModel):
         return float(val) if val is not None and val > 0 else None
 
 
-# New Refactored Response Models
 class CategoryCandidate(BaseModel):
     id: str
     name: str
@@ -49,7 +48,7 @@ class CategoryCandidate(BaseModel):
 class CategoryResult(BaseModel):
     resolved_id: Optional[str] = None
     resolved_name: Optional[str] = None
-    source: str = "none"  # "seller_selected" | "tfidf" | "none"
+    source: str = "none"
     candidates: List[CategoryCandidate] = Field(default_factory=list)
     needs_confirmation: bool = False
 
@@ -60,7 +59,7 @@ class PriceRange(BaseModel):
 
 
 class PricingResult(BaseModel):
-    mode: str = "none"  # "market" | "market_low_confidence" | "cost_plus" | "none"
+    mode: str = "none"
     insufficient_market_data: bool = False
     sample_size: int = 0
     sample_size_after_outlier_filter: int = 0
@@ -69,7 +68,7 @@ class PricingResult(BaseModel):
     p75: int = 0
     suggested_price: int = 0
     suggested_range: PriceRange = Field(default_factory=PriceRange)
-    confidence: str = "none"  # "high" | "medium" | "low" | "none"
+    confidence: str = "none"
     warnings: List[str] = Field(default_factory=list)
     explanation: str = ""
 
@@ -88,7 +87,7 @@ class TagResult(BaseModel):
 
 class TitleItem(BaseModel):
     text: str
-    angle: str = "balanced"  # "material" | "function" | "style" | "technical" | "balanced"
+    angle: str = "balanced"
 
 
 class SpecItem(BaseModel):
@@ -104,7 +103,7 @@ class DescriptionStructure(BaseModel):
 
 
 class ContentResult(BaseModel):
-    source: str = "fallback"  # "llm" | "fallback"
+    source: str = "fallback"
     titles: List[TitleItem] = Field(default_factory=list)
     description: DescriptionStructure = Field(default_factory=DescriptionStructure)
     claims_used: List[str] = Field(default_factory=list)
@@ -119,14 +118,12 @@ class MetaResult(BaseModel):
 
 
 class UnifiedSuggestionResponse(BaseModel):
-    # New standardized structure
     category: CategoryResult = Field(default_factory=CategoryResult)
     pricing: PricingResult = Field(default_factory=PricingResult)
     tags: TagResult = Field(default_factory=TagResult)
     content: ContentResult = Field(default_factory=ContentResult)
     meta: MetaResult = Field(default_factory=MetaResult)
 
-    # Backward compatibility with existing Frontend
     category_detected: str = ""
     product_type: str = "general"
     noun: str = "Sản Phẩm"

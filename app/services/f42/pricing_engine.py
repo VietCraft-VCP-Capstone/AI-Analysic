@@ -63,17 +63,12 @@ def compute_pricing(
     target_margin: Optional[float] = None,
     cfg=config
 ) -> PricingResult:
-    """
-    Hàm thuần toán học tính toán khoảng giá đề xuất minh bạch, có kiểm tra giá vốn.
-    Không phụ thuộc vào I/O cơ sở dữ liệu.
-    """
     clean_prices = [float(p) for p in prices if p is not None and isinstance(p, (int, float)) and p > 0]
     sample_size = len(clean_prices)
     filtered_prices = filter_outliers(clean_prices, method=cfg.OUTLIER_METHOD, k=cfg.IQR_K)
     sample_filtered = len(filtered_prices)
     warnings: List[str] = []
 
-    # Nhánh 1: Đủ dữ liệu thị trường
     if sample_filtered >= cfg.MIN_SAMPLE_LOW:
         sorted_p = sorted(filtered_prices)
         raw_p25 = _percentile(sorted_p, 0.25)
@@ -94,7 +89,6 @@ def compute_pricing(
         suggested_low = p25
         suggested_high = p75
 
-        # Ràng buộc giá vốn
         if blank_cost > 0:
             if p50 < blank_cost * cfg.COST_FLOOR_RATIO:
                 warnings.append("Giá trung bình thị trường đang thấp hơn hoặc sát giá vốn của bạn.")
@@ -129,7 +123,6 @@ def compute_pricing(
             explanation=explanation,
         )
 
-    # Nhánh 2: Thiếu dữ liệu thị trường nhưng có giá vốn (Cost-Plus)
     elif blank_cost > 0:
         margin = target_margin if target_margin is not None else cfg.DEFAULT_TARGET_MARGIN
         suggested_price = round_price(blank_cost * (1 + margin), cfg.PRICE_ROUND_STEP)
@@ -158,7 +151,6 @@ def compute_pricing(
             explanation=explanation,
         )
 
-    # Nhánh 3: Thiếu cả thị trường lẫn giá vốn
     else:
         warnings.append("Không đủ dữ liệu đối thủ và chưa có giá vốn.")
         explanation = "Chưa đủ dữ liệu đối thủ cùng ngành trên sàn và bạn chưa nhập giá vốn để gợi ý mức giá."
@@ -179,15 +171,11 @@ def compute_pricing(
 
 
 def fetch_prices_from_db(category_id: Optional[str], db_live: Any) -> List[float]:
-    """
-    Truy vấn giá sản phẩm cùng category_id từ collection products và product_variants.
-    """
     if not category_id or db_live is None:
         return []
 
     prices: List[float] = []
     try:
-        # 1. Tìm trong products theo ObjectId hoặc string
         match_query: Dict[str, Any] = {"is_hidden": {"$ne": True}}
         if ObjectId.is_valid(category_id):
             oid = ObjectId(category_id)
@@ -209,7 +197,6 @@ def fetch_prices_from_db(category_id: Optional[str], db_live: Any) -> List[float
 
         prod_ids = [p["_id"] for p in prods]
 
-        # 2. Lấy giá từ biến thể hoạt động
         if prod_ids:
             variants = list(db_live["product_variants"].find(
                 {"product_id": {"$in": prod_ids}, "is_active": {"$ne": False}},
@@ -220,7 +207,6 @@ def fetch_prices_from_db(category_id: Optional[str], db_live: Any) -> List[float
                 if rp and float(rp) > 0:
                     prices.append(float(rp))
 
-        # 3. Nếu biến thể ít, bổ sung min_price / max_price từ chính sản phẩm
         if len(prices) < 5:
             for p in prods:
                 min_p = p.get("min_price")

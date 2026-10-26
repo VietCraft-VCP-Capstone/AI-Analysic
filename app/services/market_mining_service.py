@@ -1,7 +1,3 @@
-"""Tầng 1: Module Data-Mining khai phá số liệu thị trường thực tế từ MongoDB
-để xác định nhóm hàng hot, khoảng giá thật và sản phẩm tiêu biểu theo ngành hàng.
-"""
-
 import re
 from typing import Any, Dict, List, Optional
 from app.api.v1._mart import db

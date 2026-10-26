@@ -1,16 +1,3 @@
-"""
-cccd_ocr_service.py — Trích xuất thông tin CCCD bằng EasyOCR + Xác thực ảnh giả/thật.
-
-Tính năng:
-  1. OCR quét ảnh CCCD mặt trước → trả về: họ tên, số CCCD, ngày sinh, giới tính,
-     quốc tịch, quê quán, nơi thường trú, ngày hết hạn.
-  2. OCR quét ảnh CCCD mặt sau → trả về: ngày cấp, đặc điểm nhận dạng, nơi cấp.
-  3. Xác thực ảnh CCCD: kiểm tra chất lượng ảnh, bố cục CCCD, format số CCCD,
-     phát hiện ảnh chụp lại từ màn hình (moiré), cross-validation.
-
-Kiến trúc: Được gọi qua FastAPI endpoint, KHÔNG truy vấn DB.
-"""
-
 import re
 import io
 import logging
@@ -51,14 +38,6 @@ VALID_PROVINCE_CODES = {
 # 1. XÁC THỰC SỐ CCCD
 # ═══════════════════════════════════════════════════════════════════════════
 def validate_cccd_number(raw: str) -> Dict[str, Any]:
-    """Kiểm tra cấu trúc số CCCD 12 số theo quy chuẩn Bộ Công an.
-
-    Cấu trúc: PPP G YY XXXXXX
-      - PPP: mã tỉnh/thành phố (3 số)
-      - G: giới tính + thế kỷ (0/1 = nam/nữ sinh 1900-1999, 2/3 = nam/nữ sinh 2000+)
-      - YY: 2 số cuối năm sinh
-      - XXXXXX: số ngẫu nhiên (6 số)
-    """
     digits = re.sub(r"\D", "", raw)
     result: Dict[str, Any] = {
         "is_valid": False,
@@ -100,7 +79,6 @@ def validate_cccd_number(raw: str) -> Dict[str, Any]:
 # 2. KIỂM TRA CHẤT LƯỢNG ẢNH
 # ═══════════════════════════════════════════════════════════════════════════
 def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
-    """Kiểm tra chất lượng ảnh CCCD: độ phân giải, mờ (blur), độ sáng."""
     import cv2
 
     h, w = img_array.shape[:2]
@@ -140,12 +118,7 @@ def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
 
     return result
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 3. PHÁT HIỆN CHỤP LẠI TỪ MÀN HÌNH (Moiré Pattern)
-# ═══════════════════════════════════════════════════════════════════════════
 def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
-    """Phát hiện ảnh chụp lại từ màn hình bằng phân tích tần số FFT."""
     import cv2
 
     gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY) if len(img_array.shape) == 3 else img_array
@@ -158,15 +131,11 @@ def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
     h, w = magnitude.shape
     cy, cx = h // 2, w // 2
 
-    # Loại bỏ thành phần tần số thấp (DC component)
     mask_radius = min(h, w) // 10
     magnitude[cy - mask_radius:cy + mask_radius, cx - mask_radius:cx + mask_radius] = 0
 
-    # Đánh giá năng lượng ở tần số cao — ảnh chụp màn hình có năng lượng cao ở tần số cao
     high_freq_energy = float(np.mean(magnitude))
 
-    # Ngưỡng: ảnh chụp màn hình thường có high_freq_energy > 5.5
-    # (Nâng từ 4.5 lên 5.5 để giảm false positive với ảnh chụp thật từ điện thoại)
     is_screen_capture = high_freq_energy > 5.5
 
     return {
@@ -176,11 +145,6 @@ def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
         if is_screen_capture else None,
     }
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 4. PHÁT HIỆN BỐ CỤC CCCD (Layout Detection)
-# ═══════════════════════════════════════════════════════════════════════════
-# Các cụm từ khóa đặc trưng trên CCCD mặt trước và mặt sau
 FRONT_KEYWORDS = [
     "CĂN CƯỚC", "CÔNG DÂN", "CITIZEN", "CARD",
     "Họ và tên", "Full name", "Sinh", "Date of birth",
@@ -235,23 +199,11 @@ def detect_cccd_layout(ocr_texts: List[str], side: str = "front") -> Dict[str, A
         if not is_valid else None,
     }
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 5. TRÍCH XUẤT THÔNG TIN TỪ OCR (Parsing)
-# ═══════════════════════════════════════════════════════════════════════════
-
 def _clean_text(text: str) -> str:
-    """Loại bỏ ký tự thừa, chuẩn hóa khoảng trắng."""
     return re.sub(r"\s+", " ", text).strip()
 
 
 def _find_value_after(texts: List[str], label_patterns: List[str]) -> Optional[str]:
-    """Tìm giá trị xuất hiện sau label (trên cùng dòng hoặc dòng kế tiếp).
-
-    EasyOCR thường tách label và value thành 2 text block riêng biệt,
-    ví dụ: ["Họ và tên / Full name", "NGUYỄN VĂN A"].
-    Hàm này thử cả 2 cách: cùng dòng và dòng kế tiếp.
-    """
     # ── Cách 1: Tìm theo dòng riêng lẻ (ưu tiên vì chính xác hơn) ──
     for i, text in enumerate(texts):
         for pattern in label_patterns:
@@ -327,11 +279,6 @@ def _extract_date(texts: List[str], label_patterns: List[str]) -> Optional[str]:
 
 
 def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
-    """Trích xuất thông tin từ kết quả OCR mặt trước CCCD.
-
-    Trả về: số CCCD, họ tên, ngày sinh, giới tính, quốc tịch, quê quán,
-    nơi thường trú, ngày hết hạn.
-    """
     texts = [item[1] for item in ocr_results]
     full_text = "\n".join(texts)
 
@@ -508,26 +455,12 @@ def parse_back_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
     return result
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# 6. HÀM CHÍNH: SCAN + XÁC THỰC CCCD
-# ═══════════════════════════════════════════════════════════════════════════
-
 def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
-    """Quét ảnh CCCD: OCR + kiểm tra chất lượng + xác thực giả/thật.
 
-    Args:
-        image_bytes: Nội dung file ảnh (bytes)
-        side: "front" = mặt trước, "back" = mặt sau
-
-    Returns:
-        Dict chứa: ocr_data, verification (kết quả xác thực)
-    """
     import io
     import cv2
     from PIL import Image
 
-    # ── Bảo vệ chống Decompression Bomb TRƯỚC KHI giải mã ảnh ──────────────
-    # Giới hạn tối đa 16 Megapixels; Pillow sẽ chỉ đọc header mà chưa giải mã toàn bộ pixel vào RAM
     Image.MAX_IMAGE_PIXELS = 16_000_000
     try:
         with Image.open(io.BytesIO(image_bytes)) as pil_img:

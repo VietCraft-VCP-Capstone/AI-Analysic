@@ -16,17 +16,12 @@ def compute_tag_scores(
     min_freq: int = config.TAG_MIN_FREQ,
     stoplist: List[str] = config.TAG_GENERIC_STOPLIST
 ) -> TagResult:
-    """
-    Thuần hàm tính điểm TF-IDF cho các tag trong danh mục so với toàn sàn.
-    """
     if not category_tags:
         return TagResult(items=[], basis="popular_tags_internal", sample_size=0)
 
-    # 1. Chuẩn hóa stoplist & banned
     stop_set = {strip_accents(s) for s in stoplist}
     banned_set = {strip_accents(b) for b in banned_keywords}
 
-    # 2. Đếm tần suất trong category
     clean_cat_tags: List[str] = []
     for t in category_tags:
         norm = normalize_nfc(t).strip()
@@ -41,8 +36,6 @@ def compute_tag_scores(
     if not cat_counts:
         return TagResult(items=[], basis="popular_tags_internal", sample_size=0)
 
-    # 3. Tính IDF từ toàn sàn
-    # Số tài liệu toàn sàn có chứa tag
     global_counts = Counter([normalize_nfc(t).strip() for t in global_tags if t])
     total_docs = max(len(global_tags), len(category_tags), 1)
 
@@ -53,11 +46,9 @@ def compute_tag_scores(
 
         g_freq = global_counts.get(tag, freq)
         idf = math.log((total_docs + 1.0) / (g_freq + 1.0)) + 1.0
-        # Score = TF * IDF
         score = round(freq * idf, 2)
         scored_items.append(TagItem(tag=tag, score=score, freq=freq))
 
-    # Sắp xếp theo score giảm dần, sau đó theo freq
     scored_items.sort(key=lambda x: (x.score, x.freq), reverse=True)
 
     return TagResult(
@@ -72,12 +63,10 @@ def fetch_tags_from_db(
     db_live: Any,
     banned_keywords: Set[str]
 ) -> TagResult:
-    """Truy vấn thẻ tags thực tế từ MongoDB products và tags."""
     if db_live is None:
         return TagResult(items=[], basis="popular_tags_internal", sample_size=0)
 
     try:
-        # Lấy tag của các sản phẩm cùng category
         cat_filter: Dict[str, Any] = {"is_hidden": {"$ne": True}}
         if category_id:
             if ObjectId.is_valid(category_id):
@@ -95,7 +84,6 @@ def fetch_tags_from_db(
                     if isinstance(t, str):
                         cat_tags.append(t)
 
-        # Lấy một mẫu tags toàn sàn để làm baseline IDF
         global_prods = list(db_live["products"].find({"is_hidden": {"$ne": True}}, {"tags": 1}).limit(300))
         global_tags: List[str] = []
         for p in global_prods:
@@ -105,7 +93,6 @@ def fetch_tags_from_db(
                     if isinstance(t, str):
                         global_tags.append(t)
 
-        # Bổ sung từ collection tags nếu có ít tag
         if len(cat_tags) < 5:
             all_db_tags = list(db_live["tags"].find({"status": {"$ne": "INACTIVE"}}, {"name": 1}).limit(20))
             for t in all_db_tags:

@@ -21,7 +21,6 @@ from app.services.f42.schemas import (
 )
 from app.services.f42.vi_text import normalize_nfc
 
-# In-memory Cache: key -> (timestamp, ContentResult)
 _CACHE: Dict[str, Tuple[float, ContentResult]] = {}
 
 
@@ -35,7 +34,6 @@ def _get_api_key() -> Optional[str]:
 
 
 def _call_gemini_api(prompt_text: str, api_key: str, timeout_s: int = config.LLM_TIMEOUT_S) -> Optional[str]:
-    """Gọi Gemini HTTP API tương tự LLMSeasonalService."""
     headers = {"Content-Type": "application/json"}
     payload = {
         "contents": [{"parts": [{"text": prompt_text}]}],
@@ -80,18 +78,10 @@ def generate_content(
     extra_attributes: str = "",
     banned_keywords: Optional[Set[str]] = None
 ) -> ContentResult:
-    """
-    Sinh tiêu đề SEO và bài mô tả sản phẩm hoàn chỉnh:
-    1. Kiểm tra cache
-    2. Thử gọi LLM nếu có Gemini API Key
-    3. Hậu kiểm bằng post-validator
-    4. Fallback an toàn nếu offline/lỗi/không có key
-    """
     banned = banned_keywords or set()
     cache_key = _get_cache_key(user_title, category_name, material, blank_cost)
     now = time.time()
 
-    # 1. Kiểm tra Cache
     if cache_key in _CACHE:
         ts, cached_res = _CACHE[cache_key]
         if now - ts < config.CACHE_TTL_S:
@@ -106,7 +96,6 @@ Thuộc tính khác: {extra_attributes if extra_attributes else 'Không có'}"""
 
     api_key = _get_api_key()
 
-    # 2. Thử gọi LLM nếu có key
     if api_key and len(api_key) > 5:
         user_prompt = USER_PROMPT_TEMPLATE.format(
             category_name=category_name,
@@ -126,7 +115,6 @@ Thuộc tính khác: {extra_attributes if extra_attributes else 'Không có'}"""
                     banned
                 )
                 if valid_data and not errors:
-                    # Chuyển đổi thành ContentResult
                     titles = [
                         TitleItem(text=t.get("text", ""), angle=t.get("angle", "balanced"))
                         for t in valid_data.get("titles", [])
@@ -154,10 +142,8 @@ Thuộc tính khác: {extra_attributes if extra_attributes else 'Không có'}"""
                     _CACHE[cache_key] = (now, res)
                     return res
                 else:
-                    # Retry với phản hồi lỗi
                     user_prompt += f"\nLần trước output vi phạm các lỗi: {', '.join(errors[:3])}. Hãy sửa chữa triệt để."
 
-    # 3. Fallback khi không có API key hoặc LLM thất bại
     fallback_res = generate_fallback_content(
         user_title=user_title,
         category_name=category_name,

@@ -22,12 +22,6 @@ def _cosine_similarity(vec1: Dict[str, float], vec2: Dict[str, float]) -> float:
 
 
 class ContextResolver:
-    """
-    Bộ giải quyết danh mục thông minh:
-    1. Ưu tiên danh mục seller chọn (không đoán lại).
-    2. Nếu chưa chọn: so khớp TF-IDF vector giữa tiêu đề người dùng và toàn bộ danh mục trong DB.
-    """
-
     def __init__(self, categories: List[Dict[str, Any]]):
         self.categories = categories
         self.cat_map: Dict[str, Dict[str, Any]] = {}
@@ -36,7 +30,6 @@ class ContextResolver:
         self._build_index()
 
     def _build_index(self):
-        """Xây dựng TF-IDF vector cho từng danh mục trong DB."""
         docs: Dict[str, List[str]] = {}
         df: Counter = Counter()
 
@@ -47,7 +40,6 @@ class ContextResolver:
                 continue
             self.cat_map[cid] = cat
 
-            # Sinh token và n-gram cho danh mục (cả có dấu và không dấu)
             tokens_vi = clean_tokens(name)
             tokens_no_acc = clean_tokens(strip_accents(name))
             cat_tokens = get_ngrams(tokens_vi) + get_ngrams(tokens_no_acc)
@@ -59,7 +51,6 @@ class ContextResolver:
         n_docs = max(len(docs), 1)
         self.idf = {w: math.log((n_docs + 1.0) / (cnt + 1.0)) + 1.0 for w, cnt in df.items()}
 
-        # Tính vector TF-IDF cho từng danh mục
         for cid, t_list in docs.items():
             tf = Counter(t_list)
             total = len(t_list) or 1
@@ -74,8 +65,6 @@ class ContextResolver:
         category_name: Optional[str] = None,
         user_title: str = ""
     ) -> CategoryResult:
-        """Giải quyết danh mục theo hợp đồng nghiệp vụ."""
-        # ƯU TIÊN 1: Seller đã chọn category_id
         if category_id and category_id in self.cat_map:
             cat = self.cat_map[category_id]
             name = cat.get("name") or category_name or ""
@@ -87,7 +76,6 @@ class ContextResolver:
                 needs_confirmation=False
             )
 
-        # Nếu gửi category_id nhưng không khớp ID trong map, thử so khớp theo ObjectId
         if category_id:
             for cid, cat in self.cat_map.items():
                 if cid.lower() == category_id.lower():
@@ -99,7 +87,6 @@ class ContextResolver:
                         needs_confirmation=False
                     )
 
-        # Nếu seller truyền category_name trực tiếp
         if category_name:
             for cid, cat in self.cat_map.items():
                 if strip_accents(cat.get("name", "")) == strip_accents(category_name):
@@ -111,7 +98,6 @@ class ContextResolver:
                         needs_confirmation=False
                     )
 
-        # ƯU TIÊN 2: Thiếu category -> TF-IDF từ tiêu đề
         clean_title = normalize_nfc(user_title).strip()
         if not clean_title or not self.doc_vectors:
             return CategoryResult(
@@ -122,7 +108,6 @@ class ContextResolver:
                 needs_confirmation=True
             )
 
-        # Dựng vector cho query tiêu đề
         q_tokens = get_ngrams(clean_tokens(clean_title)) + get_ngrams(clean_tokens(strip_accents(clean_title)))
         if not q_tokens:
             return CategoryResult(
