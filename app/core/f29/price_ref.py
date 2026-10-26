@@ -16,22 +16,32 @@ _index_cache: dict = {}
 _index_lock = threading.Lock()
 
 
+def kind(product: dict) -> str:
+    return "pod" if product.get("product_type") == "POD_TEMPLATE" else "std"
+
+
 def product_price(variants: list[dict]) -> float | None:
     prices = [to_float(v.get("retail_price")) for v in variants if v.get("is_active") is not False]
     prices = sorted(p for p in prices if p and p > 0)
     return prices[len(prices) // 2] if prices else None
 
 
-def _category(product: dict) -> str | None:
+def category_of(product: dict) -> str | None:
     cats = product.get("categories")
-    if not isinstance(cats, list) or not cats:
-        return None
-    c = cats[0]
-    return c if isinstance(c, str) and c.strip() else None
+    if isinstance(cats, list) and cats:
+        c = cats[0]
+        if isinstance(c, str) and c.strip():
+            return c.strip()
+    cat_ids = product.get("category_ids")
+    if isinstance(cat_ids, list) and cat_ids:
+        c = cat_ids[0]
+        if c is not None and str(c).strip():
+            return str(c).strip()
+    return None
 
 
 def product_group(product: dict) -> str | None:
-    return group_of(_category(product))
+    return group_of(category_of(product))
 
 
 def clear_index_cache() -> None:
@@ -40,7 +50,9 @@ def clear_index_cache() -> None:
 
 
 def _build_index(live_db) -> dict:
-    products = list(live_db["products"].find(LOC_SP_THAT, {"categories": 1, "shop_id": 1}))
+    products = list(live_db["products"].find(
+        LOC_SP_THAT, {"categories": 1, "category_ids": 1, "shop_id": 1, "product_type": 1}
+    ))
     variants: dict = {}
     for v in live_db["product_variants"].find(
             {"is_active": {"$ne": False}}, {"product_id": 1, "retail_price": 1, "is_active": 1}):
@@ -54,13 +66,14 @@ def _build_index(live_db) -> dict:
         price = product_price(variants.get(p["_id"], []))
         if price is None:
             continue
-        cat = _category(p)
+        cat = category_of(p)
         sid = p.get("shop_id")
+        k = kind(p)
         if cat:
-            by_cat.setdefault(cat, []).append((p["_id"], sid, price))
+            by_cat.setdefault((k, cat), []).append((p["_id"], sid, price))
         group = group_of(cat)
         if group:
-            by_group.setdefault(group, []).append((p["_id"], sid, price))
+            by_group.setdefault((k, group), []).append((p["_id"], sid, price))
     return {"cat": by_cat, "group": by_group}
 
 
@@ -83,13 +96,14 @@ class PriceRef:
         self.params = params
 
     def reference(self, product: dict) -> dict:
-        cat = _category(product)
+        k = kind(product)
+        cat = category_of(product)
         group = group_of(cat)
         me = product.get("_id")
         my_shop = product.get("shop_id")
         index = platform_index(self.live_db)
-        pools = (("category", index["cat"].get(cat, []) if cat else []),
-                 ("group", index["group"].get(group, []) if group else []))
+        pools = (("category", index["cat"].get((k, cat), []) if cat else []),
+                 ("group", index["group"].get((k, group), []) if group else []))
         for source, pool in pools:
             prices = [
                 item[2]
@@ -97,8 +111,8 @@ class PriceRef:
                 if item[0] != me and (not my_shop or item[1] != my_shop)
             ]
             if len(prices) >= self.params["min_peers"]:
-                return {"price": median(prices), "source": source, "n": len(prices)}
+                return {"price": median(prices), "source": source, "n": len(prices), "kind": k}
         model = suggest(product.get("title") or "", group)
         if model is not None:
-            return {"price": model["mid"], "source": "model", "n": 0}
-        return {"price": TIKI_MEDIAN[group or "all"], "source": "tiki", "n": 0}
+            return {"price": model["mid"], "source": "model", "n": 0, "kind": k}
+        return {"price": TIKI_MEDIAN[group or "all"], "source": "tiki", "n": 0, "kind": k}

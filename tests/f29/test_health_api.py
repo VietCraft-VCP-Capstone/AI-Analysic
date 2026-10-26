@@ -11,7 +11,7 @@ SAMPLE = {
     "product_id": PRODUCT_ID, "score": 71.5, "status": "needs_improvement",
     "axes": {"image": 83.3, "description": 45.6, "tags": 100.0, "review": 0.0, "price": 42.1},
     "axes_missing": ["review"], "breakdown": [], "todos": [], "warnings": [],
-    "model_version": "health-2.1", "basis": {},
+    "model_version": "health-2.2", "basis": {},
 }
 
 
@@ -35,7 +35,7 @@ def test_returns_health_score(monkeypatch, client):
     body = _get(client).json()
     assert body["data"]["score"] == 71.5
     assert body["meta"]["status"] == "ok"
-    assert body["meta"]["model_version"] == "health-2.1"
+    assert body["meta"]["model_version"] == "health-2.2"
 
 
 def test_no_weights_returns_insufficient(monkeypatch, client):

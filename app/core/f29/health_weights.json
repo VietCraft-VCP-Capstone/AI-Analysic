@@ -1,5 +1,5 @@
 {
-  "model_version": "health-2.1",
+  "model_version": "health-2.2",
   "weights": {
     "image": 24,
     "description": 11,
@@ -11,6 +11,7 @@
   "targets": {
     "image": 6,
     "description": 570,
+    "description_words": 115,
     "tags": 3
   },
   "review": {
@@ -18,8 +19,10 @@
     "p0": 0.7922
   },
   "price": {
-    "full_at": 1.0,
+    "low_full": 0.7,
+    "full_at": 1.3,
     "zero_at": 2.0,
+    "floor_at": 0.4,
     "min_peers": 8
   },
   "coefficients": {

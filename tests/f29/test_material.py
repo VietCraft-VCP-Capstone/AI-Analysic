@@ -16,6 +16,12 @@ def test_has_material_from_title():
     assert has_material({"materials": [], "title": "Khăn len đan tay"}) is True
 
 
+def test_has_material_negation():
+    assert has_material({"description": "không phải cotton"}) is False
+    assert has_material({"description": "áo 100% cotton"}) is True
+    assert has_material({"materials": ["len"]}) is True
+
+
 def test_no_material():
     assert has_material({"title": "Mũ bucket thêu logo", "materials": None}) is False
 

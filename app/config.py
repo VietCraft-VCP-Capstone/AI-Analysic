@@ -9,7 +9,7 @@ try:
     if app_env_path.exists():
         load_dotenv(dotenv_path=app_env_path, override=False)
     if root_env_path.exists():
-        load_dotenv(dotenv_path=root_env_path, override=False)
+        load_dotenv(dotenv_path=root_env_path, override=True)
 except ImportError:
     pass
 

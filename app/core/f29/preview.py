@@ -10,8 +10,7 @@ INPUT_OF = {"image": "n_images", "description": "description_length", "tags": "n
 
 def _sub(key: str, used: Dict[str, Any], rows: Dict[str, Any], pc: Dict[str, Any]) -> float:
     if key == "price":
-        return factors.price_score(used["price"], rows["price"]["reference"]["price"],
-                                   float(pc["full_at"]), float(pc["zero_at"]))
+        return factors.price_score(used["price"], rows["price"]["reference"]["price"], pc)
     return factors.ratio_score(float(used[INPUT_OF[key]]), float(rows[key]["target"]))
 
 

@@ -11,7 +11,7 @@ FIXTURE = Path(__file__).parent / "weights_fixture.json"
 def test_load_reads_fixture():
     data = weights.load(FIXTURE)
     assert sum(data["weights"].values()) == 100
-    assert data["model_version"] == "health-2.1"
+    assert data["model_version"] == "health-2.2"
 
 
 def test_load_missing_raises(tmp_path):

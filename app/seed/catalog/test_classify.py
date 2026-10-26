@@ -1,5 +1,26 @@
+import sys
+from pathlib import Path
+_DIR = Path(__file__).resolve().parent
+if str(_DIR) not in sys.path:
+    sys.path.insert(0, str(_DIR))
+
 import unittest
-from collect_printify import classify
+from build_catalog import classify_blueprint, PRODUCT_TYPES
+
+def classify(title: str) -> str:
+    pt = classify_blueprint(title)
+    if not pt:
+        return "unknown"
+    group = PRODUCT_TYPES.get(pt, {}).get("group")
+    if group == "drinkware":
+        return "mug"
+    if group in ("apparel_top", "apparel_bottom"):
+        return "tshirt"
+    if group == "bag":
+        return "tote"
+    if group == "wallart":
+        return "poster"
+    return group or "unknown"
 
 class TestClassifyPrintify(unittest.TestCase):
     def test_stainless_steel_not_tshirt(self):

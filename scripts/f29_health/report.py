@@ -70,7 +70,7 @@ def _limits(p):
 
 
 def _text(p):
-    head = ["# Điểm sức khoẻ sản phẩm v2 (health-2.1)",
+    head = ["# Điểm sức khoẻ sản phẩm v2 (health-2.2)",
             f"Tạo lúc {p['created_at']}. Trọng số lưu ở `app/core/f29/health_weights.json`."]
     parts = [head, tldr_lines(p), roles_lines(p), _method(p), markets_lines(p), ranges_lines(p),
              tiki_lines(p), material_lines(p), price_lines(), _limits(p)]

@@ -47,9 +47,10 @@ class TestPreviewHealth:
 
     def test_preview_equals_recalculated_score(self):
         calc = _calc()
-        result = preview_health(calc, PRODUCT_ID, {"n_images": 6, "description_length": 570, "n_tags": 3})
+        desc = " ".join(f"word{i}" for i in range(115))
+        result = preview_health(calc, PRODUCT_ID, {"n_images": 6, "description_length": 115, "n_tags": 3})
         product = with_id(base_product(shop_id=ObjectId(SHOP_ID),
-                                       images=[f"i{i}.jpg" for i in range(6)], description="x" * 570))
+                                       images=[f"i{i}.jpg" for i in range(6)], description=desc))
         assert result["score"] == _calc(product=product).calculate(PRODUCT_ID)["score"]
 
     def test_seed_or_missing_listing_returns_none(self):
@@ -95,7 +96,7 @@ class TestPreviewEndpoint:
         assert r.status_code == 200
         body = r.json()
         assert body["meta"]["status"] == "ok"
-        assert body["meta"]["model_version"] == "health-2.1"
+        assert body["meta"]["model_version"] == "health-2.2"
         assert body["data"]["delta_vs_current"] > 0
 
     def test_other_shop_forbidden(self, client):

@@ -3,7 +3,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 
-from app.core.f29.scoring import content_axis_score, content_component_scores
 from app.core.listing_intel.normalize import tokens
 from scripts.li.fit import fit, predict
 
@@ -16,10 +15,18 @@ def random_score(train, ev):
     return np.random.default_rng(42).random(len(ev))
 
 
+def _content_v1(img, desc):
+    comps = []
+    if img is not None:
+        comps.append(min(100.0, max(0.0, img / 5.0 * 100.0)))
+    if desc is not None:
+        comps.append(min(100.0, max(0.0, desc / 150.0 * 100.0)))
+    return (sum(comps) / len(comps)) if comps else 0.0
+
+
 def health_v1(train, ev):
     parts = zip(ev["n_images"].to_numpy(float), ev["desc_len"].to_numpy(float))
-    scores = [content_axis_score(content_component_scores(_val(i), _val(d), None)) for i, d in parts]
-    return np.array([0.0 if s is None else s for s in scores], dtype=float)
+    return np.array([_content_v1(_val(i), _val(d)) for i, d in parts], dtype=float)
 
 
 def single(col):

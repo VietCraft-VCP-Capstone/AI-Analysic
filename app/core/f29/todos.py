@@ -4,6 +4,7 @@ from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from app.api.v1._live import LOC_SP_THAT
 from app.core.f29.constants import EFFORT, MIN_CATEGORY_SAMPLE
+from app.core.f29.factors import desc_words
 from app.core.f29.scoring import count_approved_tags, to_float
 
 PRICE_SOURCE = {"category": "trong cùng danh mục", "group": "trong cùng nhóm hàng", "tiki": "trên Tiki",
@@ -88,7 +89,9 @@ def content_peer_stats(live_db, cat_key: Optional[Any], pending_tag_ids: FrozenS
     peers: List[Dict[str, Any]] = []
     used_category = False
     if cat_key is not None:
-        peers = list(products_coll.find({**LOC_SP_THAT, "category_ids.0": cat_key}, fields))
+        peers = list(products_coll.find({**LOC_SP_THAT, "categories.0": cat_key}, fields))
+        if not peers:
+            peers = list(products_coll.find({**LOC_SP_THAT, "category_ids.0": cat_key}, fields))
         if len(peers) >= MIN_CATEGORY_SAMPLE:
             used_category = True
 
@@ -104,8 +107,7 @@ def content_peer_stats(live_db, cat_key: Optional[Any], pending_tag_ids: FrozenS
         return 0
 
     def _desc_len(p):
-        d = p.get("description")
-        return len(d.strip()) if isinstance(d, str) else 0
+        return desc_words(p.get("description"))
 
     n_images = [_count_img(p) for p in peers]
     desc_lens = [_desc_len(p) for p in peers]
@@ -126,7 +128,7 @@ def _message(row: Dict[str, Any]) -> str:
     if key == "image":
         return f"Thêm {int(target - value)} ảnh (đang có {value}/{int(target)})"
     if key == "description":
-        return f"Viết mô tả dài thêm {int(target - value)} ký tự ({value}/{int(target)})"
+        return f"Viết thêm {int(target - value)} từ ({value}/{int(target)})"
     if key == "tags":
         return tag_message(value, row["pending"], int(target))
     if key == "material":
@@ -138,6 +140,9 @@ def _message(row: Dict[str, Any]) -> str:
     if not value:
         return "Chưa có giá bán cho biến thể nào" + _popular(row)
     ref = row["reference"]
+    if value < ref["price"]:
+        pct = round((1 - value / ref["price"]) * 100)
+        return f"Giá thấp hơn mức giữa {pct}%, có thể đang bán rẻ quá" + _popular(row)
     return (f"Giá cao hơn {round((value / ref['price'] - 1) * 100)}% so với mức giữa "
             f"{PRICE_SOURCE[ref['source']]} ({_vnd(ref['price'])})") + _popular(row)
 

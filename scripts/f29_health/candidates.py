@@ -2,7 +2,6 @@ import numpy as np
 
 from app.core.f29 import factors
 from app.core.f29.constants import MODEL_VERSION
-from app.core.f29.scoring import content_axis_score, content_component_scores
 from scripts.f29_ml import baselines, evaluate, models
 from scripts.f29_health import evidence
 from scripts.f29_ml.evaluate import delta_ci
@@ -43,8 +42,15 @@ def olist(train_sub, train_y, sub, df, weights):
     return out | _single(sub)
 
 
+def _v1_c(n, d):
+    comps = [min(100.0, max(0.0, float(n) / 5.0 * 100.0))] if n is not None and not (isinstance(n, float) and np.isnan(n)) else []
+    if d is not None and not (isinstance(d, float) and np.isnan(d)):
+        comps.append(min(100.0, max(0.0, float(d) / 150.0 * 100.0)))
+    return sum(comps) / len(comps) if comps else 0.0
+
+
 def tiki(train_sub, train_y, sub, df, weights):
-    v1 = [content_axis_score(content_component_scores(n, d, None)) for n, d in zip(df["n_images"], df["desc_len"])]
+    v1 = [_v1_c(n, d) for n, d in zip(df["n_images"], df["desc_len"])]
     out = {
         LEARNED: _linear(sub, weights),
         EQUAL: sub.mean(axis=1).to_numpy(),
