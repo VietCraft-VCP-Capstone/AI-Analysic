@@ -9,11 +9,7 @@ from scripts.li import paths
 from scripts.li.labels import split_by_seller, top25
 from scripts.li.reviews import build_reviews
 
-DL = Path(
-    os.environ.get("LI_DL_DIR")
-    or "/tmp/claude-1000/-home-rio-Documents-CODE-nodejs-vietcraft/"
-    "a6de79fb-f4f8-4967-8a37-cf5641336562/scratchpad/dl"
-)
+DL = Path(os.environ.get("LI_DL_DIR") or paths.raw(""))
 CATEGORY_MAP = Path(__file__).resolve().parents[2] / "app/core/listing_intel/data/category_map.json"
 PREFIX = "vietnamese_tiki_products_"
 SOURCES = {

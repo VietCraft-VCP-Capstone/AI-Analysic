@@ -114,3 +114,33 @@ def health_ml(id: str, shop_id: str = CurrentShop):
                       sample_size=result["peer_group"]["size"],
                       confidence="medium" if result["peer_group"]["type"] == "category" else "low", **meta_args)
     return ok(result, meta)
+
+
+@router.post("/api/analytics/listings/{id}/sync", tags=["F29 · Hạt"])
+def sync_listing_health(id: str, shop_id: str = CurrentShop):
+    meta_args = dict(scope="listing", scope_id=id, database="vietcraft", mode="live")
+    if not la_shop_live(shop_id):
+        return insufficient(NO_SHOP, build_meta(**meta_args))
+
+    _kiem_quyen_listing(id, shop_id)
+
+    try:
+        calc = HealthScoreCalculator()
+        result = calc.calculate(id)
+        if result and "error" not in result:
+            try:
+                calc.save(result)
+            except Exception:
+                pass
+            meta = build_meta(model_version=MODEL_VERSION, collection="products", attributed_to_live_shop=True, **meta_args)
+            return ok({"status": "synced", "product_id": id, "score": result.get("score")}, meta)
+    except Exception as e:
+        print(f"[f29_health sync] {type(e).__name__}: {e}", flush=True)
+        return insufficient("Hệ thống chưa thể cập nhật điểm cho sản phẩm này", build_meta(**meta_args))
+
+    if result is None:
+        not_found("listing")
+    if "error" in result:
+        return insufficient(NO_WEIGHTS, build_meta(**meta_args))
+    return insufficient("Không thể tính điểm sức khỏe", build_meta(**meta_args))
+

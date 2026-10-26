@@ -49,3 +49,16 @@ def test_no_weights_returns_insufficient(monkeypatch, client):
 def test_unknown_listing_404(monkeypatch, client):
     monkeypatch.setattr(HealthScoreCalculator, "calculate", lambda self, pid: None)
     assert _get(client).status_code == 404
+
+
+def test_sync_health_score(monkeypatch, client):
+    monkeypatch.setattr(HealthScoreCalculator, "calculate", lambda self, pid: SAMPLE)
+    saved = []
+    monkeypatch.setattr(HealthScoreCalculator, "save", lambda self, res: saved.append(res))
+    r = client.post(f"/api/analytics/listings/{PRODUCT_ID}/sync", headers={"X-Debug-Shop-Id": SHOP_ID})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["data"]["status"] == "synced"
+    assert body["data"]["score"] == 71.5
+    assert len(saved) == 1
+

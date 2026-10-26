@@ -14,11 +14,42 @@ from app.core.f29.calculator import HealthScoreCalculator
 from app.core.f29.constants import MODEL_VERSION
 
 STATE_COLLECTION = "scheduler_state"
+LOCK_COLLECTION = "scheduler_locks"
 STATE_ID_MINUTE_SCAN = "f29_minute_scan"
 STATE_ID_NIGHTLY = "f29_nightly_rescan"
 
 DEFAULT_LOOKBACK_MINUTES = 24 * 60
 VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+def _acquire_lock(lock_id: str, ttl_seconds: int = 120) -> bool:
+    try:
+        db = db_live()
+        now = datetime.now(timezone.utc)
+        db[LOCK_COLLECTION].update_one(
+            {"_id": lock_id},
+            {"$setOnInsert": {"locked_until": now - timedelta(seconds=1)}},
+            upsert=True,
+        )
+        res = db[LOCK_COLLECTION].update_one(
+            {"_id": lock_id, "locked_until": {"$lt": now}},
+            {"$set": {"locked_until": now + timedelta(seconds=ttl_seconds)}},
+        )
+        return getattr(res, "modified_count", 0) > 0
+    except Exception:
+        return True
+
+
+def _release_lock(lock_id: str) -> None:
+    try:
+        db = db_live()
+        now = datetime.now(timezone.utc)
+        db[LOCK_COLLECTION].update_one(
+            {"_id": lock_id},
+            {"$set": {"locked_until": now - timedelta(seconds=1)}},
+        )
+    except Exception:
+        pass
 
 
 def _get_last_scan_time(job_id: str, default_lookback_minutes: int = DEFAULT_LOOKBACK_MINUTES) -> datetime:
@@ -68,42 +99,48 @@ def _recalculate_and_save(
 
 
 def scan_changed_products() -> int:
-    db = db_live()
-    scan_started_at = datetime.now(timezone.utc)
-    last_scan_time = _get_last_scan_time(STATE_ID_MINUTE_SCAN)
+    if not _acquire_lock("lock_f29_minute_scan", ttl_seconds=180):
+        print("[f29_scheduler] Lock scan_changed dang ban, bo qua luot nay.", flush=True)
+        return 0
+    try:
+        db = db_live()
+        scan_started_at = datetime.now(timezone.utc)
+        last_scan_time = _get_last_scan_time(STATE_ID_MINUTE_SCAN)
 
-    state_doc = db[STATE_COLLECTION].find_one({"_id": STATE_ID_MINUTE_SCAN}) or {}
-    retry_ids = [ObjectId(i) for i in state_doc.get("failed_product_ids", []) if ObjectId.is_valid(i)]
+        state_doc = db[STATE_COLLECTION].find_one({"_id": STATE_ID_MINUTE_SCAN}) or {}
+        retry_ids = [ObjectId(i) for i in state_doc.get("failed_product_ids", []) if ObjectId.is_valid(i)]
 
-    changed_ids = {
-        p["_id"] for p in db["products"].find(
-            {**LOC_SP_THAT, "updated_at": {"$gt": last_scan_time}}, {"_id": 1}
-        )
-    } | set(retry_ids)
-
-    changed_variant_product_ids = list({
-        v["product_id"] for v in db["product_variants"].find(
-            {"updated_at": {"$gt": last_scan_time}}, {"product_id": 1}
-        )
-    })
-    changed_review_product_ids = {
-        r["product_id"] for r in db["reviews"].find(
-            {"updated_at": {"$gt": last_scan_time}}, {"product_id": 1}
-        ) if r.get("product_id")
-    }
-
-    related_ids = list(set(changed_variant_product_ids) | changed_review_product_ids)
-    if related_ids:
-        changed_ids |= {
+        changed_ids = {
             p["_id"] for p in db["products"].find(
-                {**LOC_SP_THAT, "_id": {"$in": related_ids}}, {"_id": 1}
+                {**LOC_SP_THAT, "updated_at": {"$gt": last_scan_time}}, {"_id": 1}
             )
+        } | set(retry_ids)
+
+        changed_variant_product_ids = list({
+            v["product_id"] for v in db["product_variants"].find(
+                {"updated_at": {"$gt": last_scan_time}}, {"product_id": 1}
+            )
+        })
+        changed_review_product_ids = {
+            r["product_id"] for r in db["reviews"].find(
+                {"updated_at": {"$gt": last_scan_time}}, {"product_id": 1}
+            ) if r.get("product_id")
         }
 
-    n_ok, stopped, failed_ids = _recalculate_and_save(changed_ids)
-    if not stopped:
-        _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at, failed_ids)
-    return n_ok
+        related_ids = list(set(changed_variant_product_ids) | changed_review_product_ids)
+        if related_ids:
+            changed_ids |= {
+                p["_id"] for p in db["products"].find(
+                    {**LOC_SP_THAT, "_id": {"$in": related_ids}}, {"_id": 1}
+                )
+            }
+
+        n_ok, stopped, failed_ids = _recalculate_and_save(changed_ids)
+        if not stopped:
+            _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at, failed_ids)
+        return n_ok
+    finally:
+        _release_lock("lock_f29_minute_scan")
 
 
 def needs_full_rescan(db) -> bool:
@@ -112,15 +149,21 @@ def needs_full_rescan(db) -> bool:
 
 
 def nightly_full_rescan() -> int:
-    db = db_live()
-    scan_started_at = datetime.now(timezone.utc)
+    if not _acquire_lock("lock_f29_nightly_rescan", ttl_seconds=600):
+        print("[f29_scheduler] Lock nightly_rescan dang ban, bo qua luot nay.", flush=True)
+        return 0
+    try:
+        db = db_live()
+        scan_started_at = datetime.now(timezone.utc)
 
-    all_ids = [p["_id"] for p in db["products"].find(LOC_SP_THAT, {"_id": 1})]
-    n_ok, stopped, failed_ids = _recalculate_and_save(all_ids) if all_ids else (0, False, [])
-    if not stopped:
-        _set_last_scan_time(STATE_ID_NIGHTLY, scan_started_at)
-        _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at, failed_ids)
-    return n_ok
+        all_ids = [p["_id"] for p in db["products"].find(LOC_SP_THAT, {"_id": 1})]
+        n_ok, stopped, failed_ids = _recalculate_and_save(all_ids) if all_ids else (0, False, [])
+        if not stopped:
+            _set_last_scan_time(STATE_ID_NIGHTLY, scan_started_at)
+            _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at, failed_ids)
+        return n_ok
+    finally:
+        _release_lock("lock_f29_nightly_rescan")
 
 
 _scheduler = None
@@ -140,7 +183,7 @@ def start_scheduler():
     scheduler.add_job(
         scan_changed_products,
         "interval",
-        seconds=60,
+        seconds=300,
         id="f29_scan_changed",
         max_instances=1,
         coalesce=True,
@@ -182,7 +225,28 @@ def stop_scheduler() -> None:
         _scheduler = None
 
 
+def run_daemon() -> None:
+    import signal
+    import time
+    print("Khoi dong F29 Scheduler daemon...", flush=True)
+    sched = start_scheduler()
+    stop_daemon = False
+    def _stop_sig(s, f):
+        nonlocal stop_daemon
+        stop_daemon = True
+    signal.signal(signal.SIGINT, _stop_sig)
+    signal.signal(signal.SIGTERM, _stop_sig)
+    print("F29 Scheduler dang chay. Nhan Ctrl+C de dung.", flush=True)
+    while not stop_daemon:
+        time.sleep(1)
+    stop_scheduler()
+    print("F29 Scheduler da dung an toan.", flush=True)
+
+
 if __name__ == "__main__":
-    print("Quét thay đổi (F29 BR-181)...", flush=True)
-    n = scan_changed_products()
-    print(f"Đã chấm lại {n} sản phẩm thay đổi.", flush=True)
+    if "--daemon" in sys.argv:
+        run_daemon()
+    else:
+        print("Quét thay đổi (F29 BR-181)...", flush=True)
+        n = scan_changed_products()
+        print(f"Đã chấm lại {n} sản phẩm thay đổi.", flush=True)
