@@ -249,12 +249,12 @@ class F42Orchestrator:
         # -------------------------------------------------------------
         internal_market = MarketDataAggregator.fetch_internal_platform_data(
             title=title_input,
-            category_name=category_name_in,
+            category_name=category_name_in or "",
             db_live=db_live
         )
         google_trends = MarketDataAggregator.fetch_google_trending_data(
-            query=title_input or category_name_in,
-            category_name=category_name_in,
+            query=title_input or category_name_in or "",
+            category_name=category_name_in or "",
             db_data=_get_data_db()
         )
 
@@ -262,6 +262,7 @@ class F42Orchestrator:
         # KHỐI 1: KIỂM TRA REAL AI (Google Gemini LLM Trực Tiếp)
         # -------------------------------------------------------------
         ai_data: Optional[Dict[str, Any]] = None
+        detected_brand: Optional[str] = None
         if MarketAIAdvisor.is_gemini_available():
             try:
                 ai_data = MarketAIAdvisor.call_gemini_analysis(
@@ -417,7 +418,7 @@ class F42Orchestrator:
                         explanation=expl,
                         source_label="Phân tích xu hướng thị trường & sàn TMĐT",
                         detected_product=detected_product,
-                        detected_brand=detected_brand if 'detected_brand' in locals() else None,
+                        detected_brand=detected_brand,
                     )
                 else:
                     sem_res = MarketAIAdvisor.semantic_fallback_analysis(
