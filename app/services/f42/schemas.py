@@ -8,6 +8,8 @@ class SuggestionRequest(BaseModel):
     category_name: Optional[str] = None
     categoryName: Optional[str] = None
     title: Optional[str] = None
+    product_title: Optional[str] = None
+    productTitle: Optional[str] = None
     keywords: Optional[str] = None
     material: Optional[str] = None
     blank_cost: Optional[float] = None
@@ -25,7 +27,7 @@ class SuggestionRequest(BaseModel):
         return (self.category_name or self.categoryName or "").strip() or None
 
     def get_title_or_keywords(self) -> str:
-        return (self.title or self.keywords or "").strip()
+        return (self.title or self.product_title or self.productTitle or self.keywords or "").strip()
 
     def get_material(self) -> str:
         return (self.material or "").strip()
@@ -59,25 +61,40 @@ class PriceRange(BaseModel):
     high: int = 0
 
 
+class ComparableItem(BaseModel):
+    title: str
+    price: int
+    similarity: float
+    source: str  # "tiki" | "vietcraft"
+
+
 class PricingResult(BaseModel):
     mode: str = "none"  # "market" | "market_low_confidence" | "cost_plus" | "none"
+    # "comparables" | "category_market" | "cost_plus" | "none"
+    method: str = "none"
     insufficient_market_data: bool = False
     sample_size: int = 0
     sample_size_after_outlier_filter: int = 0
     p25: int = 0
     p50: int = 0
     p75: int = 0
+    p90: int = 0
     suggested_price: int = 0
     suggested_range: PriceRange = Field(default_factory=PriceRange)
     confidence: str = "none"  # "high" | "medium" | "low" | "none"
     warnings: List[str] = Field(default_factory=list)
     explanation: str = ""
+    comparables: List[ComparableItem] = Field(default_factory=list)
+    detected_product: Optional[str] = None
+    detected_brand: Optional[str] = None
+    source_label: Optional[str] = None
 
 
 class TagItem(BaseModel):
     tag: str
     score: float = 0.0
     freq: int = 0
+    source: str = "internal"  # "internal" | "category" | "llm"
 
 
 class TagResult(BaseModel):
@@ -135,3 +152,7 @@ class UnifiedSuggestionResponse(BaseModel):
     trending_keywords: List[Dict[str, Any]] = Field(default_factory=list)
     suggested_tags: List[str] = Field(default_factory=list)
     seo_description: str = ""
+    detected_material: Optional[str] = None
+    detected_product: Optional[str] = None
+    detected_brand: Optional[str] = None
+    ai_engine_status: Dict[str, Any] = Field(default_factory=dict)

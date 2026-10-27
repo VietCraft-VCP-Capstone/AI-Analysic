@@ -29,7 +29,7 @@ def test_loc_don_that_co_seed_ref_va_is_simulated():
 def test_loc_filters_used_in_functions():
     """LOC_SP_THAT và LOC_DON_THAT phải được dùng trong san_pham_live() và gia_cung_danh_muc_live()."""
     source_file = ROOT_DIR / "app" / "api" / "v1" / "_live.py"
-    source_code = source_file.read_text()
+    source_code = source_file.read_text(encoding="utf-8")
 
     # Kiểm tra định nghĩa
     assert "LOC_SP_THAT = {" in source_code, "LOC_SP_THAT chưa được định nghĩa"
@@ -62,7 +62,7 @@ def test_loc_filters_used_in_functions():
 def test_single_location_definition():
     """Bộ lọc phải được định nghĩa ở một chỗ duy nhất trong _live.py."""
     source_file = ROOT_DIR / "app" / "api" / "v1" / "_live.py"
-    source_code = source_file.read_text()
+    source_code = source_file.read_text(encoding="utf-8")
 
     # Kiểm tra chỉ có một định nghĩa LOC_SP_THAT
     count_loc_sp = source_code.count("LOC_SP_THAT = {")
