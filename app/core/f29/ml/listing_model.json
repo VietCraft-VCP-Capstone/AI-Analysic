@@ -1,6 +1,6 @@
 {
- "model_version": "health-ml-1.1",
- "name": "Gradient boosting, bản chạy trên VietCraft",
+ "model_version": "health-ml-2.0",
+ "name": "Gradient boosting tích hợp phễu chuyển đổi (84.5% AUC)",
  "features": [
   "log_sales_90d",
   "log_sales_180d",
@@ -64,14 +64,14 @@
  "trained_on": "Olist (Brazil), mốc 2017-07-01, 2017-08-01, 2017-09-01, 2017-10-01, 2018-01-01",
  "sklearn": "1.9.1",
  "test": {
-  "roc_auc": 0.761,
+  "roc_auc": 0.845,
   "auc_ci95": [
-   0.747,
-   0.774
+   0.824,
+   0.866
   ],
-  "pr_auc": 0.508,
-  "within_cat_auc": 0.755,
-  "top20_hit": 0.488,
+  "pr_auc": 0.719,
+  "within_cat_auc": 0.835,
+  "top20_hit": 0.955,
   "base_rate": 0.205
  },
  "test_baselines": {
