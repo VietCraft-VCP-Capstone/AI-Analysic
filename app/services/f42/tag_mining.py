@@ -67,7 +67,7 @@ def fetch_tags_from_db(
         return TagResult(items=[], basis="popular_tags_internal", sample_size=0)
 
     try:
-        cat_filter: Dict[str, Any] = {"is_hidden": {"$ne": True}}
+        cat_filter: Dict[str, Any] = dict(config.LIVE_PRODUCT_FILTER)
         if category_id:
             if ObjectId.is_valid(category_id):
                 oid = ObjectId(category_id)
@@ -84,7 +84,7 @@ def fetch_tags_from_db(
                     if isinstance(t, str):
                         cat_tags.append(t)
 
-        global_prods = list(db_live["products"].find({"is_hidden": {"$ne": True}}, {"tags": 1}).limit(300))
+        global_prods = list(db_live["products"].find(dict(config.LIVE_PRODUCT_FILTER), {"tags": 1}).limit(300))
         global_tags: List[str] = []
         for p in global_prods:
             tags = p.get("tags") or []

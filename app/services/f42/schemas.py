@@ -14,8 +14,9 @@ class SuggestionRequest(BaseModel):
     material: Optional[str] = None
     blank_cost: Optional[float] = None
     blankCost: Optional[float] = None
-    target_margin: Optional[float] = None
-    targetMargin: Optional[float] = None
+    # Biên lợi nhuận dạng tỉ lệ (0.3 = 30%). Chặn 30 (tưởng là %) → giá gấp 31 lần giá vốn.
+    target_margin: Optional[float] = Field(default=None, ge=0, le=3)
+    targetMargin: Optional[float] = Field(default=None, ge=0, le=3)
     extra_attributes: Optional[str] = None
     product_type: Optional[str] = None
     productType: Optional[str] = None
@@ -64,7 +65,7 @@ class PriceRange(BaseModel):
 class ComparableItem(BaseModel):
     title: str
     price: int
-    similarity: float
+    similarity: Optional[float] = None  # None khi khớp theo từ khóa (không có điểm tương đồng)
     source: str  # "tiki" | "vietcraft"
 
 

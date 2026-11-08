@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Query
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
@@ -39,7 +39,7 @@ def get_smart_suggestion(
     title: Optional[str] = None,
     material: Optional[str] = None,
     blankCost: Optional[float] = None,
-    targetMargin: Optional[float] = None,
+    targetMargin: Optional[float] = Query(default=None, ge=0, le=3),
     shop_id: str = CurrentShop
 ):
     req = SuggestionRequest(

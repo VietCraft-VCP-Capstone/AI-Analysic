@@ -51,8 +51,11 @@ def verify_gateway_secret(
         )
 
 
+# Hàm ĐỒNG BỘ (def, không async): EasyOCR chạy 5–15s trên CPU. FastAPI tự đưa endpoint
+# đồng bộ vào threadpool, nên một lượt quét không còn chặn event loop của cả service AI
+# (F42 smart suggest, analytics... vẫn trả lời bình thường trong lúc quét).
 @router.post("/", dependencies=[Depends(verify_gateway_secret)])
-async def ocr_cccd(
+def ocr_cccd(
     file: UploadFile = File(..., description="Ảnh CCCD (JPG/PNG/WebP, tối đa 10MB)"),
     side: str = Form("front", description="Mặt của CCCD: 'front' hoặc 'back'"),
 ):
@@ -76,7 +79,7 @@ async def ocr_cccd(
     total_read = 0
     chunks = []
     while True:
-        chunk = await file.read(chunk_size)
+        chunk = file.file.read(chunk_size)
         if not chunk:
             break
         total_read += len(chunk)
@@ -102,11 +105,11 @@ async def ocr_cccd(
     try:
         result = scan_cccd(image_bytes, side=side)
     except Exception as e:
-        logger.error(f"OCR CCCD failed: {type(e).__name__}: {e}")
+        # Không log nội dung lỗi chi tiết (có thể chứa dữ liệu CCCD), không trả tên exception cho client
+        logger.error("OCR CCCD failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=500,
-            detail={"error": "ocr_failed",
-                    "message": f"Lỗi xử lý OCR: {type(e).__name__}. Vui lòng thử lại."},
+            detail={"error": "ocr_failed", "message": "Lỗi xử lý OCR. Vui lòng thử lại."},
         )
 
     return result
