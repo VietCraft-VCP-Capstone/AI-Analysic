@@ -18,7 +18,9 @@ def estimate_cold_start_propensity(product_id: str, live_db) -> Optional[Dict[st
 
     quality_res = None
     try:
-        quality_res = live_db["listing_health_scores"].find_one({"product_id": p_oid})
+        quality_res = live_db["listing_health_scores"].find_one(
+            {"product_id": p_oid}, sort=[("date", -1), ("computed_at", -1)]
+        )
     except Exception:
         pass
 

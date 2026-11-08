@@ -135,10 +135,10 @@ class TestCalculateIntegration:
 
 
 class TestSaveIdempotency:
-    def _sample_result(self, score=72.5):
+    def _sample_result(self, score=72.5, date=None):
         return {
             "product_id": PRODUCT_ID,
-            "date": NOW.date().isoformat(),
+            "date": date or NOW.date().isoformat(),
             "score": score,
             "status": "needs_improvement",
             "axes": {"image": 100.0, "description": 100.0, "tags": 100.0, "review": 0.0, "price": 0.0},
@@ -149,6 +149,15 @@ class TestSaveIdempotency:
             "content_hash": "abc123",
             "inputs_hash": "def456",
         }
+
+    def test_save_different_dates_creates_history_documents(self):
+        calc = make_calculator()
+        calc.save(self._sample_result(date="2026-10-15", score=50.0))
+        calc.save(self._sample_result(date="2026-10-16", score=75.0))
+        docs = calc.live_db["listing_health_scores"].docs
+        assert len(docs) == 2
+        scores = {d["score"] for d in docs}
+        assert scores == {50.0, 75.0}
 
     def test_save_twice_same_result_creates_one_document(self):
         calc = make_calculator()
