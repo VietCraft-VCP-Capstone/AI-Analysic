@@ -2,7 +2,7 @@ import math
 import re
 import time
 import unicodedata
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -18,6 +18,7 @@ NGUONG_GIONG = 0.15         # liệt kê đối thủ: bắt được 79% hàng 
 NGUONG_GAN_NHU_Y_HET = 0.35 # từ mức này 73% đúng là cùng sản phẩm (ngưỡng F1 cao nhất)
 NGUONG_KHONG_LY_DO = 0.35   # không có từ hiếm nào chung thì phải giống tới mức này mới tính
 SO_DOI_THU = 5
+SO_SHOP_GOI_Y = 10           # đủ dư để FE bỏ shop đã theo dõi mà vẫn còn 3 shop
 K_GIA = 8
 TOI_THIEU_GIA = 3
 TRON_GIA = 10                # càng nhiều đối thủ trực tiếp thì càng tin giá của họ hơn mặt bằng cùng loại
@@ -225,8 +226,22 @@ def shop_canh_tranh_nhat(may: MayGiong, cua_toi: Sequence[str], k: int = 3) -> L
             g["_sp"].add(pid)
             g["best_similarity"] = max(g["best_similarity"], round(s, 3))
     for g in gom.values():
-        g["overlap"] = len(g.pop("_sp"))
+        g["my_product_ids"] = sorted(g.pop("_sp"))
+        g["overlap"] = len(g["my_product_ids"])
     return sorted(gom.values(), key=lambda g: (-g["overlap"], -g["best_similarity"]))[:k]
+
+
+def shop_nen_theo_doi(may: MayGiong, dm_cua_sp: Dict[str, str], k: int = SO_SHOP_GOI_Y) -> Dict[str, Any]:
+    """Shop nên theo dõi trên mọi sản phẩm của tôi ("all") và trong từng danh mục; mỗi shop ghi danh mục bị trùng."""
+    theo_dm: Dict[str, List[str]] = defaultdict(list)
+    for pid, dm in dm_cua_sp.items():
+        theo_dm[dm].append(pid)
+    ra = {"all": shop_canh_tranh_nhat(may, list(dm_cua_sp), k),
+          "by_category": {dm: shop_canh_tranh_nhat(may, ids, k) for dm, ids in theo_dm.items()}}
+    for ds in [ra["all"], *ra["by_category"].values()]:
+        for s in ds:
+            s["categories"] = sorted({dm_cua_sp[p] for p in s["my_product_ids"]})
+    return ra
 
 
 _CACHE: Dict[str, Any] = {"khoa": None, "luc": 0.0, "may": None}
