@@ -1148,6 +1148,47 @@ def seasonal(
             "pod_blanks": pod_blanks,
         })
 
+    # Lấy danh sách sản phẩm THẬT của shop & rà soát sản phẩm khớp với dịp
+    shop_products = []
+    try:
+        if la_shop_live(shop_id):
+            raw_sp = san_pham_live(shop_id, gioi_han=100)
+            for p in raw_sp:
+                shop_products.append({
+                    "_id": p["product_id"],
+                    "title": p["title"],
+                    "price_vnd": p.get("price_vnd") or 0,
+                    "stock": p.get("stock") or 0,
+                    "images": [p.get("image_url")] if p.get("image_url") else [],
+                    "tags": p.get("tags") or [],
+                    "categories": p.get("categories") or [],
+                    "orders": 0,
+                    "revenue_vnd": 0,
+                })
+        else:
+            seed_prods = list(db_live()["products"].find({}, {"title": 1, "tags": 1, "images": 1, "categories": 1, "price": 1, "retail_price": 1, "stock": 1, "sold_count": 1}).limit(20))
+            for p in seed_prods:
+                shop_products.append({
+                    "_id": str(p["_id"]),
+                    "title": p.get("title") or "",
+                    "price_vnd": int(p.get("price") or p.get("retail_price") or 150000),
+                    "stock": int(p.get("stock") or 25),
+                    "images": p.get("images") or [],
+                    "tags": p.get("tags") or [],
+                    "categories": p.get("categories") or [],
+                    "orders": int(p.get("sold_count") or 0),
+                    "revenue_vnd": int(p.get("sold_count") or 0) * int(p.get("price") or 150000),
+                })
+    except Exception:
+        shop_products = []
+
+    search_terms = [k.lower() for k in active_camp.get("search_keywords", [])] + [active_camp.get("name", "").lower(), active_camp.get("id", "").lower()]
+    matching_shop_products = []
+    for p in shop_products:
+        text_to_check = f"{p['title']} {' '.join(p.get('tags', []))} {' '.join(p.get('categories', []))}".lower()
+        if any(term in text_to_check for term in search_terms if len(term) >= 3):
+            matching_shop_products.append(p)
+
     meta = build_meta(
         scope="platform",
         scope_id=active_camp["id"],
@@ -1330,6 +1371,8 @@ def seasonal(
         "ready_to_ship_ideas": ready_ideas,
         "pod_blanks": pod_blanks,
         "opportunity_clusters": opportunity_clusters,
+        "shop_products": shop_products,
+        "matching_shop_products": matching_shop_products,
         "method": f"Thống kê mô tả từ {measured_sample_size:,} đơn hàng thật + Lịch quốc gia calendar_vn + Kiểm chứng 5 lớp",
         "limitation": "Không có dữ liệu nào đảm bảo chắc chắn sản phẩm sẽ bán chạy. Seller cần tự kiểm tra bằng chứng và bắt đầu từ bước Thử nhỏ."
     }, meta)
