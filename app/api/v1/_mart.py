@@ -37,7 +37,7 @@ def db():
     return client_dung_chung()[settings.MONGO_DB_SEED]
 
 
-KHOANG_HOP_LE = {"7d": 7, "30d": 30, "90d": 90, "180d": 180, "365d": 365, "1y": 365}
+KHOANG_HOP_LE = {"7d": 7, "30d": 30, "90d": 90, "180d": 180, "365d": 365, "1y": 365, "year": 365}
 
 
 def doc_khoang(time_range: str) -> int:

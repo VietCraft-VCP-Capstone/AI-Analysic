@@ -7,72 +7,65 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
+from app.api.v1._f30_store import latest_run, read_events
 from app.api.v1._live import la_shop_live
-from app.api.v1._live_shop import alerts_live
-from app.api.v1._mart import cua_so, db, ngay_moi_nhat
-from app.api.v1._template import CurrentShop, invalid_param, mart_not_ready, meta_from_record, ok
+from app.api.v1._mart import cua_so, db
+from app.api.v1._template import CurrentShop, build_meta, invalid_param, mart_not_ready, ok
+from app.services.f30.rules import (MIN_CHANGE_PCT, MIN_CHANGE_VND, MIN_EXPECTED,
+                                    MIN_HISTORY_DAYS, MODEL_VERSION, Z_THRESHOLD)
 
 router = APIRouter()
 
 MART = "anomaly_event"
 KY_HAN = {"7d": 7, "30d": 30, "90d": 90, "all": None}
-NGUONG = {"z": 7.0,
-          "why": ("Đo thực nghiệm: ngưỡng 2.0 của BR-183 cho 7,38% báo động giả, "
-                  "ngưỡng 7.0 còn 0,6%. Code đúng hơn SRS — xem docs/SPEC_CHANGES.md.")}
+WEEKLY_CAP = 3  # trần thông báo/shop/7 ngày, BE giữ (anomaly-alert.delivery.ts)
+THRESHOLD = {"z": Z_THRESHOLD, "min_change_pct": MIN_CHANGE_PCT, "min_change_vnd": MIN_CHANGE_VND,
+             "min_expected": MIN_EXPECTED, "weekly_cap": WEEKLY_CAP}
+CAC_TRUONG = ("metric", "direction", "rule", "z", "expected", "actual", "change_pct",
+              "severity", "calendar_sensitive", "confidence", "top_listings")
+LY_DO = {
+    "chua_chay": "Shop này chưa được chạy phép dò bất thường lần nào.",
+    "qua_ngan": "Shop mới có {n} ngày lịch sử, cần ít nhất {can} ngày để biết mức bình thường.",
+    "khong_co_san_pham": "Shop chưa có sản phẩm nào để dò bất thường.",
+    "loi": "Không phân tích được dữ liệu của shop.",
+}
 
 
 @router.get("/api/notifications/alerts", tags=["F30 · Hiếu"])
 def alerts(shop_id: str = CurrentShop, period: str = "90d"):
     if period not in KY_HAN:
         invalid_param("period", " | ".join(KY_HAN))
-    if la_shop_live(shop_id):
-        rows, duoc_do, ghi_chu, meta = alerts_live(shop_id, KY_HAN[period])
-        return _ket_qua(shop_id, period, [{**r, "date": r["event_date"]} for r in rows],
-                        duoc_do, ghi_chu, meta)
-
-    coll = db()[MART]
-    if coll.estimated_document_count() == 0:
+    live = la_shop_live(shop_id)
+    if not live and db()[MART].count_documents({}) == 0:
         mart_not_ready(MART)
-
-    loc = {"entity_type": "shop", "entity_id": shop_id}
-    if KY_HAN[period]:
-        moi = ngay_moi_nhat({"shop_id": shop_id}) or ""
-        if moi:
-            tu, den = cua_so(moi, KY_HAN[period])
-            loc["event_date"] = {"$gte": tu, "$lte": den}
-
-    rows = list(coll.find(loc, {"_id": 0}).sort("event_date", -1))
-
-    duoc_do = coll.count_documents({"entity_id": shop_id}) > 0
-    mau = rows[0] if rows else coll.find_one({}, {"_id": 0})
-    meta = meta_from_record(mau, scope="shop", scope_id=shop_id, collection=MART,
-                            mode="seed_demo", sample_size=len(rows),
-                            confidence=(rows[0].get("confidence", "ok") if rows else "medium"))
-
-    return _ket_qua(shop_id, period, [{**r, "date": r["event_date"]} for r in rows], duoc_do,
-                    None if duoc_do else
-                    "Shop này KHÔNG được đưa vào phép dò: chuỗi doanh thu ngày có quá "
-                    "nhiều ngày bằng 0 (dưới 40% số ngày có bán), nền của chuỗi là 0 nên "
-                    "mọi ngày bán được đều bị chấm là đột biến. Không phải shop không có "
-                    "bất thường — là chưa đo được.", meta)
+    run = latest_run(shop_id)
+    if run is None:
+        return _ket_qua(shop_id, period, live, [], {}, "chua_chay")
+    den = run["run_date"]
+    tu = cua_so(den, KY_HAN[period])[0] if KY_HAN[period] else None
+    rows = [r for r in read_events(shop_id, tu) if r["event_date"] <= den]
+    return _ket_qua(shop_id, period, live, rows, run, run.get("skip_reason"))
 
 
-def _ket_qua(shop_id, period, rows, duoc_do, ghi_chu, meta):
+def _muc(r):
+    return {"id": r["id"], "date": r["event_date"], **{k: r.get(k) for k in CAC_TRUONG}}
+
+
+def _ket_qua(shop_id, period, live, rows, run, skip):
+    meta = build_meta(computed_at=run.get("computed_at"),
+                      model_version=run.get("model_version", MODEL_VERSION),
+                      scope="shop", scope_id=shop_id, collection=MART,
+                      mode="live" if live else "seed_demo", attributed_to_live_shop=live,
+                      sample_size=len(rows),
+                      confidence=rows[0].get("confidence", "ok") if rows else "medium")
     return ok({
         "shop_id": shop_id,
         "period": period,
-        "alerts": [{
-            "date": r["date"],
-            "direction": r["direction"],
-            "z": r["z"],
-            "expected_vnd": r.get("expected"),
-            "actual_vnd": r.get("actual"),
-            "severity": r["severity"],
-            "calendar_sensitive": r.get("calendar_sensitive"),
-            "confidence": r.get("confidence"),
-        } for r in rows],
+        "alerts": [_muc(r) for r in rows],
         "total": len(rows),
-        "shop_was_analysed": duoc_do,
-        "threshold": NGUONG,
-        "limitation": ghi_chu,
+        "shop_was_analysed": skip is None,
+        "skip_reason": skip,
+        "limitation": LY_DO[skip].format(n=run.get("history_days", 0), can=MIN_HISTORY_DAYS)
+        if skip else None,
+        "threshold": THRESHOLD,
     }, meta)

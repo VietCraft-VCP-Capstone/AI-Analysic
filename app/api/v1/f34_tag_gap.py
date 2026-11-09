@@ -9,7 +9,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
-from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, nguon_doi_thu, ten_tag_live
+from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, mo_ta_live, nguon_doi_thu, ten_tag_live
+from app.api.v1._doi_thu_ai import goi_y_tu_khoa, may_giong
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, ok
 
@@ -113,13 +114,25 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
                    f"đừng dùng danh sách dưới đây để ra quyết định. Endpoint chỉ có ý "
                    f"nghĩa trên dữ liệu sàn thật.")
 
+    # AI: gợi ý riêng cho từng sản phẩm, lấy từ sản phẩm giống nó (chỉ shop thật).
+    goi_y = []
+    if ng["live"]:
+        may = may_giong(coll, mo_ta_live, ten_tag_live)
+        for r in sorted(coll.find({"shop_id": shop_id, "category_id": cat}), key=lambda r: r.get("rank_in_cat") or 0):
+            g = goi_y_tu_khoa(may, r["listing_id"])
+            if g:
+                goi_y.append({"product_id": r["listing_id"], "title": r.get("title"), "suggestions": g})
+        them = {x["tag_id"] for p in goi_y for x in p["suggestions"]} - set(ten_tag)
+        ten_tag.update(ten_tag_live(them))
+
     return ok({
         "category_id": cat,
         "available_categories": cua_toi,
         **({"category_names": ten_dm} if ng["live"] else {}),
         "competitors_scanned": len(dan_dau),
         "my_tags": sorted(tag_toi),
-        "tag_names": {t: ten_tag.get(t) or t for t in set(dem_dau) | tag_toi},
+        "tag_names": {t: ten_tag.get(t) or t for t in set(dem_dau) | tag_toi | {x["tag_id"] for p in goi_y for x in p["suggestions"]}},
+        **({"per_product": goi_y} if ng["live"] else {}),
         # Tag nhóm dẫn đầu hay dùng, kể cả tag mình đã có: FE hiện "đã có / chưa có" cho người mới.
         "leader_tags": [{"tag_id": t, "used_by": n, "mine": t in tag_toi}
                         for t, n in sorted(dem_dau.items(), key=lambda x: (-x[1], x[0]))[:12]],

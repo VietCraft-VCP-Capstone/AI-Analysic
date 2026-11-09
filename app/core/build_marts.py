@@ -13,6 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 from pymongo import MongoClient
 
 from app.config import settings
+from app.core.f30_seed import build_anomaly_event
 from app.core.writer import MART_SCHEMA, finish_model_run, save_model_output, start_model_run
 
 VERSION = "marts-1.0"
@@ -21,10 +22,6 @@ M_BAYES = 50  # docs/BAYES_M_SELECTION.md
 
 # Chỉ số Google Trends dưới mức này thì % tăng không đáng tin (thang 0-100).
 NEN_TOI_THIEU = 5.0
-
-# Chuỗi ngày phải có ít nhất ngần này tỉ lệ ngày CÓ doanh thu thì z-score mới
-# có nghĩa. Dưới ngưỡng, nền của chuỗi là 0 và mọi ngày bán được đều thành đột biến.
-TOI_THIEU_NGAY_CO_BAN = 0.40
 
 
 def _db():
@@ -612,66 +609,6 @@ def _viec_can_lam(db, lid, truc, danh_muc_id, n_anh, con_hang_ty_le, tong_bien_t
 
 
 # ---------------------------------------------------------------------------
-# anomaly_event — ngày doanh thu tụt/vọt bất thường. Nền của F30
-# ---------------------------------------------------------------------------
-
-SO_NGAY_TOI_THIEU_BAT_THUONG = 60
-
-
-def bat_thuong_chuoi(ngay: List[str], gia_tri: List[float]):
-    """Trả (sự kiện bất thường, lý do bỏ qua); sự kiện là None khi chuỗi không đủ tin cậy."""
-    from app.services.zscore_service import ZScoreService
-
-    if len(gia_tri) < SO_NGAY_TOI_THIEU_BAT_THUONG:
-        return None, "qua_ngan"
-    # Chuỗi quá thưa thì nền là 0 và mọi ngày có bán đều thành đột biến giả.
-    if sum(1 for v in gia_tri if v) / len(gia_tri) < TOI_THIEU_NGAY_CO_BAN:
-        return None, "qua_thua"
-    try:
-        kq = ZScoreService.analyze(gia_tri, dates=ngay, period=7)
-    except Exception:
-        return None, "loi"
-    if kq.get("status") == "unreliable_high_rate":
-        return None, "khong_tin_cay"
-
-    return [{
-        "event_date": ngay[p["index"]],
-        "direction": "drop" if p["score"] < 0 else "spike",
-        "z": round(float(p["score"]), 2),
-        "expected": int(round(float(p.get("trend") or 0) + float(p.get("seasonal") or 0))),
-        "actual": int(round(float(p["value"]))),
-        "severity": ("high" if abs(p["score"]) >= 15 else
-                     "medium" if abs(p["score"]) >= 10 else "low"),
-        "calendar_sensitive": bool(p.get("calendar_sensitive")),
-        "confidence": kq.get("status", "ok"),
-        "reliability_note": kq.get("reliability_note"),
-        "cycles_observed": round(float(kq.get("cycles_observed", 0)), 1),
-    } for p in kq.get("points", []) if p.get("is_anomaly")], "ok"
-
-
-def build_anomaly_event(db) -> List[Dict[str, Any]]:
-    chuoi = defaultdict(list)
-    for r in db["listing_daily"].aggregate([
-        {"$group": {"_id": {"s": "$shop_id", "d": "$date"}, "rev": {"$sum": "$revenue_vnd"}}},
-        {"$sort": {"_id.d": 1}},
-    ]):
-        chuoi[r["_id"]["s"]].append((r["_id"]["d"], float(r["rev"])))
-
-    ban_ghi = []
-    bo_qua = {"qua_ngan": 0, "qua_thua": 0, "khong_tin_cay": 0, "loi": 0}
-
-    for shop, diem in chuoi.items():
-        su_kien, ly_do = bat_thuong_chuoi([d for d, _ in diem], [v for _, v in diem])
-        if su_kien is None:
-            bo_qua[ly_do] += 1
-            continue
-        ban_ghi.extend({"entity_type": "shop", "entity_id": shop, **e} for e in su_kien)
-    ban_ghi.sort(key=lambda r: (r["event_date"], -abs(r["z"])))
-    print(f"   [anomaly] {len(chuoi)} shop -> bỏ qua: {bo_qua}")
-    return ban_ghi
-
-
-# ---------------------------------------------------------------------------
 # mart_shop_hour — nhịp đặt hàng theo thứ/giờ. Nền của F31
 # ---------------------------------------------------------------------------
 
@@ -890,7 +827,7 @@ def main() -> int:
 
     for t in ten:
         print(f"── {t}")
-        ban_ghi = JOBS[t](db)
+        ban_ghi = JOBS[t](db, dry_run=a.dry_run) if t == "anomaly_event" else JOBS[t](db)
         print(f"   tính được {len(ban_ghi):,} dòng")
         if ban_ghi:
             mau = ban_ghi[0]

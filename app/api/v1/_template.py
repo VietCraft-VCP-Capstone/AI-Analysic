@@ -232,6 +232,14 @@ def current_shop_id(
     return decode_shop_id(authorization.split(" ", 1)[1].strip())
 
 
+def require_gateway(x_gateway_secret: Optional[str] = Header(default=None)) -> None:
+    """Chỉ BE gateway được gọi route nội bộ (job, trigger). Sai/thiếu → 401."""
+    bi_mat = _gateway_secret()
+    if not bi_mat or not x_gateway_secret or \
+            not hmac.compare_digest(x_gateway_secret.encode(), bi_mat.encode()):
+        raise HTTPException(status_code=401, detail={"error": "unauthorized"})
+
+
 # Viết gọn cho router: `shop_id: str = CurrentShop`
 CurrentShop = Depends(current_shop_id)
 

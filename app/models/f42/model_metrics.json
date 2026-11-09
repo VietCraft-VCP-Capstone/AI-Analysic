@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-10-26 07:56:15",
+  "category_classification": {
+    "accuracy": 0.9465836898742384,
+    "f1_macro": 0.7326535377595059
+  },
+  "quantile_pricing": {
+    "mdape": 42.33181697914189,
+    "coverage": 48.23026059898872
+  }
+}

@@ -19,6 +19,7 @@ from app.api.v1._template import che_do_xac_thuc
 from app.api.v1.analytics_routes import gan_vao as gan_analytics
 from app.api.v1.cccd_ocr import router as cccd_ocr_router
 from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
+from app.api.v1.f30_internal import router as f30_internal_router
 from app.api.v1.listing_quality import router as listing_quality_router
 
 @asynccontextmanager
@@ -214,6 +215,7 @@ TRANG_THAI_F = gan_analytics(app)
 # Include routes
 app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", tags=["CCCD OCR & Verification"])
 app.include_router(smart_suggestion_router)
+app.include_router(f30_internal_router)
 app.include_router(listing_quality_router)
 
 
