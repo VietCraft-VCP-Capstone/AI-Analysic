@@ -43,7 +43,7 @@ def test_no_weights_returns_insufficient(monkeypatch, client):
     body = _get(client).json()
     assert body["data"] is None
     assert body["meta"]["status"] == "insufficient_data"
-    assert body["meta"]["reason"] == "Điểm sức khoẻ đang được cập nhật, vui lòng thử lại sau."
+    assert body["meta"]["reason"] == "Điểm tối ưu sản phẩm đang được cập nhật, vui lòng thử lại sau."
 
 
 def test_unknown_listing_404(monkeypatch, client):

@@ -208,7 +208,7 @@ class HealthScoreCalculator:
         }
 
         self.live_db["listing_health_scores"].update_one(
-            {"product_id": product_oid},
+            {"product_id": product_oid, "date": date_dt},
             {"$set": doc, "$setOnInsert": {"created_at": now}},
             upsert=True,
         )
