@@ -194,18 +194,18 @@ def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str
     # Pha 1: Quá hạn hoặc sát hạn chốt đơn (<= 3 ngày hoặc đã qua cao điểm)
     if days_to_cutoff <= 3 or hom_nay >= peak_d:
         if days_to_cutoff <= 1:
-            badge_text = f"Hạn chốt {days_to_cutoff} ngày · Dừng nhận đơn mới" if days_to_cutoff > 0 else "Đã quá hạn chốt đơn"
+            badge_text = f"Hạn chốt {days_to_cutoff} ngày" if days_to_cutoff > 0 else "Đã qua hạn chốt"
         else:
-            badge_text = f"Còn {days_to_cutoff} ngày đến hạn chốt"
+            badge_text = f"Hạn chốt còn {days_to_cutoff} ngày"
 
         return {
             "action_type": "close_orders",
             "badge_text": badge_text,
             "badge_variant": "amber",
-            "title": f"Chốt đơn & ưu tiên xử lý hàng sẵn có dịp {ev_name}",
+            "title": "Chốt đơn & ưu tiên xuất hàng sẵn có",
             "advice": (
-                f"Dịp {ev_name} sắp đến hạn chốt ({cut_off_d.strftime('%d/%m')}, còn {days_to_cutoff} ngày). "
-                f"Đã qua thời điểm làm mẫu mới. Nên ưu tiên đóng gói và xử lý các đơn hàng sẵn có/tồn kho "
+                f"Sắp đến hạn chốt nhận đơn ({cut_off_d.strftime('%d/%m')}, còn {days_to_cutoff} ngày). "
+                f"Đã qua thời điểm làm mẫu mới. Nên tập trung xử lý các đơn hàng sẵn phôi trong kho "
                 f"để bảo đảm giao kịp trước ngày {ev_d.strftime('%d/%m')}."
             ),
             "calculation_basis": f"Hạn chốt {cut_off_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 10 ngày (sản xuất P90 & giao hàng an toàn).",
@@ -219,12 +219,12 @@ def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str
         days_to_peak = max(0, (peak_d - hom_nay).days)
         return {
             "action_type": "boost_traffic",
-            "badge_text": "Giai đoạn đăng bán & gom đơn",
+            "badge_text": "Mở bán & gom đơn",
             "badge_variant": "blue",
-            "title": f"Tối ưu listing & đẩy từ khóa \"{kw}\"",
+            "title": f"Tối ưu listing & từ khóa \"{kw}\"",
             "advice": (
-                f"Nhu cầu tìm kiếm đang tăng tốc trước tuần cao điểm ({peak_d.strftime('%d/%m')}, còn {days_to_peak} ngày). "
-                f"Khuyến nghị hoàn thiện hình ảnh mẫu cho nhóm {cat_friendly}, tối ưu tiêu đề gắn từ khóa \"{kw}\" để tăng thứ hạng tìm kiếm."
+                f"Nhu cầu tìm kiếm tăng tốc trước cao điểm ({peak_d.strftime('%d/%m')}, còn {days_to_peak} ngày). "
+                f"Khuyến nghị hoàn thiện ảnh thật nhóm {cat_friendly}, tối ưu tiêu đề gắn từ khóa \"{kw}\" để đón đơn sớm."
             ),
             "calculation_basis": f"Bắt đầu mở bán {traction_d.strftime('%d/%m')} = Trước cao điểm 10 ngày để kịp index từ khóa.",
             "cta_label": "Xem từ khóa & đối thủ",
@@ -236,16 +236,16 @@ def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str
     else:
         days_to_prep = max(0, (rd_d - hom_nay).days)
         is_in_prep = hom_nay >= rd_d
-        badge_text = "Giai đoạn chuẩn bị mẫu & phôi" if is_in_prep else f"Bắt đầu chuẩn bị sau {days_to_prep} ngày"
+        badge_text = "Chuẩn bị mẫu & phôi" if is_in_prep else f"Chuẩn bị sau {days_to_prep} ngày"
 
         return {
             "action_type": "prepare_blank",
             "badge_text": badge_text,
             "badge_variant": "emerald",
-            "title": f"Chuẩn bị phôi xưởng & duyệt mẫu đón {ev_name}",
+            "title": "Chuẩn bị phôi xưởng & duyệt mẫu",
             "advice": (
-                f"Khung thời gian phù hợp để duyệt mẫu thiết kế {cat_friendly} và liên hệ xưởng chuẩn bị phôi "
-                f"cho nhóm từ khóa \"{kw}\" trước khi bước vào giai đoạn mở bán ({traction_d.strftime('%d/%m')})."
+                f"Thời điểm phù hợp để duyệt mẫu thiết kế {cat_friendly} và liên hệ xưởng chuẩn bị phôi "
+                f"cho nhóm từ khóa \"{kw}\" trước khi mở bán ({traction_d.strftime('%d/%m')})."
             ),
             "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 38 ngày (lead time xưởng & đón sóng).",
             "cta_label": "Xem phôi xưởng có sẵn",
