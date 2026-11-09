@@ -174,7 +174,7 @@ def analyze_product_seasonal_readiness(
     checklist = [
         {
             "id": "images",
-            "label": f"Ảnh concept theo chủ đề {camp_name}",
+            "label": f"Ảnh concept dịp {camp_name}",
             "is_done": has_images,
             "action_title": f"Bổ sung ảnh concept dịp {camp_name}",
             "action_detail": f"Tải thêm ít nhất 2 ảnh chụp sản phẩm với bối cảnh hoặc hộp quà theo chủ đề dịp {camp_name}.",
