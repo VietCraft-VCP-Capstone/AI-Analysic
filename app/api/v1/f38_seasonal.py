@@ -1154,26 +1154,52 @@ def seasonal(
         if la_shop_live(shop_id):
             raw_sp = san_pham_live(shop_id, gioi_han=100)
             for p in raw_sp:
+                imgs = p.get("images") or []
+                if not imgs and p.get("image_url"):
+                    imgs = [p["image_url"]]
                 shop_products.append({
                     "_id": p["product_id"],
                     "title": p["title"],
                     "price_vnd": p.get("price_vnd") or 0,
                     "stock": p.get("stock") or 0,
-                    "images": [p.get("image_url")] if p.get("image_url") else [],
+                    "images": imgs,
+                    "thumbnail": imgs[0] if imgs else None,
+                    "image_url": imgs[0] if imgs else None,
                     "tags": p.get("tags") or [],
                     "categories": p.get("categories") or [],
                     "orders": 0,
                     "revenue_vnd": 0,
                 })
         else:
-            seed_prods = list(db_live()["products"].find({}, {"title": 1, "tags": 1, "images": 1, "categories": 1, "price": 1, "retail_price": 1, "stock": 1, "sold_count": 1}).limit(20))
+            seed_prods = []
+            try:
+                seed_prods = list(db_live()["products"].find({}, {"title": 1, "tags": 1, "images": 1, "categories": 1, "price": 1, "retail_price": 1, "stock": 1, "sold_count": 1, "thumbnail": 1, "image_url": 1}).limit(20))
+            except Exception:
+                pass
+            if not seed_prods:
+                try:
+                    seed_prods = list(db()["products"].find({}, {"title": 1, "tags": 1, "images": 1, "categories": 1, "price": 1, "retail_price": 1, "stock": 1, "sold_count": 1, "thumbnail": 1, "image_url": 1}).limit(20))
+                except Exception:
+                    pass
+
             for p in seed_prods:
+                raw_imgs = p.get("images") or []
+                if isinstance(raw_imgs, str):
+                    raw_imgs = [raw_imgs]
+                imgs = [x if isinstance(x, str) else x.get("url") for x in raw_imgs if x]
+                if not imgs and p.get("thumbnail"):
+                    imgs = [p["thumbnail"]]
+                if not imgs and p.get("image_url"):
+                    imgs = [p["image_url"]]
+
                 shop_products.append({
                     "_id": str(p["_id"]),
                     "title": p.get("title") or "",
                     "price_vnd": int(p.get("price") or p.get("retail_price") or 150000),
                     "stock": int(p.get("stock") or 25),
-                    "images": p.get("images") or [],
+                    "images": imgs,
+                    "thumbnail": imgs[0] if imgs else None,
+                    "image_url": imgs[0] if imgs else None,
                     "tags": p.get("tags") or [],
                     "categories": p.get("categories") or [],
                     "orders": int(p.get("sold_count") or 0),
