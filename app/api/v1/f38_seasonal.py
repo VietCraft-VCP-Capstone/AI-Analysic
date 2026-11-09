@@ -169,8 +169,48 @@ CATEGORY_OCCASION_BLUEPRINTS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
 }
 
 
+CAT_OCCASION_KEYWORDS: Dict[str, Dict[str, str]] = {
+    "thoi-trang": {
+        "20/11": "khăn choàng quà tặng",
+        "12/12": "áo ấm mùa đông",
+        "noel": "áo len giáng sinh",
+        "tet": "áo dài cách tân",
+    },
+    "qua-tang": {
+        "20/11": "quà 20/11 tri ân",
+        "12/12": "set quà cuối năm",
+        "noel": "hộp quà giáng sinh",
+        "tet": "hộp quà tết",
+    },
+    "do-go": {
+        "20/11": "bút gỗ khắc tên",
+        "12/12": "khay gỗ trang trí",
+        "noel": "đồ gỗ giáng sinh",
+        "tet": "khay mứt tết gỗ",
+    },
+    "gom-su": {
+        "20/11": "ly sứ in câu chúc",
+        "12/12": "bộ ấm trà gốm",
+        "noel": "cốc sứ giáng sinh",
+        "tet": "bình hoa gốm tết",
+    },
+    "may-tre-dan": {
+        "20/11": "giỏ quà mây tre",
+        "12/12": "hộp tre đựng quà",
+        "noel": "đèn mây decor noel",
+        "tet": "khay mây đựng bánh mứt",
+    },
+    "trang-suc": {
+        "20/11": "trâm cài áo quà tặng",
+        "12/12": "vòng tay phong thủy",
+        "noel": "dây chuyền bạc giáng sinh",
+        "tet": "trang sức đón tết",
+    },
+}
+
+
 def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str) -> dict:
-    """Tạo khuyến nghị hành động thực tế cho từng dịp dựa trên thời gian, từ khóa và ngành hàng."""
+    """Tạo khuyến nghị hành động thực tế cho từng dịp dựa trên thời gian, từ khóa và ngành hàng (áp dụng cho cả SP thường và SP chế tác)."""
     ev_d = date.fromisoformat(win["event_date"])
     cut_off_d = date.fromisoformat(win["cut_off_date"])
     peak_d = date.fromisoformat(win["peak_start"])
@@ -179,8 +219,13 @@ def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str
 
     days_to_cutoff = win["days_to_cut_off"]
     ev_name = ev["name"]
-    kw_list = ev.get("default_search_keywords") or []
-    kw = kw_list[0] if kw_list else "quà tặng"
+    ev_key = ev.get("key", "")
+
+    # Chọn từ khóa chuẩn xác theo ngành hàng của shop và dịp sự kiện
+    kw = (
+        CAT_OCCASION_KEYWORDS.get(cat_slug, {}).get(ev_key)
+        or (ev.get("default_search_keywords") or ["sản phẩm quà tặng"])[0]
+    )
 
     cat_friendly = {
         "thoi-trang": "mẫu may mặc & phụ kiện",
@@ -202,15 +247,15 @@ def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str
             "action_type": "close_orders",
             "badge_text": badge_text,
             "badge_variant": "amber",
-            "title": "Chốt đơn & ưu tiên xuất hàng sẵn có",
+            "title": "Chốt đơn & xử lý hàng sẵn có",
             "advice": (
                 f"Sắp đến hạn chốt nhận đơn ({cut_off_d.strftime('%d/%m')}, còn {days_to_cutoff} ngày). "
-                f"Đã qua thời điểm làm mẫu mới. Nên tập trung xử lý các đơn hàng sẵn phôi trong kho "
+                f"Đã qua thời điểm nhận thêm mẫu mới. Nên tập trung kiểm kê và đóng gói các sản phẩm sẵn có trong shop "
                 f"để bảo đảm giao kịp trước ngày {ev_d.strftime('%d/%m')}."
             ),
-            "calculation_basis": f"Hạn chốt {cut_off_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 10 ngày (sản xuất P90 & giao hàng an toàn).",
-            "cta_label": "Xem phôi & tồn kho",
-            "target_tab": "ideas",
+            "calculation_basis": f"Hạn chốt {cut_off_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 10 ngày (đóng gói & giao hàng an toàn).",
+            "cta_label": "Xem sản phẩm shop & tồn kho",
+            "target_tab": "readiness",
             "is_urgent": True,
         }
 
@@ -227,29 +272,29 @@ def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str
                 f"Khuyến nghị hoàn thiện ảnh thật nhóm {cat_friendly}, tối ưu tiêu đề gắn từ khóa \"{kw}\" để đón đơn sớm."
             ),
             "calculation_basis": f"Bắt đầu mở bán {traction_d.strftime('%d/%m')} = Trước cao điểm 10 ngày để kịp index từ khóa.",
-            "cta_label": "Xem từ khóa & đối thủ",
-            "target_tab": "opps",
+            "cta_label": "Xem xu hướng & sức mua",
+            "target_tab": "traits",
             "is_urgent": False,
         }
 
-    # Pha 3: Giai đoạn chuẩn bị mẫu & phôi xưởng (trước traction)
+    # Pha 3: Giai đoạn chuẩn bị nguồn hàng & lên mẫu (trước traction)
     else:
         days_to_prep = max(0, (rd_d - hom_nay).days)
         is_in_prep = hom_nay >= rd_d
-        badge_text = "Chuẩn bị mẫu & phôi" if is_in_prep else f"Chuẩn bị sau {days_to_prep} ngày"
+        badge_text = "Chuẩn bị nguồn hàng & mẫu" if is_in_prep else f"Chuẩn bị sau {days_to_prep} ngày"
 
         return {
-            "action_type": "prepare_blank",
+            "action_type": "prepare_inventory",
             "badge_text": badge_text,
             "badge_variant": "emerald",
-            "title": "Chuẩn bị phôi xưởng & duyệt mẫu",
+            "title": "Chuẩn bị nguồn hàng & lên mẫu mới",
             "advice": (
-                f"Thời điểm phù hợp để duyệt mẫu thiết kế {cat_friendly} và liên hệ xưởng chuẩn bị phôi "
-                f"cho nhóm từ khóa \"{kw}\" trước khi mở bán ({traction_d.strftime('%d/%m')})."
+                f"Thời điểm phù hợp để chủ động chuẩn bị nguồn hàng {cat_friendly}, lên combo hoặc mẫu mới "
+                f"cho nhóm từ khóa \"{kw}\" trước khi bước vào đợt mở bán ({traction_d.strftime('%d/%m')})."
             ),
-            "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 38 ngày (lead time xưởng & đón sóng).",
-            "cta_label": "Xem phôi xưởng có sẵn",
-            "target_tab": "ideas",
+            "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 38 ngày (thời gian làm hàng & đón sóng).",
+            "cta_label": "Xem gợi ý sản phẩm đón dịp",
+            "target_tab": "potential",
             "is_urgent": False,
         }
 
