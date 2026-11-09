@@ -465,7 +465,33 @@ def seasonal(
         distinct_sellers = {x.get("seller_id") or x.get("seller_name") for x in items_sorted if x.get("seller_id") or x.get("seller_name")}
         total_sold = sum(int(x.get("sold_count") or 0) for x in items_sorted)
 
+        # Danh sách shop thật đang bán trong cụm: gộp các listing theo tên shop
+        sellers_map: Dict[str, Dict[str, Any]] = {}
+        for x in items_sorted:
+            s_name = x.get("seller_name") or ""
+            if not s_name:
+                continue
+            entry = sellers_map.setdefault(s_name, {
+                "sellerName": s_name,
+                "platform": x.get("platform") or "Tiki",
+                "listingCount": 0,
+                "soldCount": 0,
+                "minPriceVnd": None,
+                "maxPriceVnd": None,
+                "topProductTitle": x.get("title") or "",
+                "topProductUrl": x.get("product_url") or "",
+                "ratingAverage": float(x.get("rating_average") or 0.0),
+            })
+            entry["listingCount"] += 1
+            entry["soldCount"] += int(x.get("sold_count") or 0)
+            pv = int(x.get("price_vnd") or 0)
+            if pv:
+                entry["minPriceVnd"] = pv if entry["minPriceVnd"] is None else min(entry["minPriceVnd"], pv)
+                entry["maxPriceVnd"] = pv if entry["maxPriceVnd"] is None else max(entry["maxPriceVnd"], pv)
+        cluster_sellers = sorted(sellers_map.values(), key=lambda s: s["soldCount"], reverse=True)
+
         real_blueprints.append({
+            "cluster_sellers": cluster_sellers,
             "title": lead["title"],
             "category": lead.get("sub_category") or "Thời trang & Phụ kiện",
             "keyword": lead.get("trend_keyword") or primary_kw,
@@ -880,6 +906,7 @@ def seasonal(
             "sellerName": seller_name,
             "soldCount": sold_cnt,
             "representativeProducts": rep_products,
+            "sellers": bp.get("cluster_sellers") or [],
             "clusteringMethod": f"Thu thập trực tiếp từ {platform_name} & VietCraft (trạng thái: Đang bán)",
             "evidence": {
                 "id": f"ev_clust_real_{idx}",

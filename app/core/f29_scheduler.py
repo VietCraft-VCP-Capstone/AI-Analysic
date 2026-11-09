@@ -213,6 +213,18 @@ def start_scheduler():
         register(scheduler)
     except Exception as e:  # noqa: BLE001
         print(f"[f29_scheduler] Khong dang ky duoc job Listing Intel: {type(e).__name__}: {e}", flush=True)
+    try:
+        from app.collectors.collect_external_products import run_collection
+        scheduler.add_job(
+            run_collection,
+            CronTrigger(hour=3, minute=30, timezone=VN_TZ),
+            id="collect_external_products_nightly",
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=3600,
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[f29_scheduler] Khong dang ky duoc job collect external products: {type(e).__name__}: {e}", flush=True)
     scheduler.start()
     _scheduler = scheduler
     return scheduler
