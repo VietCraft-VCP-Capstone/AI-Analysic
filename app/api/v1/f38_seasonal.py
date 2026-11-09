@@ -169,6 +169,91 @@ CATEGORY_OCCASION_BLUEPRINTS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
 }
 
 
+def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str) -> dict:
+    """Tạo khuyến nghị hành động thực tế cho từng dịp dựa trên thời gian, từ khóa và ngành hàng."""
+    ev_d = date.fromisoformat(win["event_date"])
+    cut_off_d = date.fromisoformat(win["cut_off_date"])
+    peak_d = date.fromisoformat(win["peak_start"])
+    traction_d = date.fromisoformat(win["traction_start"])
+    rd_d = date.fromisoformat(win["rd_start"])
+
+    days_to_cutoff = win["days_to_cut_off"]
+    ev_name = ev["name"]
+    kw_list = ev.get("default_search_keywords") or []
+    kw = kw_list[0] if kw_list else "quà tặng"
+
+    cat_friendly = {
+        "thoi-trang": "mẫu may mặc & phụ kiện",
+        "qua-tang": "set quà tặng & lưu niệm",
+        "do-go": "sản phẩm gỗ mỹ nghệ",
+        "gom-su": "đồ gốm sứ thủ công",
+        "may-tre-dan": "hàng mây tre đan",
+        "trang-suc": "trang sức thủ công",
+    }.get(cat_slug, "sản phẩm thủ công")
+
+    # Pha 1: Quá hạn hoặc sát hạn chốt đơn (<= 3 ngày hoặc đã qua cao điểm)
+    if days_to_cutoff <= 3 or hom_nay >= peak_d:
+        if days_to_cutoff <= 1:
+            badge_text = f"Hạn chốt {days_to_cutoff} ngày · Dừng nhận đơn mới" if days_to_cutoff > 0 else "Đã quá hạn chốt đơn"
+        else:
+            badge_text = f"Còn {days_to_cutoff} ngày đến hạn chốt"
+
+        return {
+            "action_type": "close_orders",
+            "badge_text": badge_text,
+            "badge_variant": "amber",
+            "title": f"Chốt đơn & ưu tiên xử lý hàng sẵn có dịp {ev_name}",
+            "advice": (
+                f"Dịp {ev_name} sắp đến hạn chốt ({cut_off_d.strftime('%d/%m')}, còn {days_to_cutoff} ngày). "
+                f"Đã qua thời điểm làm mẫu mới. Nên ưu tiên đóng gói và xử lý các đơn hàng sẵn có/tồn kho "
+                f"để bảo đảm giao kịp trước ngày {ev_d.strftime('%d/%m')}."
+            ),
+            "calculation_basis": f"Hạn chốt {cut_off_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 10 ngày (sản xuất P90 & giao hàng an toàn).",
+            "cta_label": "Xem phôi & tồn kho",
+            "target_tab": "ideas",
+            "is_urgent": True,
+        }
+
+    # Pha 2: Giai đoạn mở bán listing & gom đơn đặt trước (traction -> peak)
+    elif hom_nay >= traction_d:
+        days_to_peak = max(0, (peak_d - hom_nay).days)
+        return {
+            "action_type": "boost_traffic",
+            "badge_text": "Giai đoạn đăng bán & gom đơn",
+            "badge_variant": "blue",
+            "title": f"Tối ưu listing & đẩy từ khóa \"{kw}\"",
+            "advice": (
+                f"Nhu cầu tìm kiếm đang tăng tốc trước tuần cao điểm ({peak_d.strftime('%d/%m')}, còn {days_to_peak} ngày). "
+                f"Khuyến nghị hoàn thiện hình ảnh mẫu cho nhóm {cat_friendly}, tối ưu tiêu đề gắn từ khóa \"{kw}\" để tăng thứ hạng tìm kiếm."
+            ),
+            "calculation_basis": f"Bắt đầu mở bán {traction_d.strftime('%d/%m')} = Trước cao điểm 10 ngày để kịp index từ khóa.",
+            "cta_label": "Xem từ khóa & đối thủ",
+            "target_tab": "opps",
+            "is_urgent": False,
+        }
+
+    # Pha 3: Giai đoạn chuẩn bị mẫu & phôi xưởng (trước traction)
+    else:
+        days_to_prep = max(0, (rd_d - hom_nay).days)
+        is_in_prep = hom_nay >= rd_d
+        badge_text = "Giai đoạn chuẩn bị mẫu & phôi" if is_in_prep else f"Bắt đầu chuẩn bị sau {days_to_prep} ngày"
+
+        return {
+            "action_type": "prepare_blank",
+            "badge_text": badge_text,
+            "badge_variant": "emerald",
+            "title": f"Chuẩn bị phôi xưởng & duyệt mẫu đón {ev_name}",
+            "advice": (
+                f"Khung thời gian phù hợp để duyệt mẫu thiết kế {cat_friendly} và liên hệ xưởng chuẩn bị phôi "
+                f"cho nhóm từ khóa \"{kw}\" trước khi bước vào giai đoạn mở bán ({traction_d.strftime('%d/%m')})."
+            ),
+            "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Ngày sự kiện ({ev_d.strftime('%d/%m')}) − 38 ngày (lead time xưởng & đón sóng).",
+            "cta_label": "Xem phôi xưởng có sẵn",
+            "target_tab": "ideas",
+            "is_urgent": False,
+        }
+
+
 @router.get("/api/analytics/forecast/seasonal", tags=["F38 · Kế hoạch cao điểm & Lịch ra hàng"])
 def seasonal(
     shop_id: str = CurrentShop,
@@ -347,7 +432,8 @@ def seasonal(
                 "cutoff_days": cutoff_days,
                 "end_days": end_days
             },
-            "is_dashed_curve": is_dashed
+            "is_dashed_curve": is_dashed,
+            "action_recommendation": _tao_khuyen_nghi_hanh_dong(ev, win, hom_nay, cat_slug)
         })
 
     # Sắp xếp toàn bộ dịp theo trình tự thời gian diễn ra
