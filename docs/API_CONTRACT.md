@@ -494,13 +494,30 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 Đo chất lượng bằng script đo riêng, không nằm trong repo.
 
 - F32 `my_listings[].direct_rivals`: `[{product_id, shop_id, shop_name, title, price_vnd, est_sales_90d,
-  similarity (0–1), near_identical, reasons[]}]`, tối đa 5. Liệt kê từ độ giống 0,15; `near_identical` khi ≥ 0,35.
+  similarity (0–1), near_identical, reasons[], materials[]}]`, tối đa 5. Liệt kê từ độ giống 0,15; `near_identical` khi ≥ 0,35.
+  Chất liệu (`products.materials` + `product_variants.material` đang bán) là một trường của TF-IDF; hai sản phẩm đều
+  ghi chất liệu mà không trùng chất liệu nào thì không là láng giềng (áp cho đối thủ trực tiếp, shop gợi ý, giá AI, từ khoá).
+  `my_listings[].materials[]`: chất liệu sản phẩm của mình, rỗng là chưa ghi.
   Hai ngưỡng đo trên 17.000 tin Shopee Product Matching chưa dùng để chỉnh: ở 0,15 bắt được 79% hàng cùng sản phẩm
   trong top 5; từ 0,35 thì 73% kết quả đúng là cùng sản phẩm. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity,
   my_product_ids}]`, tối đa 3 shop trùng nhiều sản phẩm của mình nhất **trong danh mục đang xem**.
   `rival_shops_by_category` (thêm 27/10): `{all: [...], by_category: {<danh mục>: [...]}}`, mỗi phần tử như trên kèm `categories`
   (danh mục của mình có sản phẩm bị trùng), tối đa 10 shop mỗi danh sách. `all` tính trên mọi sản phẩm của shop, không phụ thuộc
   `categoryId`, để gợi ý theo dõi không bỏ sót đối thủ ở danh mục phụ. FE bỏ shop đã theo dõi rồi hiện 3 shop đầu.
+- F32 toàn cảnh danh mục (thêm 11/11, chỉ shop thật, `_doi_thu_toan_canh.py`, thống kê chứ không phải AI):
+  `shops[]` mỗi shop trong danh mục `{shop_id, shop_name, is_me, n_listings, types[{name, count}], materials[] (3 chất liệu
+  nhiều nhất, tên chuẩn), new_30d, price_vnd{p25, median, p75}, units_90d, share_pct, rating (rating_shrunk gộp theo số lượt),
+  n_reviews, favorites, response_minutes, weekly_units[8] (số bán theo tuần trong danh mục), trend, similar_listings, rivalry,
+  shared_types[], is_peer}`, xếp theo `units_90d` giảm dần.
+  `rivalry` 0–100 = Σ theo loại hàng của mình (tỉ trọng loại đó trong hàng của mình × shop kia có bán loại đó × min/max hai giá
+  trung vị) × 100; `null` ở dòng của mình. `trend.kind`: `surge` (z bền của F36, kèm `last_week`, `baseline`) hoặc
+  `up`/`down`/`stable` theo kiểm định hai tỉ lệ thị phần 4 tuần gần nhất so với 4 tuần trước (|z| ≥ 1,96, kèm
+  `share_before_pct`, `share_after_pct`, `z`); dưới 10 sản phẩm bán trong 8 tuần thì `null`. `is_peer`: shop bán nhiều nhất
+  trong các shop có giá trung vị lệch ≤ 10% so với mình và bán gấp ≥ 2 lần. `concentration_top3_pct`: thị phần cộng của 3 shop
+  đầu (CR3). `price_points[]`: mỗi sản phẩm một điểm `{listing_id, title, shop_name, is_mine, product_type_id,
+  product_type_name, price_vnd, units_90d, materials[] (tên chuẩn), materials_unknown[] (cách gõ chưa có trong từ điển),
+  price_by_material{tên chuẩn: giá} (chỉ khi biến thể chất liệu đó có giá khác `price_vnd`)}`. FE tính vùng giá bán chạy
+  = khoảng 25–75% theo trọng số lượng bán, cần ≥ 3 sản phẩm có đơn.
 - F35 (khi đã chọn `productId`) `ai_price`: `{suggested_vnd, low_vnd, high_vnd, confidence: high|medium|low,
   rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
   `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 8 sản phẩm giống nhất, pha với mặt
@@ -508,9 +525,13 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 - F36 `alerts[].threat`: `{score 0–100, level high|medium|low, similarity, matched_product_id, matched_title,
   price_gap_pct (> 0 là đối thủ rẻ hơn), shop_strength, near_identical}`. Điểm = độ giống với sản phẩm khớp nhất của mình (đủ 0,35,
   tức gần như cùng sản phẩm, là tối đa) × sức mạnh shop đối thủ (doanh số 90 ngày so với shop lớn nhất) × áp lực giá (rẻ hơn, tối đa +50%).
-  Cảnh báo xếp theo `threat.score` giảm dần. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z}]` —
+  Cảnh báo xếp theo `threat.score` giảm dần. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z, threshold,
+  weeks[8]}]` (`threshold` = mức nền + 3,5 × độ lệch bền, vạch trên biểu đồ kiểm soát) —
   shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3,5 so với 7 tuần trước (cần ≥ 4 tuần có đơn). Ngưỡng 3,5 chọn
   trên số bán theo tuần của người bán Olist năm 2017 (báo nhầm ≤ 2%); chấm trên 2018: báo nhầm 1,2%, 55% cảnh báo là tăng tốc thật.
+  Thêm 11/11 cho dòng thời gian: `tracked[].weekly_sales[8]` (số bán theo tuần trong danh mục, đơn đã giao, bỏ đơn chủ shop tự
+  mua) và `tracked[].launches[]` = sản phẩm đăng trong 8 tuần `{listing_id, title, listed_at, product_type_name, price_vnd,
+  in_my_niche, threat (như `alerts[].threat`, chỉ khi cùng loại hàng với mình), matched_price_vnd}`.
 - F34 `per_product`: `[{product_id, title, suggestions[{tag_id, score, used_by, better_sellers, popular_in_type}]}]`.
   Gợi ý lai: 0,7 theo sản phẩm giống (độ giống × độ bán chạy) + 0,3 theo độ phổ biến cùng loại.
 - F33 `strategic_groups`: `{k, silhouette, clear (≥ 0,25), features[], axes{x, y}, groups[{id, label, size,
@@ -523,16 +544,18 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 ### Kế hoạch tuần này · `/api/analytics/competitor-brief` (GET, ngoài bảng 16 endpoint) — thêm 18/10/2026, chỉ shop thật
 
 BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_doi_thu_ke_hoach.py`
-gom các sự thật đã tính ở F32–F36 (đe doạ cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
-từ khoá ≥ 2 sản phẩm giống dùng, khoảng cách tới nhóm bán tốt, đối thủ trực tiếp chưa theo dõi, lấy từ `rival_shops_by_category.all`) rồi lập tối đa 10 việc,
+gom các sự thật đã tính ở F32–F36 (cạnh tranh cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
+từ khoá ≥ 2 sản phẩm giống dùng, mẫu gần như trùng hàng của mình, giá ngoài vùng bán chạy, shop cùng phân khúc bán gấp đôi,
+đánh giá dồn về top 5, thời gian phản hồi, đối thủ trực tiếp chưa theo dõi, lấy từ `rival_shops_by_category.all`) rồi lập tối đa 10 việc,
 mỗi loại tối đa 2 (FE chia 5 việc mỗi trang).
 
 `data`: `{source: rules|llm, provider (vd "anthropic/claude-sonnet-5-5") | null, actions[{action, why, link | null, priority}],
 facts_count, generated_at}`. Có `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` thì mô hình ngôn ngữ viết lại
 câu chữ (`COMPETITOR_BRIEF_MODEL` đổi mô hình Claude); việc nào có con số không nằm trong sự thật bị bỏ, không còn việc
 nào thì dùng kế hoạch theo luật. Lưu đệm 30 phút theo shop, tự làm mới khi sự thật đổi.
-`priority`: `gap` (hàng mới đe doạ cao) · `quan_trong` (giá lệch, đối thủ tăng tốc, hàng mới đe doạ vừa) · `nen_lam`
-(từ khoá, nhóm bán tốt, theo dõi shop); `actions` luôn xếp từ `gap` tới `nen_lam`. Mô hình ngôn ngữ phải ghi `fact` là số
+`priority`: `gap` (hàng mới cạnh tranh cao, mẫu gần như trùng hàng của mình) · `quan_trong` (giá lệch, giá ngoài vùng bán
+chạy, đối thủ tăng tốc, hàng mới cạnh tranh vừa) · `nen_lam` (từ khoá, shop cùng phân khúc đáng tham khảo, đánh giá, theo dõi
+shop) · `duy_tri` (điểm mạnh nên giữ, vd thời gian phản hồi nhanh nhất danh mục); `actions` luôn xếp từ `gap` tới `duy_tri`. Mô hình ngôn ngữ phải ghi `fact` là số
 thứ tự sự thật làm căn cứ cho từng việc; việc không chỉ ra được sự thật bị bỏ.
 
 ---

@@ -8,8 +8,10 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
-from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, mo_ta_live, nguon_doi_thu, ten_tag_live
+from app.api.v1._competitor_live import (_bay_gio, danh_muc_cua_toi, meta_doi_thu, mo_ta_live, nguon_doi_thu,
+                                         ten_tag_live, tuan_ban_trong_dm)
 from app.api.v1._doi_thu_ai import may_giong, shop_canh_tranh_nhat, shop_nen_theo_doi
+from app.api.v1._doi_thu_toan_canh import diem_gia, tong_hop_shop
 from app.api.v1._mart import tien
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, ok
 
@@ -50,7 +52,8 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
 
     chieu = {"_id": 0, "listing_id": 1, "shop_id": 1, "shop_name": 1, "title": 1,
              "price_vnd": 1, "est_sales_90d": 1, "rating_shrunk": 1, "n_reviews": 1,
-             "favorite_count": 1, "rank_in_cat": 1, "n_in_cat": 1,
+             "favorite_count": 1, "rank_in_cat": 1, "n_in_cat": 1, "materials": 1, "material_prices": 1,
+             "product_type_id": 1, "product_type_name": 1,
              "computed_at": 1, "model_version": 1}
 
     trong_cat = list(coll.find({"category_id": cat}, chieu))
@@ -72,8 +75,16 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
     sao_tb = sum(sao_toi) / len(sao_toi) if sao_toi else None
     # Đối thủ trực tiếp theo nội dung sản phẩm (AI), chỉ có ở shop thật.
     may = may_giong(coll, mo_ta_live, ten_tag_live) if ng["live"] else None
+    # Toàn cảnh theo shop (bản đồ vị thế, bảng so sánh) và điểm giá từng sản phẩm: chỉ shop thật có đơn, ngày đăng thật.
+    toan_canh = {}
+    if may:
+        now = _bay_gio()
+        trung = {g["shop_id"]: g["overlap"] for g in shop_canh_tranh_nhat(may, [r["listing_id"] for r in cua_minh], k=99)}
+        toan_canh = {**tong_hop_shop(trong_cat, shop_id, tuan_ban_trong_dm(trong_cat, now), trung, now),
+                     "price_points": diem_gia(trong_cat, shop_id)}
 
     return ok({
+        **toan_canh,
         "category_id": cat,
         "available_categories": cua_toi,
         # SRS 3.9.1: ít đối thủ vẫn hiện đúng số đang có; dưới 5 thì FE ghi thứ hạng chỉ để tham khảo.
@@ -90,6 +101,7 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             "favorite_count": r.get("favorite_count") or 0,
             "rank_in_cat": r.get("rank_in_cat"),
             "n_in_cat": r.get("n_in_cat"),
+            **({"materials": r.get("materials") or []} if ng["live"] else {}),
             **({"direct_rivals": may.doi_thu_truc_tiep(r["listing_id"])} if may else {}),
         } for r in sorted(cua_minh, key=lambda r: r.get("rank_in_cat") or 10**9)],
         **({"direct_rival_shops": shop_canh_tranh_nhat(may, [r["listing_id"] for r in cua_minh])} if may else {}),
