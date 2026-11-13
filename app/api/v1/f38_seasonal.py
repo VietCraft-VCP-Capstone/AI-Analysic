@@ -642,21 +642,21 @@ def _tinh_campaign_funnel_va_kenh(
 
     # Bảng phân tích chi tiết đóng góp các kênh bán hàng theo dịp (đồng bộ với tổng đơn của phễu)
     total_orders = max(1, funnel["orders"])
-    ord_listing = max(1, int(round(total_orders * 0.42)))
-    ord_video = max(1, int(round(total_orders * 0.28)))
-    ord_combo = max(1, int(round(total_orders * 0.20)))
-    ord_repeat = max(0, total_orders - ord_listing - ord_video - ord_combo)
+    ord_listing = max(1, int(round(total_orders * 0.45)))
+    ord_campaign = max(1, int(round(total_orders * 0.25)))
+    ord_social = max(1, int(round(total_orders * 0.15)))
+    ord_repeat = max(0, total_orders - ord_listing - ord_campaign - ord_social)
 
     aov_listing = int(occasion_spending)
-    aov_video = int(occasion_spending * 1.05)
-    aov_combo = int(occasion_spending * 1.35)
+    aov_campaign = int(occasion_spending * 1.10)
+    aov_social = int(occasion_spending * 1.05)
     aov_repeat = int(occasion_spending * 1.15)
 
     channels = [
         {
             "channel_key": "organic_listing",
-            "name": "Listing Gian hàng tự nhiên (SEO & Tìm kiếm)",
-            "share_pct": 42.0,
+            "name": "Tìm kiếm & Khám phá tự nhiên (SEO sàn)",
+            "share_pct": 45.0,
             "gmv_vnd": ord_listing * aov_listing,
             "orders_count": ord_listing,
             "sku_orders": int(round(ord_listing * 1.25)),
@@ -666,33 +666,33 @@ def _tinh_campaign_funnel_va_kenh(
             "action_tip": "Tối ưu ảnh concept và gắn bộ 5 thẻ tag ngách điểm cao."
         },
         {
-            "channel_key": "craft_video",
-            "name": "Video xưởng & Quy trình làm quà thủ công",
-            "share_pct": 28.0,
-            "gmv_vnd": ord_video * aov_video,
-            "orders_count": ord_video,
-            "sku_orders": int(round(ord_video * 1.15)),
-            "items_sold": int(round(ord_video * 1.4)),
-            "aov_vnd": aov_video,
-            "growth_pct": 28.2,
-            "action_tip": "Đăng video cận cảnh đóng hộp nơ thiệp trước hạn chốt 10 ngày."
+            "channel_key": "campaign_promo",
+            "name": "Chiến dịch sàn & Khuyến mãi theo dịp",
+            "share_pct": 25.0,
+            "gmv_vnd": ord_campaign * aov_campaign,
+            "orders_count": ord_campaign,
+            "sku_orders": int(round(ord_campaign * 1.2)),
+            "items_sold": int(round(ord_campaign * 1.5)),
+            "aov_vnd": aov_campaign,
+            "growth_pct": 28.0,
+            "action_tip": "Đăng ký tham gia sự kiện mùa lễ của sàn và thiết lập mã ưu đãi dịp cao điểm."
         },
         {
-            "channel_key": "gift_combo",
-            "name": "Set Combo đóng hộp & Quà tặng cá nhân hóa",
-            "share_pct": 20.0,
-            "gmv_vnd": ord_combo * aov_combo,
-            "orders_count": ord_combo,
-            "sku_orders": int(round(ord_combo * 1.3)),
-            "items_sold": int(round(ord_combo * 2.4)),
-            "aov_vnd": aov_combo,
-            "growth_pct": 45.0,
-            "action_tip": "Thêm phân loại 'Kèm hộp quà nơ + thiệp viết tay (+35.000đ)'."
+            "channel_key": "direct_social",
+            "name": "Liên kết ngoài & Mạng xã hội của shop",
+            "share_pct": 15.0,
+            "gmv_vnd": ord_social * aov_social,
+            "orders_count": ord_social,
+            "sku_orders": int(round(ord_social * 1.15)),
+            "items_sold": int(round(ord_social * 1.3)),
+            "aov_vnd": aov_social,
+            "growth_pct": 18.5,
+            "action_tip": "Chia sẻ link bộ sưu tập lên Facebook, TikTok, Zalo để kéo khách về gian hàng."
         },
         {
             "channel_key": "repeat_buyers",
-            "name": "Khách quen quay lại đặt quà theo dịp",
-            "share_pct": 10.0,
+            "name": "Khách quen quay lại đặt hàng theo dịp",
+            "share_pct": 15.0,
             "gmv_vnd": ord_repeat * aov_repeat,
             "orders_count": ord_repeat,
             "sku_orders": int(round(ord_repeat * 1.25)),
@@ -703,14 +703,15 @@ def _tinh_campaign_funnel_va_kenh(
         }
     ]
 
-    # Phân bổ động lực mua sắm: Quà biếu tặng vs Tự mua dùng
+    # Phân bổ động lực mua sắm theo mục đích thực tế
+    gift_pct = 65.0 if is_gifting else 25.0
+    self_pct = 35.0 if is_gifting else 75.0
     motivation = {
-        "gift_purchases_pct": 68.0 if is_gifting else 38.0,
-        "self_purchases_pct": 32.0 if is_gifting else 62.0,
+        "gift_purchases_pct": gift_pct,
+        "self_purchases_pct": self_pct,
         "top_reasons": [
-            {"reason": "Tặng người thân / gia đình", "pct": 45 if is_gifting else 18},
-            {"reason": "Quà tặng bạn bè / đồng nghiệp", "pct": 28 if is_gifting else 20},
-            {"reason": "Tự mua thưởng bản thân dịp lễ", "pct": 27 if is_gifting else 62}
+            {"reason": "Tự mua sắm sử dụng cho bản thân", "pct": int(self_pct)},
+            {"reason": "Mua làm quà biếu tặng", "pct": int(gift_pct)}
         ]
     }
 
