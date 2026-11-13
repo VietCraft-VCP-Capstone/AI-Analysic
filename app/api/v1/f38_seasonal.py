@@ -703,15 +703,15 @@ def _tinh_campaign_funnel_va_kenh(
         }
     ]
 
-    # Phân bổ động lực mua sắm theo mục đích thực tế
+    # Phân bổ mục đích mua sắm tinh gọn: Tự mua dùng vs Mua tặng
     gift_pct = 65.0 if is_gifting else 25.0
     self_pct = 35.0 if is_gifting else 75.0
     motivation = {
         "gift_purchases_pct": gift_pct,
         "self_purchases_pct": self_pct,
         "top_reasons": [
-            {"reason": "Tự mua sắm sử dụng cho bản thân", "pct": int(self_pct)},
-            {"reason": "Mua làm quà biếu tặng", "pct": int(gift_pct)}
+            {"reason": "Tự mua dùng", "pct": int(self_pct)},
+            {"reason": "Mua tặng", "pct": int(gift_pct)}
         ]
     }
 
