@@ -164,6 +164,8 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
             "title": p.get("title") or "",
             "tags": p.get("tags") or [],
             "categories": p.get("categories") or [],
+            "images": p.get("images") or [],
+            "image_url": (p.get("images") or [None])[0],
             "n_images": len(p.get("images") or []),
             "description_len": len(p.get("description") or ""),
             "rating": _so(p.get("average_rating")),
