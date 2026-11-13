@@ -166,6 +166,28 @@ def nightly_full_rescan() -> int:
         _release_lock("lock_f29_nightly_rescan")
 
 
+def market_price_crawl():
+    """F42: cào giá thị trường (Tiki) — 6:00 và 18:00 giờ VN. Khoá để nhiều tiến trình không cào trùng."""
+    if not _acquire_lock("lock_f42_market_crawl", ttl_seconds=3600):
+        print("[f42_crawl] Lock dang ban, bo qua luot nay.", flush=True)
+        return
+    try:
+        from app.services.f42.market_crawler import run_crawl
+        from app.services.f42.orchestrator import _get_data_db
+
+        db = _get_data_db()
+        if db is None:
+            print("[f42_crawl] Khong ket noi duoc MongoDB data, bo qua.", flush=True)
+            return
+        s = run_crawl(db)
+        print(f"[f42_crawl] {s['status']}: {s['keywords']} tu khoa, {s['items']} tin "
+              f"({s['valid_items']} hop le), luu {s['saved']}, loi {len(s['errors'])}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[f42_crawl] Loi: {type(e).__name__}: {e}", flush=True)
+    finally:
+        _release_lock("lock_f42_market_crawl")
+
+
 _scheduler = None
 
 
@@ -193,6 +215,14 @@ def start_scheduler():
         nightly_full_rescan,
         CronTrigger(hour=0, minute=0, timezone=VN_TZ),
         id="f29_nightly_rescan",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        market_price_crawl,
+        CronTrigger(hour="6,18", minute=0, timezone=VN_TZ),
+        id="f42_market_crawl",
         max_instances=1,
         coalesce=True,
         misfire_grace_time=3600,

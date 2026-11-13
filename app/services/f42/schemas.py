@@ -89,6 +89,8 @@ class PricingResult(BaseModel):
     detected_product: Optional[str] = None
     detected_brand: Optional[str] = None
     source_label: Optional[str] = None
+    # Google Trends: {keyword, momentum, recent_mean, prev_mean, direction}; None nếu không áp dụng
+    demand_signal: Optional[Dict[str, Any]] = None
 
 
 class TagItem(BaseModel):
@@ -137,6 +139,8 @@ class MetaResult(BaseModel):
 
 
 class UnifiedSuggestionResponse(BaseModel):
+    # Kết quả lọc tiêu đề seller: tiêu đề sạch, thuộc tính đã tách, cụm đã bỏ, vấn đề nên sửa
+    input_analysis: Dict[str, Any] = Field(default_factory=dict)
     # New standardized structure
     category: CategoryResult = Field(default_factory=CategoryResult)
     pricing: PricingResult = Field(default_factory=PricingResult)

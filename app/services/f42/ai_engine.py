@@ -18,17 +18,15 @@ Khả năng:
    - Bộ thẻ Tag xu hướng.
 """
 
-import json
 import logging
 import os
 import re
-import time
-import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from dotenv import load_dotenv
 
 from app.services.f42 import config
+from app.services.f42.gemini_client import generate_json
 from app.services.f42.vi_text import clean_tokens, normalize_nfc, strip_accents
 from app.services.f42.schemas import (
     ComparableItem,
@@ -195,60 +193,17 @@ Trả về DUY NHẤT một JSON hợp lệ (không markdown):
     "highlights": ["3-5 điểm, mỗi điểm truy ngược được về seller_input"],
     "usage_guide": "chỉ viết khi seller khai báo chất liệu, ngược lại null"
   }},
-  "tags": ["từ khóa tìm kiếm thực tế liên quan sản phẩm"],
+  "tags": ["5-8 thẻ ngắn 1-4 từ, người mua hay gõ để tìm ĐÚNG loại sản phẩm này (vd \"nến thơm\", \"nến thơm sáp đậu nành\"); không lặp nguyên tiêu đề, không ghi đời máy/số đo seller không nhắc"],
   "missing_info": ["..."],
   "warnings": ["..."]
 }}"""
 
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": api_key
-        }
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": config.LLM_TEMPERATURE,
-                "topP": config.LLM_TOP_P,
-                "maxOutputTokens": max(config.LLM_MAX_OUTPUT_TOKENS, 2048),
-                "responseMimeType": "application/json"
-            }
-        }
-
-        models_to_try = list(dict.fromkeys([config.LLM_MODEL, *config.LLM_FALLBACK_MODELS]))
-        deadline = time.time() + config.LLM_TIMEOUT_S * 1.5  # tổng thời gian chờ tối đa cho mọi model
-
-        for model in models_to_try:
-            remaining = deadline - time.time()
-            if remaining <= 1:
-                break
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers=headers,
-                    method="POST"
-                )
-                with urllib.request.urlopen(req, timeout=min(config.LLM_TIMEOUT_S, remaining)) as response:
-                    if response.status == 200:
-                        body = json.loads(response.read().decode("utf-8"))
-                        candidates = body.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            if parts:
-                                txt = parts[0].get("text", "").strip()
-                                # Clean markdown code fences if any
-                                if txt.startswith("```"):
-                                    txt = re.sub(r"^```[a-z]*\s*", "", txt)
-                                    txt = re.sub(r"\s*```$", "", txt)
-                                data = json.loads(txt)
-                                if isinstance(data, dict) and data.get("titles"):
-                                    return data
-            except Exception as exc:
-                logger.warning("f42.gemini_call_failed", extra={"model": model, "error": str(exc)})
-                continue
-
-        return None
+        models = [config.LLM_MODEL, *config.LLM_FALLBACK_MODELS]
+        return generate_json(
+            [{"text": prompt}], api_key, models, timeout_s=config.LLM_TIMEOUT_S,
+            temperature=config.LLM_TEMPERATURE, max_output_tokens=max(config.LLM_MAX_OUTPUT_TOKENS, 4096),
+            accept=lambda d: bool(d.get("titles")),
+        )
 
     # ------------------------------------------------------------------
     # 3. BỘ PHÂN TÍCH NGỮ NGHĨA TMĐT DỰ PHÒNG (KHI CHƯA KẾT NỐI GEMINI KEY)
