@@ -35,6 +35,11 @@ MATERIAL_KEYWORDS: List[str] = [
     "tơ tằm", "lụa", "canvas", "vải bố", "vải dù", "nhung", "ren", "lông vũ", "cashmere",
     # gỗ / tự nhiên
     "gỗ sồi", "gỗ óc chó", "gỗ thông", "gỗ cao su", "gỗ keo", "gỗ hương", "gỗ mun", "gỗ trắc",
+    "gỗ nghiến", "gỗ teak", "gỗ lim", "gỗ xoan", "gỗ cẩm", "gỗ walnut",
+    # sáp nến
+    "sáp đậu nành", "sáp ong", "sáp dừa", "sáp parafin", "parafin",
+    # nhựa/khác hay gặp
+    "melamine", "nhôm đúc", "gang đúc", "đá marble", "đá granite",
     "gỗ tràm", "gỗ mdf", "gỗ tự nhiên", "gỗ", "tre", "mây", "cói", "lục bình", "trầm hương",
     # gốm, đá, thủy tinh
     "gốm sứ", "gốm", "sứ", "thủy tinh", "pha lê", "đá cẩm thạch", "đá thạch anh", "đá tự nhiên",
@@ -188,16 +193,30 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
     m25, m50, m75 = est.p25, est.p50, est.p75  # phân vị thị trường thật, trước khi áp giá vốn
     p25, p50, p75 = _apply_cost_floor(m25, m50, m75, blank_cost, warnings, cfg)
 
+    if getattr(est, "match_note", None):
+        warnings.append(est.match_note)
     if est.confidence == "low":
         warnings.append(
-            "Các sản phẩm tìm được chưa thật giống hoặc giá phân tán rộng — hãy coi đây là mức tham khảo "
-            "và bổ sung tiêu đề cụ thể hơn (loại sản phẩm, thương hiệu, chất liệu, kích thước)."
+            "Các sản phẩm tìm được chưa thật giống hoặc giá chênh nhau nhiều, giá chỉ để tham khảo. "
+            "Ghi tên rõ hơn (loại sản phẩm, thương hiệu, chất liệu, kích thước) để có giá sát hơn."
         )
 
     n_live = sum(1 for c in est.comparables if c.source == "vietcraft")
+    n_sold = sum(1 for c in est.comparables if c.source == "vietcraft_sold" or (c.source == "vietcraft" and c.sold > 0))
+    n_fresh = sum(1 for c in est.comparables if c.source == "tiki_fresh")
     source_note = f"{est.n_used} sản phẩm tương tự"
+    notes = []
     if n_live:
-        source_note += f" (trong đó {n_live} sản phẩm đang bán trên sàn)"
+        notes.append(f"{n_live} sản phẩm đang bán trên sàn")
+    if n_sold:
+        notes.append(f"{n_sold} sản phẩm đã bán thành công trên sàn")
+    if n_fresh:
+        notes.append(f"{n_fresh} sản phẩm Tiki giá cập nhật trong 14 ngày, đã có người mua")
+    sold_total = sum(c.sold for c in est.comparables)
+    if sold_total:
+        notes.append(f"tổng đã bán {sold_total:,}".replace(",", "."))
+    if notes:
+        source_note += f" (trong đó {'; '.join(notes)})"
 
     parts = [f"Dựa trên {source_note}"]
     if est.detected_product:
@@ -215,7 +234,8 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
             title=c.title[:140],
             price=int(round(c.price)),
             similarity=round(c.similarity, 3),
-            source="Sàn VietCraft" if c.source == "vietcraft" else "Thị trường TMĐT"
+            source={"vietcraft": "Sàn VietCraft", "vietcraft_sold": "Sàn VietCraft (giá đã bán)",
+                    "tiki_fresh": "Tiki (giá mới cập nhật)"}.get(c.source, "Thị trường TMĐT")
         )
         for c in est.comparables[:8]
     ]
@@ -424,6 +444,48 @@ def fetch_live_listings(
             "materials": [m for m in (p.get("materials") or []) if isinstance(m, str)],
         })
     return rows
+
+
+SOLD_LOOKBACK_DAYS = 180
+
+
+def fetch_sold_items(db_live: Any, days: int = SOLD_LOOKBACK_DAYS) -> Dict[Any, Dict[str, Any]]:
+    """
+    Giá bán THẬT trên sàn: món hàng trong đơn đã giao thành công trong `days` ngày gần nhất.
+    Bỏ đơn giả lập (is_simulated), đơn chưa giao/huỷ và đơn đã hoàn tiền — chỉ giữ giá người mua
+    thực sự trả và giữ lại. Trả theo product_id: {title, price (giá niêm yết lúc bán, trung vị), qty}.
+    """
+    from datetime import datetime, timedelta, timezone
+    from statistics import median
+
+    if db_live is None:
+        return {}
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        rows = db_live["orders"].aggregate([
+            {"$match": {
+                "is_simulated": {"$ne": True},
+                "order_status": "DELIVERED",
+                "refund_status": {"$ne": "REFUNDED"},
+                "created_at": {"$gte": since},
+            }},
+            {"$unwind": "$items"},
+            {"$project": {"pid": "$items.product_id", "title": "$items.title",
+                          "price": "$items.retail_price", "qty": "$items.quantity"}},
+        ])
+        out: Dict[Any, Dict[str, Any]] = {}
+        for r in rows:
+            price = to_float_price(r.get("price"))
+            if not price or not r.get("pid"):
+                continue
+            e = out.setdefault(r["pid"], {"title": normalize_nfc(r.get("title") or ""), "prices": [], "qty": 0})
+            e["prices"].append(price)
+            e["qty"] += max(1, int(r.get("qty") or 1))
+        return {pid: {"title": e["title"], "price": float(median(e["prices"])), "qty": e["qty"]}
+                for pid, e in out.items()}
+    except Exception as exc:  # DB lỗi không được làm hỏng gợi ý giá
+        logger.warning("f42.fetch_sold_items_failed", extra={"error": str(exc)})
+        return {}
 
 
 def fetch_prices_from_db(

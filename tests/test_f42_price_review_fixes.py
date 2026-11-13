@@ -20,7 +20,9 @@ def _index():
     for i in range(6):
         rows.append(("fashion", f"Giày boots nam da lộn cao cổ mẫu {i}", 400_000 + i * 10_000))
         rows.append(("fashion", f"Áo đông xuân nam giữ nhiệt mẫu {i}", 70_000 + i * 1_000))
-        rows.append(("accessories", f"Đồng hồ nam dây da mặt tròn mẫu {i}", 900_000 + i * 20_000))
+        # mỗi tin một hãng như thực tế (6 tin chỉ khác "mẫu i" ở cuối giờ bị gộp là biến thể lặp lại)
+        brand = ["Casio", "Orient", "Citizen", "Seiko", "Tissot", "Fossil"][i]
+        rows.append(("accessories", f"Đồng hồ nam dây da {brand} mặt tròn", 900_000 + i * 20_000))
         rows.append(("bags", f"Balo laptop nam chống nước mẫu {i}", 300_000 + i * 5_000))
         rows.append(("shoes", f"Giày ABC thể thao mẫu {i}", 120_000 + i * 2_000))
     df = pd.DataFrame(rows, columns=["group", "title", "price"])

@@ -18,7 +18,7 @@ from pymongo import MongoClient
 from app.config import settings
 from app.services.f42 import config
 from app.services.f42.ai_engine import MarketAIAdvisor
-from app.services.f42.comparable_pricing import ComparableEstimate, ComparableIndex
+from app.services.f42.comparable_pricing import ComparableEstimate, ComparableIndex, _contains, _head_tokens, _prep
 from app.services.f42.content_validator import validate_content
 from app.services.f42.context_resolver import ContextResolver
 from app.services.f42.external_market import ExternalMarketProvider
@@ -27,6 +27,7 @@ from app.services.f42.pricing_engine import (
     detect_material,
     fetch_prices_from_db,
     pricing_from_comparables,
+    round_price,
 )
 from app.services.f42.vi_text import contains_phrase_lenient, strip_accents
 from app.services.f42.schemas import (
@@ -46,7 +47,11 @@ from app.services.f42.schemas import (
     UnifiedSuggestionResponse,
 )
 from app.services.f42.market_aggregator import MarketDataAggregator
+from app.services.f42.market_crawler import fetch_on_demand, record_seller_query
+from app.services.f42.trend_signal import apply_demand, demand_signal
+from app.services.f42.input_parser import ParsedInput, parse_seller_input
 from app.services.f42.tag_mining import fetch_tags_from_db
+from app.services.f42.tag_curator import curate_tags, normalize_tag
 
 logger = logging.getLogger(__name__)
 
@@ -187,11 +192,17 @@ def _resolve_pricing(
     blank_cost: float,
     target_margin: Optional[float],
     material: Optional[str],
+    has_model: bool = False,
 ) -> PricingResult:
     """Một đường định giá duy nhất cho mọi nhánh (có hay không có Gemini)."""
     # 1. Sản phẩm tương đồng
     if comp_est is not None and comp_est.usable and comp_est.p50 > 0 and len(comp_est.comparables) >= 2:
         return pricing_from_comparables(comp_est, blank_cost=blank_cost)
+
+    # Tên nêu mẫu cụ thể (OPPO Reno15 F, Vivobook 15) mà không có dữ liệu đúng mẫu: KHÔNG lấy giá "cùng tên
+    # trên sàn"/"cả danh mục" — các bước đó gộp mọi hãng (OPPO bị định giá 29 triệu theo iPhone 17, 18 Pro Max)
+    if has_model:
+        return compute_pricing([], blank_cost=blank_cost, target_margin=target_margin)
 
     # 2. Sản phẩm cùng tên trên sàn VietCraft
     prices = internal_market.get("prices") or []
@@ -204,7 +215,7 @@ def _resolve_pricing(
             res.mode = "market" if n >= config.MIN_SAMPLE_HIGH else "market_low_confidence"
             res.warnings = [w for w in res.warnings if "toàn bộ danh mục" not in w]
             if n < config.MIN_SAMPLE_HIGH:
-                res.warnings.append("Số mẫu ít, độ tin cậy thấp.")
+                res.warnings.append("Có ít sản phẩm để so sánh, giá chỉ để tham khảo.")
             res.explanation = res.explanation.replace(
                 "sản phẩm cùng danh mục trên sàn", "sản phẩm có tên tương tự đang bán trên sàn VietCraft"
             )
@@ -214,6 +225,38 @@ def _resolve_pricing(
     # 3. Cả danh mục trên sàn → 4. Cost-Plus → 5. Không gợi ý (compute_pricing tự rẽ nhánh)
     cat_prices = fetch_prices_from_db(category_id, db_live, material) if category_id and db_live is not None else []
     return compute_pricing(cat_prices, blank_cost=blank_cost, target_margin=target_margin)
+
+
+def _apply_quantity_and_condition(res: PricingResult, parsed: ParsedInput) -> None:
+    """Combo N: giá thị trường tính cho 1 sản phẩm rồi nhân N. Hàng cũ: dữ liệu là hàng mới → cảnh báo."""
+    if parsed.condition == "used":
+        res.warnings.append(next(i for i in parsed.issues if i.startswith("Hàng đã qua sử dụng")))
+    q = parsed.quantity
+    if q <= 1 or res.suggested_price <= 0 or res.method == "cost_plus":
+        return
+    unit = res.suggested_price
+    res.p25, res.p50, res.p75, res.p90 = (v * q for v in (res.p25, res.p50, res.p75, res.p90))
+    res.suggested_price = unit * q
+    res.suggested_range = PriceRange(low=res.suggested_range.low * q, high=res.suggested_range.high * q)
+    res.explanation = (res.explanation or "") + (
+        f" Đây là combo {q} sản phẩm: giá 1 sản phẩm khoảng {unit:,}đ × {q} = {unit * q:,}đ. "
+        "Combo thường được giảm nhẹ so với mua lẻ để khuyến khích mua nhiều.").replace(",", ".")
+
+
+def _apply_demand_signal(res: PricingResult, db_data: Any, title: str, blank_cost: float) -> None:
+    """Google Trends chỉ dịch giá đề xuất TRONG khoảng giá thị trường thật, không dùng cho Cost-Plus."""
+    if res.method not in ("comparables", "internal_similar", "category_market") or res.suggested_price <= 0:
+        return
+    signal = demand_signal(db_data, title)
+    if not signal:
+        return
+    out = apply_demand(res.p25, res.p50, res.p75, signal, round_price)
+    price = out["price"]
+    if blank_cost > 0:  # dịch xuống cũng không được bán dưới giá vốn × biên tối thiểu
+        price = max(price, round_price(blank_cost * config.COST_MIN_SUGGEST_RATIO))
+    res.suggested_price = price
+    res.explanation = (res.explanation or "") + out["note"]
+    res.demand_signal = {**signal, "direction": out["direction"]}
 
 
 _ENGINE_LABELS = {
@@ -228,6 +271,7 @@ _GROWTH_LABELS = {
     "google_trends": "Google Trends",
     "google_suggest": "Gợi ý Google",
     "ai": "AI gợi ý",
+    "detected": "Từ tên sản phẩm",
 }
 
 
@@ -251,22 +295,28 @@ class F42Orchestrator:
         categories = _get_categories(db_live)
         banned = _get_banned_keywords(db_live)
 
-        title_input = req.get_title_or_keywords()
+        # Lọc tiêu đề seller gõ trước khi dùng: bỏ emoji/quảng cáo, chuẩn hoá cách viết, tách thuộc tính
+        # (combo, hàng cũ, dung lượng, màu...) — chữ "giá rẻ, freeship" từng làm lệch kết quả so giá.
+        parsed = parse_seller_input(req.get_title_or_keywords(), req.get_material())
+        title_input = parsed.clean_title if parsed.raw_title else ""
         category_id_in = req.get_category_id()
         category_name_in = req.get_category_name()
         material_in = req.get_material()
         blank_cost = req.get_blank_cost()
         target_margin = req.get_target_margin()
-        extra_attr = req.extra_attributes or ""
+        extra_attr = "; ".join(x for x in (req.extra_attributes or "", parsed.attribute_text()) if x)
+        # Tiêu đề seller nhập = từ khóa cho lượt cào giá kế tiếp (lấp ngành hàng dữ liệu cũ còn thiếu)
+        record_seller_query(db_data, title_input)
 
         # Tự điền chất liệu nếu seller để trống nhưng tiêu đề có nêu rõ
         effective_material = material_in or detect_material(title_input)
 
-        combined_query = title_input
-        if effective_material and not contains_phrase_lenient(title_input, effective_material):
+        # So giá theo 1 sản phẩm (bỏ "combo 2", "cũ 99%"), không chèn nhãn thuộc tính vào câu tìm kiếm
+        combined_query = parsed.pricing_query
+        if effective_material and not contains_phrase_lenient(combined_query, effective_material):
             combined_query = f"{combined_query} {effective_material}".strip()
-        if extra_attr:
-            combined_query = f"{combined_query} {extra_attr}".strip()
+        if req.extra_attributes:
+            combined_query = f"{combined_query} {req.extra_attributes}".strip()
         seller_text = " ".join(x for x in (title_input, material_in, extra_attr, category_name_in or "") if x)
 
         # ---------------- Khối 0: dữ liệu ----------------
@@ -278,13 +328,24 @@ class F42Orchestrator:
         )
 
         comp_est: Optional[ComparableEstimate] = None
+        model_sig: List[str] = []
         try:
             index = ComparableIndex.get()
             if index is not None and combined_query:
                 index.refresh_live(db_live)
+                index.refresh_market(db_data)
                 comp_est = index.estimate(combined_query)
+                # Chưa có dữ liệu hoặc căn cứ yếu: cào Tiki ngay rồi tính lại. Tiêu đề nêu đúng mẫu
+                # (iPhone 18 Pro Max) thì tìm theo tên mẫu — "điện thoại iphone..." Tiki trả cả Realme, Redmi.
+                model_sig = index.model_signature(title_input)
+                search_term = " ".join(model_sig) or title_input
+                if (not comp_est.usable or comp_est.confidence == "low") and fetch_on_demand(db_data, search_term):
+                    index.invalidate_market()
+                    index.refresh_market(db_data)
+                    comp_est = index.estimate(combined_query)
         except Exception as exc:
-            logger.warning("f42.comparables_failed", extra={"error": str(exc)})
+            # In cả lý do ra console: chỉ ghi tên sự kiện thì không ai biết vì sao giá ra "chưa đủ dữ liệu"
+            logger.warning("f42.comparables_failed: %s: %s", type(exc).__name__, exc, extra={"error": str(exc)})
         detected_product = comp_est.detected_product if comp_est else None
         detected_brand = comp_est.detected_brand if comp_est else None
 
@@ -343,13 +404,15 @@ class F42Orchestrator:
         try:
             pricing_res = _resolve_pricing(
                 comp_est, internal_market, effective_category_id, db_live,
-                blank_cost, target_margin, effective_material or None,
+                blank_cost, target_margin, effective_material or None, has_model=bool(model_sig),
             )
         except Exception as exc:
             logger.warning("f42.pricing_failed", extra={"error": str(exc)})
             pricing_res = compute_pricing([], blank_cost=blank_cost, target_margin=target_margin)
         pricing_res.detected_product = pricing_res.detected_product or detected_product
         pricing_res.detected_brand = pricing_res.detected_brand or detected_brand
+        _apply_demand_signal(pricing_res, db_data, title_input, blank_cost)
+        _apply_quantity_and_condition(pricing_res, parsed)
 
         # ---------------- Khối 3: tag ----------------
         try:
@@ -379,20 +442,35 @@ class F42Orchestrator:
             pass
         back: List[TagItem] = []
         try:
-            for it in ExternalMarketProvider.get_lifted_keywords(effective_category_name, combined_query, top_n=6):
-                _add(back, it.get("keyword", ""), score=float(it.get("lift", 1.0)), freq=int(it.get("freq", 0)), source="external_market")
+            # Từ khoá bán chạy của CẢ nhóm ngành (vd "accessories" = phụ kiện thời trang) chỉ giữ khi nói
+            # đúng loại sản phẩm — trước đây "Ốp lưng điện thoại" nhận thẻ "Tập Khăn", "Bdn01 54X54Cm".
+            head = " ".join(_head_tokens(_prep(title_input or "")))
+            for it in ExternalMarketProvider.get_lifted_keywords(effective_category_name, combined_query, top_n=12):
+                kw = it.get("keyword", "")
+                if head and _contains(_prep(kw), head):
+                    _add(back, kw, score=float(it.get("lift", 1.0)), freq=int(it.get("freq", 0)), source="external_market")
         except Exception:
             pass
         for kw in keyword_data.get("trend_keywords", [])[:5]:
             _add(back, kw, score=1.0, freq=0, source="google_trends")
         for kw in keyword_data.get("suggest_keywords", [])[:5]:
             _add(back, kw, score=0.5, freq=0, source="google_suggest")
-        tag_res.items = front + tag_res.items + back
+        detected_items = [TagItem(tag=t, score=1.0, freq=0, source="detected")
+                          for t in (detected_product, effective_material) if t]
+        all_items = detected_items + front + tag_res.items + back
 
-        suggested_tags_list = [item.tag for item in tag_res.items]
-        for extra_tag in (detected_product, effective_material):
-            if extra_tag and _dedup_key(extra_tag) not in {_dedup_key(t) for t in suggested_tags_list}:
-                suggested_tags_list.insert(0, extra_tag)
+        # Chỉ giữ thẻ ngắn, đúng sản phẩm seller đăng (bỏ cụm cắt dở, thẻ toàn sàn lạc loại, cụm Google dài)
+        kept = curate_tags([it.tag for it in all_items], title_input, product=detected_product,
+                           material=effective_material, brand=pricing_res.detected_brand, banned=banned)
+        by_key = {}
+        for it in all_items:
+            by_key.setdefault(_prep(normalize_tag(it.tag)), it)
+        tag_res.items = []
+        for t in kept:
+            it = by_key.get(_prep(t)) or TagItem(tag=t, score=1.0, freq=0, source="detected")
+            it.tag = t
+            tag_res.items.append(it)
+        suggested_tags_list = list(kept)
 
         # ---------------- Khối 4: nội dung ----------------
         if ai_data:
@@ -456,7 +534,7 @@ class F42Orchestrator:
             "market_sample_count": sample_n,
             "notice": (
                 "" if is_ai_live
-                else "Tiêu đề và mô tả đang dùng mẫu cơ bản (AI viết nội dung chưa khả dụng); hãy bổ sung chi tiết trước khi đăng."
+                else "Tên và mô tả đang ở dạng cơ bản, bạn hãy bổ sung chi tiết trước khi đăng."
             ),
         }
 
@@ -465,7 +543,7 @@ class F42Orchestrator:
             "recommended_markup": rec_markup,
             "price_range": {
                 "low": pricing_res.suggested_range.low,
-                "median": rec_price,
+                "median": pricing_res.p50 or rec_price,  # trung vị THẬT; giá đề xuất có thể lệch do Trends
                 "high": pricing_res.suggested_range.high,
                 "premium": pricing_res.p90 or pricing_res.suggested_range.high,
             },
@@ -477,12 +555,13 @@ class F42Orchestrator:
             "warnings": pricing_res.warnings,
             "detected_product": pricing_res.detected_product,
             "detected_brand": pricing_res.detected_brand,
+            "demand_signal": pricing_res.demand_signal,
             "comparables": [c.model_dump() for c in pricing_res.comparables],
             "market_signals": keyword_data.get("search_signals", []),
             "evidence_stats": {
                 "sample_size": sample_n,
                 "p25": pricing_res.suggested_range.low,
-                "p50": rec_price,
+                "p50": pricing_res.p50 or rec_price,
                 "p75": pricing_res.suggested_range.high,
                 "p90": pricing_res.p90 or pricing_res.suggested_range.high,
                 "blank_cost": int(blank_cost) if blank_cost > 0 else 0,
@@ -520,6 +599,7 @@ class F42Orchestrator:
         )
 
         return UnifiedSuggestionResponse(
+            input_analysis=parsed.to_dict(),
             category=category_res,
             pricing=pricing_res,
             tags=tag_res,
