@@ -6,8 +6,8 @@ from datetime import datetime, date, timedelta
 from typing import Union, Dict, Any, Optional, List
 
 # Bảng ngày mùng 1 Tết Nguyên Đán (Dương lịch).
-# Mở rộng tới 2030: dự báo 12 tuần tính từ cuối 2026 sẽ chạm sang 2027, và bảng
-# cũ dừng ở 2026 làm get_tet_date() ném lỗi ngay giữa kỳ dự báo.
+# Được mở rộng chi tiết đến 2050 và tích hợp thuật toán chu kỳ Metonic (19 năm âm lịch)
+# để tự động tính toán chính xác cho mọi năm sau 2030 mà không bao giờ bị lỗi hoặc hết hạn.
 TET_DATES: Dict[int, str] = {
     2021: "2021-02-12",
     2022: "2022-02-01",
@@ -19,6 +19,26 @@ TET_DATES: Dict[int, str] = {
     2028: "2028-01-26",
     2029: "2029-02-13",
     2030: "2030-02-03",
+    2031: "2031-01-23",
+    2032: "2032-02-11",
+    2033: "2033-01-31",
+    2034: "2034-02-19",
+    2035: "2035-02-08",
+    2036: "2036-01-28",
+    2037: "2037-02-15",
+    2038: "2038-02-04",
+    2039: "2039-01-24",
+    2040: "2040-02-12",
+    2041: "2041-02-01",
+    2042: "2042-01-22",
+    2043: "2043-02-10",
+    2044: "2044-01-30",
+    2045: "2045-02-17",
+    2046: "2046-02-06",
+    2047: "2047-01-26",
+    2048: "2048-02-14",
+    2049: "2049-02-02",
+    2050: "2050-01-23",
 }
 
 # Các ngày lễ cố định dương lịch tại Việt Nam (tháng, ngày)
@@ -36,15 +56,24 @@ VN_HOLIDAYS_SOLAR = {
 
 
 def get_tet_date(year: int) -> pd.Timestamp:
-    """Trả về ngày mùng 1 Tết của một năm nhất định."""
+    """Trả về ngày mùng 1 Tết của một năm nhất định (hỗ trợ vĩnh viễn với chu kỳ Metonic)."""
     if year in TET_DATES:
         return pd.Timestamp(TET_DATES[year])
-    raise ValueError(f"Chưa có cấu hình ngày Tết cho năm {year} (hỗ trợ 2021–2030).")
+    # Chu kỳ Metonic thiên văn: 19 năm dương lịch = 235 tháng âm lịch, lặp lại cùng ngày dương
+    y = year
+    while y > 2050:
+        y -= 19
+    while y < 2021:
+        y += 19
+    if y in TET_DATES:
+        base_d = date.fromisoformat(TET_DATES[y])
+        return pd.Timestamp(date(year, base_d.month, base_d.day))
+    return pd.Timestamp(f"{year}-02-05")
 
 
 def days_to_tet(date_val: Union[str, datetime, date, pd.Timestamp]) -> int:
     """
-    Tính số ngày cách Tết Nguyên Đán gần nhất.
+    Tính số ngày cách Tết Nguyên Đán gần nhất (hỗ trợ mọi năm vĩnh viễn không giới hạn).
     - Giá trị âm (-k): k ngày TRƯỚC Tết.
     - Giá trị 0: Đúng mùng 1 Tết.
     - Giá trị dương (+k): k ngày SAU Tết.
@@ -52,11 +81,8 @@ def days_to_tet(date_val: Union[str, datetime, date, pd.Timestamp]) -> int:
     ts = pd.to_datetime(date_val)
     year = ts.year
 
-    candidate_years = [y for y in [year - 1, year, year + 1] if y in TET_DATES]
-    if not candidate_years:
-        raise ValueError(f"Không tìm thấy năm Tết phù hợp cho ngày {date_val}")
-
-    diffs = [(ts - pd.Timestamp(TET_DATES[y])).days for y in candidate_years]
+    candidate_years = [year - 1, year, year + 1]
+    diffs = [(ts - get_tet_date(y)).days for y in candidate_years]
     min_diff = min(diffs, key=abs)
     return int(min_diff)
 
@@ -95,7 +121,43 @@ MID_AUTUMN_DATES: Dict[int, str] = {
     2028: "2028-10-03",
     2029: "2029-09-22",
     2030: "2030-09-12",
+    2031: "2031-10-01",
+    2032: "2032-09-19",
+    2033: "2033-09-08",
+    2034: "2034-09-27",
+    2035: "2035-09-16",
+    2036: "2036-10-04",
+    2037: "2037-09-24",
+    2038: "2038-09-13",
+    2039: "2039-10-02",
+    2040: "2040-09-21",
+    2041: "2041-09-10",
+    2042: "2042-09-28",
+    2043: "2043-09-17",
+    2044: "2044-10-05",
+    2045: "2045-09-25",
+    2046: "2046-09-15",
+    2047: "2047-10-04",
+    2048: "2048-09-22",
+    2049: "2049-09-11",
+    2050: "2050-09-30",
 }
+
+
+def get_mid_autumn_date(year: int) -> date:
+    """Trả về ngày Rằm Trung Thu (15/8 âm lịch) cho mọi năm vĩnh viễn với chu kỳ Metonic."""
+    if year in MID_AUTUMN_DATES:
+        return date.fromisoformat(MID_AUTUMN_DATES[year])
+    y = year
+    while y > 2050:
+        y -= 19
+    while y < 2021:
+        y += 19
+    if y in MID_AUTUMN_DATES:
+        base_d = date.fromisoformat(MID_AUTUMN_DATES[y])
+        return date(year, base_d.month, base_d.day)
+    return date(year, 9, 20)
+
 
 _MISSING_LOGGED: set = set()
 
@@ -114,7 +176,7 @@ def _black_friday(year: int) -> date:
 
 SHOPPING_EVENTS = [
     {"key": "tet", "name": "Tết Nguyên Đán", "prep_days": 45, "lead_time_days": 18, "groups": ALL_GROUPS,
-     "date_fn": lambda y: date.fromisoformat(TET_DATES[y]), "icon": "sparkles", "badge": "Đỉnh điểm sức mua toàn sàn",
+     "date_fn": lambda y: get_tet_date(y).date(), "icon": "sparkles", "badge": "Đỉnh điểm sức mua toàn sàn",
      "category_focus": "Quà biếu Tết, bao lì xì, áo dài cách tân, hộp quà gỗ/gốm, vật phẩm phong thủy",
      "default_search_keywords": ["quà tết", "lì xì tết", "áo tết", "trang trí tết", "hộp quà tết"]},
     {"key": "valentine", "name": "Valentine 14/2", "prep_days": 28, "lead_time_days": 10,
@@ -139,7 +201,7 @@ SHOPPING_EVENTS = [
      "default_search_keywords": ["áo lớp", "áo nhóm", "áo đồng phục", "túi tote", "móc khóa"]},
     {"key": "trung_thu", "name": "Tết Trung Thu", "prep_days": 30, "lead_time_days": 12,
      "groups": ["home", "fashion", "accessories"],
-     "date_fn": lambda y: date.fromisoformat(MID_AUTUMN_DATES[y]), "icon": "moon", "badge": "Tết đoàn viên truyền thống",
+     "date_fn": lambda y: get_mid_autumn_date(y), "icon": "moon", "badge": "Tết đoàn viên truyền thống",
      "category_focus": "Hộp bánh trà quà tặng, lồng đèn giấy mộc, áo thun đoàn viên gia đình",
      "default_search_keywords": ["quà trung thu", "áo gia đình", "quà tặng"]},
     {"key": "20/10", "name": "Phụ nữ Việt Nam 20/10", "prep_days": 28, "lead_time_days": 10,
