@@ -1,5 +1,6 @@
 """F42 Smart Product Suggestion Service (Data-Driven Refactor)."""
 
+# pyrefly: ignore[missing-import]
 from app.services.f42.orchestrator import F42Orchestrator
 
 __all__ = ["F42Orchestrator"]
