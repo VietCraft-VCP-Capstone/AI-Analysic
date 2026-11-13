@@ -49,8 +49,7 @@ def tag_gap(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
         meta["unlock"] = {"requirement": "sản phẩm đối thủ cùng danh mục", "unit": "sản phẩm",
                           "current": len(doi_thu), "target": TOI_THIEU_DOI_THU}
         return insufficient(
-            f"Danh mục {ten_dm.get(cat) or cat} chỉ có {len(doi_thu)} sản phẩm của shop khác, "
-            f"cần tối thiểu {TOI_THIEU_DOI_THU} mới kết luận được", meta)
+            f"Cần tối thiểu {TOI_THIEU_DOI_THU} sản phẩm đối thủ trong danh mục để phân tích từ khóa.", meta)  # MSG141
 
     dan_dau = doi_thu[:SO_DAN_DAU]
     tag_toi = {t for r in trong_cat if r["shop_id"] == shop_id for t in r.get("tags") or []}
