@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.v1._competitor_live import dong_live, mo_ta_live, ten_tag_live, theo_doi_live
 from app.api.v1._doi_thu_ai import gia_de_xuat, may_giong
-from app.api.v1._doi_thu_ke_hoach import gom_su_that, lap_ke_hoach
+from app.api.v1._doi_thu_ke_hoach import gom_su_that, ke_hoach_luat
 from app.api.v1._live import la_shop_live, san_pham_live
 from app.api.v1._template import CurrentShop, build_meta, insufficient, ok
 from app.api.v1.f32_competitors import competitors
@@ -37,5 +37,5 @@ def competitor_brief(shop_id: str = CurrentShop):
                      _data(lambda: tag_gap(shop_id=shop_id, categoryId=None)),
                      gia, _data(lambda: theo_doi_live(shop_id, TOI_DA)))
     meta["sample_size"] = len(su)
-    return ok({**lap_ke_hoach(shop_id, su), "facts_count": len(su),
+    return ok({"actions": ke_hoach_luat(su), "facts_count": len(su),
                "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")}, meta)

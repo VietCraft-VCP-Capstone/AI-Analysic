@@ -1,23 +1,13 @@
-import json
-import os
-import re
-import time
-import urllib.request
-from typing import Any, Callable, Dict, List, Optional, Tuple
+"""Kế hoạch hành động: gom sự thật đã tính ở F32–F36 rồi lập việc theo luật.
+Không dùng mô hình ngôn ngữ: cùng số liệu luôn ra cùng kế hoạch, mỗi việc chỉ ra được luật và con số làm căn cứ."""
+from typing import Any, Dict, List, Optional
 
 from app.api.v1._doi_thu_toan_canh import vung_ban_chay
 
 TOI_DA_VIEC = 10      # trang chia 5 việc mỗi trang, trang đầu vẫn là 5 việc gấp nhất
 MOI_LOAI = 2          # mỗi loại việc tối đa 2 dòng để kế hoạch không toàn một việc
-CACHE_GIAY = 1800
 THU_TU_MUC = {"gap": 0, "quan_trong": 1, "nen_lam": 2, "duy_tri": 3}
 VUOT_VUNG_GIA = 1.05  # giá thấp nhất của bạn vượt quá 5% trên vùng bán chạy mới nhắc
-MO_HINH_CLAUDE = os.getenv("COMPETITOR_BRIEF_MODEL", "claude-sonnet-5-5")
-
-
-def _so(text: str) -> List[int]:
-    """Các con số trong câu, bỏ dấu phân cách nghìn: '159.000đ' -> 159000."""
-    return [int(re.sub(r"[.,\s]", "", m)) for m in re.findall(r"\d[\d.,]*\d|\d", text)]
 
 
 def _tien(v: Optional[float]) -> str:
@@ -187,85 +177,3 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if len(viec) == TOI_DA_VIEC:
             break
     return viec
-
-
-def _loi_nhac(su: List[Dict[str, Any]]) -> str:
-    return ("Bạn là trợ lý cho người bán mới trên sàn thương mại điện tử VietCraft. Dưới đây là các SỰ THẬT đã được hệ "
-            f"thống tính sẵn về đối thủ của shop (JSON). Hãy viết tối đa {TOI_DA_VIEC} việc nên làm trong tuần này, xếp "
-            "việc quan trọng nhất lên đầu, bằng tiếng Việt dễ hiểu, không dùng thuật ngữ. CHỈ dùng con số có trong dữ liệu, "
-            "không suy ra số mới, không bịa. Mỗi việc ghi `fact` là số thứ tự của sự thật làm căn cứ. Trả về DUY NHẤT "
-            'một JSON dạng {"actions":[{"fact":0,"action":"việc cần làm","why":"vì sao, có số liệu"}]}.\n\nSỰ THẬT:\n'
-            + json.dumps([{"fact": i, **f} for i, f in enumerate(su)], ensure_ascii=False))
-
-
-def _goi(url: str, body: Dict, headers: Dict[str, str], lay: Callable[[Dict], str]) -> Optional[str]:
-    try:
-        req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"),
-                                     headers={"Content-Type": "application/json", **headers}, method="POST")
-        # 12s để cả lượt (tính sự thật ~4s + LLM) vẫn dưới timeout 20s của BE gateway.
-        with urllib.request.urlopen(req, timeout=12) as r:
-            return lay(json.loads(r.read().decode("utf-8")))
-    except Exception:
-        return None
-
-
-def goi_llm(loi_nhac: str) -> Tuple[Optional[str], Optional[str]]:
-    """(văn bản, nhà cung cấp) từ khoá đầu tiên có trong môi trường; không có khoá hoặc lỗi thì (None, None)."""
-    if os.getenv("ANTHROPIC_API_KEY"):
-        return _goi("https://api.anthropic.com/v1/messages",
-                    {"model": MO_HINH_CLAUDE, "max_tokens": 1200, "messages": [{"role": "user", "content": loi_nhac}]},
-                    {"x-api-key": os.environ["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01"},
-                    lambda b: b["content"][0]["text"]), f"anthropic/{MO_HINH_CLAUDE}"
-    khoa = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if khoa:
-        m = "gemini-3.5-flash"                         # cùng họ mô hình service mùa vụ của nhóm đang dùng
-        return _goi(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={khoa}",
-                    {"contents": [{"parts": [{"text": loi_nhac}]}], "generationConfig": {"temperature": 0.3}},
-                    {}, lambda b: b["candidates"][0]["content"]["parts"][0]["text"]), f"gemini/{m}"
-    if os.getenv("OPENAI_API_KEY"):
-        return _goi("https://api.openai.com/v1/chat/completions",
-                    {"model": "gpt-4o-mini", "temperature": 0.3, "messages": [{"role": "user", "content": loi_nhac}]},
-                    {"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
-                    lambda b: b["choices"][0]["message"]["content"]), "openai/gpt-4o-mini"
-    return None, None
-
-
-def loc_viec_llm(van_ban: str, su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Đọc JSON của LLM; bỏ việc nào có con số không nằm trong sự thật (chống bịa số)."""
-    m = re.search(r"\{.*\}", van_ban or "", re.S)
-    try:
-        viec = json.loads(m.group(0))["actions"] if m else []
-    except (ValueError, KeyError, TypeError):
-        return []
-    # Mã shop/sản phẩm có chữ số, bỏ ra để không vô tình cho phép số lạ; 0–10 cho "5 việc", "7 ngày".
-    so_lieu = [{k: v for k, v in f.items() if not k.endswith("_id")} for f in su]
-    cho_phep = set(_so(json.dumps(so_lieu, ensure_ascii=False))) | set(range(11))
-    ra = []
-    for v in viec[:TOI_DA_VIEC]:
-        if not isinstance(v, dict) or not v.get("action"):
-            continue
-        i = v.get("fact")
-        # Không chỉ ra được sự thật làm căn cứ thì không biết mức ưu tiên, và cũng không chắc là có căn cứ: bỏ.
-        if not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < len(su):
-            continue
-        cau = f"{v.get('action', '')} {v.get('why', '')}"
-        if all(n in cho_phep for n in _so(cau)):
-            ra.append({"action": str(v["action"]), "why": str(v.get("why") or ""), "link": None, "priority": _muc(su[i])})
-    return sorted(ra, key=lambda x: THU_TU_MUC[x["priority"]])
-
-
-_CACHE: Dict[str, Tuple[float, str, Dict[str, Any]]] = {}
-
-
-def lap_ke_hoach(shop_id: str, su: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """LLM nếu có khoá và trả lời qua được bộ lọc số; không thì kế hoạch theo luật. Lưu đệm theo shop 30 phút."""
-    khoa = json.dumps(su, ensure_ascii=False, sort_keys=True)
-    co = _CACHE.get(shop_id)
-    if co and co[1] == khoa and time.time() - co[0] < CACHE_GIAY:
-        return co[2]
-    van_ban, nguon = goi_llm(_loi_nhac(su)) if su else (None, None)
-    viec = loc_viec_llm(van_ban, su) if van_ban else []
-    kq = {"source": "llm", "provider": nguon, "actions": viec} if viec else \
-         {"source": "rules", "provider": None, "actions": ke_hoach_luat(su)}
-    _CACHE[shop_id] = (time.time(), khoa, kq)
-    return kq

@@ -549,14 +549,12 @@ từ khoá ≥ 2 sản phẩm giống dùng, mẫu gần như trùng hàng của
 đánh giá dồn về top 5, thời gian phản hồi, đối thủ trực tiếp chưa theo dõi, lấy từ `rival_shops_by_category.all`) rồi lập tối đa 10 việc,
 mỗi loại tối đa 2 (FE chia 5 việc mỗi trang).
 
-`data`: `{source: rules|llm, provider (vd "anthropic/claude-sonnet-5-5") | null, actions[{action, why, link | null, priority}],
-facts_count, generated_at}`. Có `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` thì mô hình ngôn ngữ viết lại
-câu chữ (`COMPETITOR_BRIEF_MODEL` đổi mô hình Claude); việc nào có con số không nằm trong sự thật bị bỏ, không còn việc
-nào thì dùng kế hoạch theo luật. Lưu đệm 30 phút theo shop, tự làm mới khi sự thật đổi.
+`data`: `{actions[{action, why, link | null, priority}], facts_count, generated_at}`. Kế hoạch lập hoàn toàn theo luật
+(14/11/2026 bỏ nhánh mô hình ngôn ngữ cùng các trường `source`, `provider`): cùng số liệu luôn ra cùng kế hoạch, mỗi việc
+có link tới đúng phần của trang. Tính lại mỗi lần gọi, không lưu đệm.
 `priority`: `gap` (hàng mới cạnh tranh cao, mẫu gần như trùng hàng của mình) · `quan_trong` (giá lệch, giá ngoài vùng bán
 chạy, đối thủ tăng tốc, hàng mới cạnh tranh vừa) · `nen_lam` (từ khoá, shop cùng phân khúc đáng tham khảo, đánh giá, theo dõi
-shop) · `duy_tri` (điểm mạnh nên giữ, vd thời gian phản hồi nhanh nhất danh mục); `actions` luôn xếp từ `gap` tới `duy_tri`. Mô hình ngôn ngữ phải ghi `fact` là số
-thứ tự sự thật làm căn cứ cho từng việc; việc không chỉ ra được sự thật bị bỏ.
+shop) · `duy_tri` (điểm mạnh nên giữ, vd thời gian phản hồi nhanh nhất danh mục); `actions` luôn xếp từ `gap` tới `duy_tri`.
 
 ---
 
