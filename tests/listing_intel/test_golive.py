@@ -94,11 +94,18 @@ def test_peer_heads_capped_most_recent(env, monkeypatch):
 def test_suggestions_only_lexicon_or_approved():
     junk = ("mrm", "shopn6", "nhẹ duwa", "duwa hàng", "bụi leather", "nắng chống", "vali áo", "nam tính")
     lift = {"fashion": {**{t: 1.2 for t in junk}, "cotton": 0.5, "basic": 0.4, "xanh": 0.2, "len": -0.3}}
-    _, _, sugg = tag_report(["áo"], "áo khoác", "fashion", lift, set(), set(), None, None)
+    _, _, sugg = tag_report(["áo"], "áo khoác", "fashion", lift, set(), set(), None, None, facts="vải cotton màu xanh")
     assert [s["tag"] for s in sugg] == ["cotton", "xanh"]
     _, _, sugg = tag_report([], "áo", "fashion", lift, set(), set(), None, None, approved={"Basic"})
-    assert [s["tag"] for s in sugg] == ["cotton", "basic", "xanh"]
+    assert [s["tag"] for s in sugg] == ["basic"]
     assert tag_report(["áo"], "áo", "fashion", lift, set(), set(), None, None, suggest=False)[2] == []
+
+
+def test_approved_product_type_tags_not_suggested_to_other_products():
+    lift = {"fashion": {"quần": 0.9, "chân váy": 0.8, "sang trọng": 0.5}}
+    approved = {"quần", "chân váy", "sang trọng"}
+    _, _, sugg = tag_report([], "Áo thun nam cotton", "fashion", lift, set(), set(), None, None, approved=approved)
+    assert [s["tag"] for s in sugg] == ["sang trọng"]
 
 
 def test_weekly_series_caches_empty_then_uses_snapshot(monkeypatch, tmp_path):

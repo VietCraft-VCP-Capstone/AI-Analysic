@@ -1,7 +1,9 @@
-from app.core.listing_intel.lexicon import attributes
+from app.core.listing_intel.lexicon import materials as find_materials
 from app.core.listing_intel.normalize import fold, norm
 
 NEGATIONS = {"không", "ko", "chẳng", "chả", "no", "not", "non", "khong", "chang", "cha"}
+WEAVES = {"thun", "ren", "kaki", "jean", "denim", "nhung", "voan", "chiffon", "kate", "canvas", "nỉ", "dạ", "da pu", "simili"}
+FIBERS = {"cotton", "polyester", "spandex", "lụa", "len", "linen", "lanh", "đũi"}
 
 
 def _is_negated(tokens: list[str], idx: int) -> bool:
@@ -9,12 +11,49 @@ def _is_negated(tokens: list[str], idx: int) -> bool:
     return any(w in NEGATIONS or fold(w) in NEGATIONS for w in preceding)
 
 
+def _declared(product: dict) -> frozenset:
+    raw = product.get("materials")
+    raw = [raw] if isinstance(raw, str) else raw if isinstance(raw, list) else []
+    declared = [m for m in raw if isinstance(m, str) and m.strip()]
+    if not declared:
+        return frozenset()
+    text = f" {norm(' , '.join(declared))} "
+    exact = [t for t in find_materials(text) if f" {norm(t)} " in text]
+    return frozenset(exact or [norm(m) for m in declared])
+
+
+def _titled(product: dict) -> frozenset:
+    title = product.get("title")
+    return frozenset(find_materials(title)) if isinstance(title, str) else frozenset()
+
+
+def _compatible(a: str, b: str) -> bool:
+    wa, wb = set(fold(a).split()), set(fold(b).split())
+    if wa <= wb or wb <= wa:
+        return True
+    return (a in WEAVES and b in FIBERS) or (a in FIBERS and b in WEAVES)
+
+
+def _conflict(declared: frozenset, titled: frozenset) -> bool:
+    return bool(declared and titled and not any(_compatible(d, t) for d in declared for t in titled))
+
+
+def material_conflict(product: dict) -> tuple[list[str], list[str]] | None:
+    declared, titled = _declared(product), _titled(product)
+    return (sorted(declared), sorted(titled)) if _conflict(declared, titled) else None
+
+
+def materials_of(product: dict) -> frozenset:
+    declared, titled = _declared(product), _titled(product)
+    return frozenset() if _conflict(declared, titled) else declared or titled
+
+
 def has_material(product: dict) -> bool:
     materials = product.get("materials")
     if isinstance(materials, list) and any(isinstance(m, str) and m.strip() for m in materials):
         return True
     text = " ".join(v for v in (product.get("title"), product.get("description")) if isinstance(v, str))
-    found = attributes(text).get("material") or []
+    found = find_materials(text)
     if not found:
         return False
     tokens = norm(text).split()

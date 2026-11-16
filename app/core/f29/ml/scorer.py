@@ -118,6 +118,7 @@ def score_frame(df, product_id):
     x = df.loc[[hit[0]], cols].astype(float).reset_index(drop=True)
     return {
         "product_id": product_id,
+        "method": "model",
         "score": round(float(pct) * 100),
         "probability": round(float(p), 3),
         "peer_group": group,

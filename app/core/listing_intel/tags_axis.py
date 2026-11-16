@@ -9,6 +9,10 @@ from .normalize import fold, norm
 WEIGHTS = {"lift": 0.35, "trend": 0.25, "cos": 0.20, "attr": 0.20}
 ATTR_GROUPS = ("material", "occasion", "use")
 SUGGEST_GROUPS = ("material", "occasion", "use", "color")
+FACT_GROUPS = ("material", "color")
+PRODUCT_HEADS = tuple(fold(h) for h in (
+    "áo", "quần", "váy", "chân váy", "đầm", "set", "đồ bộ", "giày", "dép", "túi", "ví", "balo", "mũ", "nón", "khăn",
+    "thắt lưng", "vòng", "nhẫn", "dây chuyền", "bông tai", "đồng hồ", "kính", "tranh", "ly", "cốc", "bình", "phụ kiện"))
 GROUP_LABEL = {"fashion": "Thời trang", "bags": "Túi xách", "shoes": "Giày dép", "accessories": "Phụ kiện",
                "home": "Đồ gia dụng", "sport": "Thể thao"}
 
@@ -29,18 +33,32 @@ def _in_lexicon(term) -> bool:
     return norm(term) in {norm(h) for g in SUGGEST_GROUPS for h in found[g]}
 
 
+@cache
+def _fact_term(term) -> bool:
+    found = attributes(term)
+    return norm(term) in {norm(h) for g in FACT_GROUPS for h in found[g]}
+
+
+def _product_type(term) -> bool:
+    folded = fold(term)
+    return any(folded == h or folded.startswith(f"{h} ") for h in PRODUCT_HEADS)
+
+
 def suggestible(term, approved_norm=frozenset()) -> bool:
-    return norm(term) in approved_norm or _in_lexicon(term)
+    return _in_lexicon(term) or (norm(term) in approved_norm and not _product_type(term))
 
 
-def _suggest(group, table, title, folded_tags, approved):
+def _suggest(group, table, title, folded_tags, approved, facts=""):
     text = "|".join(f" {x} " for x in [fold(title), *folded_tags])
+    known = f" {fold(f'{title} {facts}')} "
     approved_norm = {norm(a) for a in approved}
     ranked, label = sorted(table.items(), key=lambda kv: -kv[1]), GROUP_LABEL.get(group, group)
     picks = (
-        {"tag": t, "reason": f"Từ khoá nổi bật ở sản phẩm bán chạy nhóm {label} (độ lift {v:.2f})".replace(".", ",")}
+        {"tag": t, "kind": "fact" if _fact_term(t) else "context",
+         "reason": f"Từ khoá nổi bật ở sản phẩm bán chạy nhóm {label} (độ lift {v:.2f})".replace(".", ",")}
         for t, v in ranked
         if v > 0 and len(t.split()) <= 3 and f" {fold(t)} " not in text and suggestible(t, approved_norm)
+        and (not _fact_term(t) or f" {fold(t)} " in known)
     )
     return list(islice(picks, 3))
 
@@ -58,12 +76,12 @@ def _mean_cos(tag_vecs, ref_vec):
 
 
 def tag_report(tags, title, group, lift, trend_terms, pending, tag_vecs, ref_vec,
-               approved=frozenset(), suggest=True):
+               approved=frozenset(), suggest=True, facts=""):
     table = (lift or {}).get(group)
     folded = [fold(t) for t in tags]
     pend = {fold(p) for p in pending}
     trend = {fold(t) for t in trend_terms}
-    suggestions = _suggest(group, table, title, folded, approved) if table and suggest else []
+    suggestions = _suggest(group, table, title, folded, approved, facts) if table and suggest else []
     if not tags:
         return 0.0, [], suggestions
     seen, verdicts, lifts, trending = set(), [], [], []

@@ -2,8 +2,36 @@ from typing import Any, Dict, Optional
 from bson import ObjectId
 import numpy as np
 
+from app.api.v1._live import LOC_SP_THAT
+from app.core.f29 import weights
 from app.core.f29.calculator import HealthScoreCalculator
 from app.core.f29.ml.scorer import load_model, _model_card
+
+
+LEVERS = {"image": "photos", "description": "description_words", "tags": "tags"}
+
+
+def _sigmoid(x: float) -> float:
+    return float(1.0 / (1.0 + np.exp(-x)))
+
+
+def _advice(product: dict, quality_res: dict, base_logit: float) -> list:
+    try:
+        cfg = weights.load()
+    except RuntimeError:
+        return []
+    t, w = cfg["targets"], cfg["weights"]
+    target = {"image": t["image"], "description": t.get("description_words", t["description"]), "tags": t["tags"]}
+    axes = quality_res.get("axes") or {b.get("key"): b.get("sub_score") for b in quality_res.get("breakdown") or []}
+    out = []
+    for key, feature in LEVERS.items():
+        sub = axes.get(key)
+        if sub is None or sub >= 100:
+            continue
+        gain = _sigmoid(base_logit + 0.025 * w[key] * (100 - sub) / 100) - _sigmoid(base_logit)
+        current = int(sub * target[key] / 100 + 0.5)
+        out.append({"feature": feature, "current": current, "target": target[key], "gain": round(gain, 3)})
+    return sorted(out, key=lambda a: -a["gain"])[:3]
 
 
 def estimate_cold_start_propensity(product_id: str, live_db) -> Optional[Dict[str, Any]]:
@@ -64,78 +92,24 @@ def estimate_cold_start_propensity(product_id: str, live_db) -> Optional[Dict[st
     prob = max(0.15, min(0.95, prob))
     score_pct = int(round(prob * 100))
 
-    advice = []
-    axes = quality_res.get("axes", {})
-    if quality_res and "breakdown" in quality_res:
-        for b in quality_res["breakdown"]:
-            k = b.get("key")
-            sub = b.get("sub_score", 0)
-            if sub < 100:
-                if k == "image":
-                    advice.append({
-                        "feature": "photos",
-                        "current": b.get("value", 0),
-                        "target": 6,
-                        "gain": 0.12
-                    })
-                elif k == "description":
-                    actual_char_len = len((product.get("description") or "").strip())
-                    advice.append({
-                        "feature": "description_length",
-                        "current": actual_char_len,
-                        "target": 570,
-                        "gain": 0.08
-                    })
-                elif k == "price":
-                    val = b.get("value")
-                    peer_val = b.get("peer")
-                    cur_diff = 25
-                    if val is not None and peer_val and peer_val > 0:
-                        cur_diff = int(round((val - peer_val) / peer_val * 100))
-                    advice.append({
-                        "feature": "log_price_rel",
-                        "current": cur_diff,
-                        "target": 0,
-                        "gain": 0.15
-                    })
-    elif axes:
-        if axes.get("image", 100) < 100:
-            raw_imgs = product.get("images") or []
-            n_imgs = len(raw_imgs) if isinstance(raw_imgs, list) else 1
-            advice.append({"feature": "photos", "current": n_imgs, "target": 6, "gain": 0.12})
-        if axes.get("description", 100) < 100:
-            actual_char_len = len((product.get("description") or "").strip())
-            advice.append({"feature": "description_length", "current": actual_char_len, "target": 570, "gain": 0.08})
-        if axes.get("price", 100) < 100:
-            advice.append({"feature": "log_price_rel", "current": 25, "target": 0, "gain": 0.15})
+    advice = _advice(product, quality_res, base_logit)
 
-    advice = sorted(advice, key=lambda x: -x["gain"])[:3]
-
-    peer_count = live_db["products"].count_documents({"categories": category})
-    is_benchmark = False
-    if peer_count < 5:
-        is_benchmark = True
-        peer_count = live_db["products"].count_documents({})
-
-    peer_name = f"{category} (Tiêu chuẩn ngành)" if is_benchmark and category != "unknown" else category
-
-    compare = [
-        {"feature": "days_since_last", "value": None, "peer_median": 14.0},
-        {"feature": "log_sales_90d", "value": 0.0, "peer_median": 2.1},
-        {"feature": "log_seller_sales", "value": 1.0, "peer_median": 3.4},
-        {"feature": "seller_rating", "value": 5.0, "peer_median": 4.8},
-    ]
+    peer_count = live_db["products"].count_documents({**LOC_SP_THAT, "categories": category})
+    by_category = peer_count >= 5
+    if not by_category:
+        peer_count = live_db["products"].count_documents(LOC_SP_THAT)
 
     return {
         "product_id": product_id,
+        "method": "cold_start",
         "score": score_pct,
         "probability": round(prob, 3),
         "peer_group": {
-            "type": "category" if category != "unknown" else "platform",
-            "name": peer_name,
-            "size": max(peer_count, 12)
+            "type": "category" if by_category else "platform",
+            "name": category if by_category else "Toàn sàn",
+            "size": peer_count
         },
         "advice": advice,
-        "compare": compare,
+        "compare": [],
         "model": _model_card(meta)
     }

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, FrozenSet, List, Optional
 from urllib.parse import urlparse
 
-from app.core.f29.constants import MAX_TITLE_LENGTH, MIN_TITLE_LENGTH
+from app.core.f29 import material, title_check
 
 
 def status_from_score(score: float) -> str:
@@ -84,9 +84,12 @@ def content_hints(
     description = _text(product.get("description"))
     title = _text(product.get("title"))
 
-    if len(title) < MIN_TITLE_LENGTH or len(title) > MAX_TITLE_LENGTH:
-        hints.append({"field": "title", "message":
-                      f"Tên sản phẩm dài {len(title)} ký tự, nên trong khoảng {MIN_TITLE_LENGTH}-{MAX_TITLE_LENGTH} ký tự"})
+    hints.extend(title_check.check(title))
+    conflict = material.material_conflict(product)
+    if conflict:
+        said, named = (", ".join(x) for x in conflict)
+        hints.append({"type": "warning", "field": "materials", "message":
+                      f"Chất liệu không khớp tên sản phẩm: ô Chất liệu ghi “{said}”, tên ghi “{named}”"})
     if description and description.lower() == title.lower():
         hints.append({"field": "description", "message": "Mô tả đang trùng với tên sản phẩm, nên viết riêng"})
     if len({normalize_image(img) for img in images if normalize_image(img)}) < len([img for img in images if img]):

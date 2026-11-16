@@ -18,7 +18,7 @@ def _load(model_path: Path):
         return None
 
 
-def _price(x: float) -> float:
+def round_price(x: float) -> float:
     return max(round(x, -3), MIN_PRICE)
 
 
@@ -32,4 +32,4 @@ def suggest(title: str, group: str | None) -> dict | None:
         low, high = mid * math.exp(q25), mid * math.exp(q75)
     except Exception:
         return None
-    return {"low": _price(low), "mid": _price(mid), "high": _price(high)}
+    return {"low": round_price(low), "mid": round_price(mid), "high": round_price(high)}

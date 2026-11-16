@@ -15,7 +15,7 @@ from ..detectors import (
 from ..schemas import AuditResponse, AuditSummary, Issue
 
 class AuditService:
-    VERSION = "listing-audit-1.0"
+    VERSION = "listing-audit-1.2"
     COLLECTION = "listing_quality_audits"
 
     def __init__(self):
@@ -80,7 +80,7 @@ class AuditService:
 
         if not force and not context_override:
             cached = db[self.COLLECTION].find_one(
-                {"listing_id": listing_id, "content_hash": content_hash},
+                {"listing_id": listing_id, "content_hash": content_hash, "version": self.VERSION},
                 sort=[("audited_at", -1)]
             )
             if cached and "issues" in cached:
@@ -174,28 +174,7 @@ class AuditService:
         return response
 
     def get_latest_audit(self, listing_id: str) -> Optional[AuditResponse]:
-        db = db_live()
-        doc = db[self.COLLECTION].find_one(
-            {"listing_id": listing_id},
-            sort=[("audited_at", -1)]
-        )
-        if not doc:
-            return self.audit_listing(listing_id, force=False)
-
-        issues = [Issue(**iss) for iss in doc.get("issues", [])]
-        summary = AuditSummary(**doc.get("summary", {}))
-        return AuditResponse(
-            auditId=doc.get("audit_id", str(doc["_id"])),
-            listingId=listing_id,
-            version=doc.get("version", self.VERSION),
-            status=doc.get("status", "completed"),
-            auditedAt=doc.get("audited_at", datetime.now(timezone.utc).isoformat()),
-            contentHash=doc.get("content_hash", ""),
-            summary=summary,
-            issues=issues,
-            detectors=doc.get("detectors", {}),
-            warnings=doc.get("warnings", [])
-        )
+        return self.audit_listing(listing_id, force=False)
 
     def recheck_listing(self, listing_id: str) -> Optional[AuditResponse]:
         db = db_live()

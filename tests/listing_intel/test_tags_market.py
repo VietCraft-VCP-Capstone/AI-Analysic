@@ -109,7 +109,10 @@ def test_tag_weak_unless_trending_and_suggestions():
         ["xấu", "len"], "áo len nữ", "fashion", lift, set(), set(), None, None
     )
     assert [v["verdict"] for v in verdicts] == ["weak", "keep"]
-    assert [s["tag"] for s in sugg] == ["da bò", "thun"]
+    assert sugg == []
+    _, _, sugg = tag_report(["xấu", "len"], "áo len nữ", "fashion", lift, set(), set(), None, None,
+                            facts="len pha thun co giãn")
+    assert [s["tag"] for s in sugg] == ["thun"]
     _, verdicts, _ = tag_report(["xấu"], "áo", "fashion", lift, {"xấu"}, set(), None, None)
     assert verdicts[0]["verdict"] == "keep"
 
@@ -147,3 +150,23 @@ def test_tag_score_renormalizes_without_lift_table():
     for lift in (None, {}, {"shoes": {"da bò": 2.0}}):
         score, _, _ = tag_report(["da bò"], "túi", "bags", lift, {"da bò"}, set(), [vec], vec)
         assert score == pytest.approx(expected)
+
+
+def test_never_suggest_material_or_color_the_product_does_not_have():
+    lift = {"shoes": {"cotton": 0.73, "văn phòng": 0.7, "đỏ": 0.65, "đi biển": 0.62}}
+    _, _, sugg = tag_report(["giày"], "Giày sneaker nam êm chân", "shoes", lift, set(), set(), None, None,
+                            facts="Đế cao su, thân da pu màu trắng")
+    tags = [s["tag"] for s in sugg]
+    assert "cotton" not in tags and "đỏ" not in tags
+
+
+def test_keyword_fragments_are_dropped():
+    from app.core.listing_intel.peers import _whole_term
+    assert [g for g in ["nam đi", "giày thể", "chân", "thể thao", "đi học", "êm chân", "len", "trang", "trắng"]
+            if _whole_term(g)] == ["thể thao", "đi học", "êm chân", "len", "trắng"]
+
+
+def test_suggestions_are_marked_fact_or_context():
+    lift = {"shoes": {"văn phòng": 0.7, "cotton": 0.6}}
+    _, _, sugg = tag_report(["giày"], "Giày vải", "shoes", lift, set(), set(), None, None, facts="vải cotton")
+    assert {s["tag"]: s["kind"] for s in sugg} == {"văn phòng": "context", "cotton": "fact"}

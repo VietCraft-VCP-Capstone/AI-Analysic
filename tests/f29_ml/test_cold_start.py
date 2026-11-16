@@ -34,7 +34,9 @@ def test_cold_start_valid_estimation(monkeypatch):
     assert 0.0 < res["probability"] < 1.0
     assert res["peer_group"]["name"] == "Túi ví"
     assert res["model"]["test_auc"] == 0.845
-    assert len(res["compare"]) == 4
+    assert res["compare"] == []
+    assert res["method"] == "cold_start"
+    assert res["peer_group"] == {"type": "category", "name": "Túi ví", "size": 15}
 
 
 def test_cold_start_sparse_peers_benchmark():
@@ -52,7 +54,7 @@ def test_cold_start_sparse_peers_benchmark():
 
     res = estimate_cold_start_propensity(p_id, db)
     assert res is not None
-    assert res["peer_group"]["name"] == "Gốm sứ thủ công (Tiêu chuẩn ngành)"
+    assert res["peer_group"] == {"type": "platform", "name": "Toàn sàn", "size": 10}
 
 
 def test_cold_start_listing_health_scores_axes_advice():
@@ -76,6 +78,8 @@ def test_cold_start_listing_health_scores_axes_advice():
     assert res is not None
     assert len(res["advice"]) > 0
     features = [a["feature"] for a in res["advice"]]
-    assert "photos" in features or "description_length" in features or "log_price_rel" in features
+    assert "log_price_rel" not in features
+    photos = next(a for a in res["advice"] if a["feature"] == "photos")
+    assert photos["target"] == 6 and photos["gain"] > 0
 
 

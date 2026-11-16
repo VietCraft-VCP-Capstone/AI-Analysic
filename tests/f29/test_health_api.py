@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.api.v1 import f29_health
 from app.core.f29.calculator import HealthScoreCalculator
 from tests.f29.fake_mongo import make_calculator
+from app.core.f29.constants import MODEL_VERSION
 from tests.f29.samples import PRODUCT_ID
 
 SHOP_ID = "64b000000000000000000001"
@@ -11,7 +12,7 @@ SAMPLE = {
     "product_id": PRODUCT_ID, "score": 71.5, "status": "needs_improvement",
     "axes": {"image": 83.3, "description": 45.6, "tags": 100.0, "review": 0.0, "price": 42.1},
     "axes_missing": ["review"], "breakdown": [], "todos": [], "warnings": [],
-    "model_version": "health-2.2", "basis": {},
+    "model_version": MODEL_VERSION, "basis": {},
 }
 
 
@@ -35,7 +36,7 @@ def test_returns_health_score(monkeypatch, client):
     body = _get(client).json()
     assert body["data"]["score"] == 71.5
     assert body["meta"]["status"] == "ok"
-    assert body["meta"]["model_version"] == "health-2.2"
+    assert body["meta"]["model_version"] == MODEL_VERSION
 
 
 def test_no_weights_returns_insufficient(monkeypatch, client):

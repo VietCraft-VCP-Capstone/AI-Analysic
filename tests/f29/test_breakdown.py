@@ -34,11 +34,11 @@ def test_todo_impact_exact_and_sorted():
 def test_price_todo_message_shows_gap_and_source():
     subs = {"image": 100.0, "description": 100.0, "tags": 100.0, "material": 100.0, "review": 100.0, "price": 50.0}
     values = {"image": 6, "description": 570, "tags": 3, "material": 1, "review": 5, "price": 150000.0}
-    reference = {"price": 100000.0, "source": "category", "n": 8}
+    reference = {"price": 100000.0, "source": "material", "n": 9, "materials": ["cotton"]}
     w = weights.load()["weights"]
     rows, _ = build(subs, values, TARGETS, {}, set(), w, {"price": {"reference": reference}})
     todo = build_todos(rows)[0]
-    assert todo["message"] == "Giá cao hơn 50% so với mức giữa trong cùng danh mục (100.000đ)"
+    assert todo["message"] == "Giá cao hơn 50% so với 9 sản phẩm cùng loại, cùng chất liệu cotton (mức giữa 100.000đ)"
 
 
 @pytest.mark.parametrize("sub", [0.0, 12.34, 37.37, 37.25, 62.5, 88.8])

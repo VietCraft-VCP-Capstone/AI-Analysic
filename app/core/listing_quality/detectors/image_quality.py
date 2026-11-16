@@ -1,5 +1,7 @@
 import math
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 import cv2
 import numpy as np
 from PIL import Image
@@ -14,6 +16,7 @@ class ImageQualityDetector:
     MIN_ASPECT = 0.5
     MAX_ASPECT = 2.0
     MAX_IMAGES_TO_CHECK = 5
+    FETCH_TIMEOUT = 8
 
     def _compute_sharpness(self, img: Image.Image) -> float:
         try:
@@ -31,21 +34,45 @@ class ImageQualityDetector:
             return issues
 
         preloaded_images = context.get("preloaded_images", {})
+        checked = images[:self.MAX_IMAGES_TO_CHECK]
+        urls = list(dict.fromkeys(i for i in checked if isinstance(i, str) and i and i not in preloaded_images))
+        external = [u for u in urls if not image_fetch.allowed(u)]
+        urls = [u for u in urls if u not in external]
+        with ThreadPoolExecutor(max_workers=max(len(urls), 1)) as pool:
+            fetched = dict(zip(urls, pool.map(lambda u: image_fetch.fetch(u, timeout=self.FETCH_TIMEOUT), urls)))
+        if external:
+            hosts = sorted({urlparse(u).hostname or "?" for u in external})
+            issues.append(Issue(
+                id="img_external",
+                code="IMAGE_EXTERNAL",
+                detector=self.code,
+                severity="low",
+                field="images",
+                status="open",
+                confidence=0.9,
+                evidence={"count": len(external), "hosts": hosts},
+                message=f"{len(external)} ảnh đang lấy từ trang khác ({', '.join(hosts)}).",
+                recommendation=Recommendation(
+                    action="REUPLOAD_IMAGES",
+                    message="Tải ảnh lên VietCraft để ảnh không bị mất hoặc bị trang gốc chặn.",
+                    field_link="images",
+                    verification="Ảnh được lưu trên máy chủ VietCraft."
+                )
+            ))
 
-        for idx, item in enumerate(images[:self.MAX_IMAGES_TO_CHECK]):
+        for idx, item in enumerate(checked):
             field_name = f"images[{idx}]"
             img: Any = None
             url = str(item) if isinstance(item, str) else ""
 
+            if url in external:
+                continue
             if url in preloaded_images:
                 img = preloaded_images[url]
             elif isinstance(item, Image.Image):
                 img = item
             elif url:
-                try:
-                    img = image_fetch.fetch(url, timeout=3)
-                except Exception:
-                    img = None
+                img = fetched.get(url)
 
             if img is None:
                 if url:
@@ -53,15 +80,15 @@ class ImageQualityDetector:
                         id=f"img_unreadable_{idx}",
                         code="IMAGE_UNREADABLE",
                         detector=self.code,
-                        severity="medium",
+                        severity="low",
                         field=field_name,
                         status="open",
-                        confidence=0.9,
+                        confidence=0.6,
                         evidence={"url": url, "reason": "Không tải hoặc không giải mã được dữ liệu ảnh"},
-                        message=f"Ảnh thứ {idx + 1} không mở được hoặc đường dẫn không hợp lệ.",
+                        message=f"Chưa tải được ảnh thứ {idx + 1} khi kiểm tra.",
                         recommendation=Recommendation(
                             action="REPLACE_IMAGE",
-                            message="Tải lại ảnh định dạng chuẩn JPG/PNG với kích thước tối thiểu 500x500px.",
+                            message="Mở trang sản phẩm xem ảnh có hiện không; nếu ảnh lỗi, tải lại ảnh JPG/PNG từ 500x500px.",
                             field_link="images",
                             verification="Kiểm tra ảnh hiển thị đúng khi mở xem trước."
                         )

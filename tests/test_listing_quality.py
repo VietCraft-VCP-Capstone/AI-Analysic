@@ -161,19 +161,37 @@ def test_api_contract_auth_guard():
     resp = client.get("/api/analytics/listings/6ad20b60b3cb281d77526bf9/quality")
     assert resp.status_code in (200, 401, 403, 404)
 
-def test_audit_service_local_db_run():
+LISTING_ID = "6ad20b60b3cb281d77526bf9"
+
+
+def _fake_live(monkeypatch, **product):
+    from bson import ObjectId
+    from app.core.listing_quality.services import audit_service
+    from tests.f29.fake_mongo import make_calculator
+    doc = {"_id": ObjectId(LISTING_ID), "title": "Áo thun cotton nam", "description": "Áo thun cotton thoáng mát " * 3,
+           "images": [], "categories": ["Áo thun"], "tags": ["áo thun"], "materials": ["cotton"], **product}
+    db = make_calculator(products=[doc], product_variants=[]).live_db
+    monkeypatch.setattr(audit_service, "db_live", lambda: db)
+    return db
+
+
+def test_audit_service_local_db_run(monkeypatch):
+    db = _fake_live(monkeypatch)
     svc = AuditService()
-    listing_id = "6ad20b60b3cb281d77526bf9"
+    listing_id = LISTING_ID
     res = svc.audit_listing(listing_id, force=True)
     assert res is not None
     assert res.listingId == listing_id
-    assert res.version == "listing-audit-1.0"
+    assert res.version == AuditService.VERSION
     assert res.status in ("completed", "partial")
     assert isinstance(res.summary.total, int)
+    assert len(db[AuditService.COLLECTION].docs) == 1
 
-def test_audit_service_recheck_flow():
+
+def test_audit_service_recheck_flow(monkeypatch):
+    _fake_live(monkeypatch)
     svc = AuditService()
-    listing_id = "6ad20b60b3cb281d77526bf9"
+    listing_id = LISTING_ID
     res1 = svc.audit_listing(listing_id, force=True)
     assert res1 is not None
     recheck_res = svc.recheck_listing(listing_id)
@@ -190,3 +208,31 @@ def test_evaluation_pipeline_metrics():
     assert results["required_fields"].precision >= 0.90
     assert results["pod_content"].precision >= 0.90
     assert results["text_consistency"].precision >= 0.90
+
+
+def test_images_are_fetched_in_parallel_within_gateway_timeout(monkeypatch):
+    import time
+    from app.core.listing_intel import image_fetch
+    from app.core.listing_quality.detectors import image_quality
+
+    def slow_fail(url, timeout):
+        time.sleep(0.4)
+        return None
+
+    monkeypatch.setattr(image_fetch, "fetch", slow_fail)
+    monkeypatch.setattr(image_fetch, "allowed", lambda url: True)
+    urls = [f"https://res.cloudinary.com/x/image/upload/v1/a{i}.png" for i in range(5)]
+    start = time.monotonic()
+    issues = image_quality.ImageQualityDetector().evaluate({"images": urls}, {})
+    assert time.monotonic() - start < 1.0
+    assert [i.code for i in issues] == ["IMAGE_UNREADABLE"] * 5
+
+
+def test_images_on_other_sites_are_one_notice_not_unreadable(monkeypatch):
+    from app.core.listing_intel import image_fetch
+    from app.core.listing_quality.detectors import image_quality
+
+    monkeypatch.setattr(image_fetch, "fetch", lambda url, timeout: (_ for _ in ()).throw(AssertionError("must not fetch")))
+    urls = [f"https://down-vn.img.susercontent.com/file/a{i}.webp" for i in range(3)]
+    issues = image_quality.ImageQualityDetector().evaluate({"images": urls}, {})
+    assert [(i.code, i.severity, i.evidence["count"]) for i in issues] == [("IMAGE_EXTERNAL", "low", 3)]

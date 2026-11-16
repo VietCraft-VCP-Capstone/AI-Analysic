@@ -3,12 +3,11 @@ import time
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 from app.api.v1._live import LOC_SP_THAT
-from app.core.f29.constants import EFFORT, MIN_CATEGORY_SAMPLE
+from app.core.f29.breakdown import score_of
+from app.core.f29.constants import EFFORT, MIN_CATEGORY_SAMPLE, PRICE_CHECK_HIGH, PRICE_CHECK_LOW
 from app.core.f29.factors import desc_words
 from app.core.f29.scoring import count_approved_tags, to_float
 
-PRICE_SOURCE = {"category": "trong cùng danh mục", "group": "trong cùng nhóm hàng", "tiki": "trên Tiki",
-                "model": "cho sản phẩm tương tự"}
 PEER_STATS_TTL = 900
 _peer_stats_cache: dict = {}
 _peer_stats_lock = threading.Lock()
@@ -120,7 +119,24 @@ def content_peer_stats(live_db, cat_key: Optional[Any], pending_tag_ids: FrozenS
 
 def _popular(row: Dict[str, Any]) -> str:
     s = row.get("suggestion")
-    return f" · Tham khảo giá sản phẩm tương tự: {_vnd(s['low'])}–{_vnd(s['high'])}" if s else ""
+    return f" · Tham khảo: {_vnd(s['low'])}–{_vnd(s['high'])}" if s else ""
+
+
+def _peers(ref: Dict[str, Any]) -> str:
+    mats = ", ".join(ref.get("materials") or [])
+    return f"{ref['n']} sản phẩm cùng loại, cùng chất liệu" + (f" {mats}" if mats else "")
+
+
+def price_check(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    reference = row.get("reference") or {}
+    value, ref = row.get("value"), reference.get("price")
+    if not value or not ref or not reference.get("comparable") or PRICE_CHECK_LOW < value / ref < PRICE_CHECK_HIGH:
+        return None
+    rel = value / ref
+    side, times = ("thấp", round(1 / rel)) if rel < 1 else ("cao", round(rel))
+    return {"type": "warning", "field": "price", "current_value": value, "target": ref, "impact": 0,
+            "message": (f"Giá {_vnd(value)} {side} hơn khoảng {times} lần so với mức tham khảo {_vnd(ref)}. "
+                        "Kiểm tra lại xem có gõ thiếu hoặc thừa số 0 không.")}
 
 
 def _message(row: Dict[str, Any]) -> str:
@@ -135,36 +151,34 @@ def _message(row: Dict[str, Any]) -> str:
         return "Ghi rõ chất liệu (ví dụ: cotton, len, gốm…) vào ô Chất liệu"
     if key == "review":
         if not value:
-            return f"Chưa có đánh giá nào, mời khách đã mua để lại đánh giá (tối đa +{int(row['weight'])} điểm)"
+            return "Chưa có đánh giá nào, mời khách đã mua để lại đánh giá"
         return f"Tỉ lệ đánh giá tốt {round(row['n_good'] / value * 100)}%, tiếp tục chăm sóc khách để giữ đánh giá tốt"
     if not value:
         return "Chưa có giá bán cho biến thể nào" + _popular(row)
     ref = row["reference"]
     if value < ref["price"]:
         pct = round((1 - value / ref["price"]) * 100)
-        return f"Giá thấp hơn mức giữa {pct}%, có thể đang bán rẻ quá" + _popular(row)
-    return (f"Giá cao hơn {round((value / ref['price'] - 1) * 100)}% so với mức giữa "
-            f"{PRICE_SOURCE[ref['source']]} ({_vnd(ref['price'])})") + _popular(row)
+        return f"Giá thấp hơn {pct}% so với {_peers(ref)}, kiểm tra lại chi phí để không bán lỗ" + _popular(row)
+    pct = round((value / ref["price"] - 1) * 100)
+    return f"Giá cao hơn {pct}% so với {_peers(ref)} (mức giữa {_vnd(ref['price'])})" + _popular(row)
 
 
-def _impact(row: Dict[str, Any]) -> float:
-    key = row.get("key")
-    if key == "review":
-        val = row.get("value") or 0
-        n_good = row.get("n_good", 0)
-        p0 = row.get("p0")
-        m = row.get("m")
-        if p0 is not None and m is not None:
-            new_sub = (n_good + 1 + m * p0) / (val + 1 + m) * 100.0
-            new_points = round(row["weight"] * new_sub / 100.0, 1)
-            return round(new_points - row["points"], 1)
-    return round(row["weight"] - row["points"], 1)
+def _fixed_points(row: Dict[str, Any]) -> float:
+    if row.get("key") == "review" and row.get("p0") is not None and row.get("m") is not None:
+        n, n_good, p0, m = row.get("value") or 0, row.get("n_good", 0), row["p0"], row["m"]
+        return round(row["weight"] * (n_good + 1 + m * p0) / (n + 1 + m), 1)
+    return float(row["weight"])
+
+
+def _impact(row: Dict[str, Any], rows: List[Dict[str, Any]]) -> float:
+    fixed = [{**r, "points": _fixed_points(r)} if r is row else r for r in rows]
+    return round(score_of(fixed) - score_of(rows), 1)
 
 
 def build_todos(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     todos = [{
         "type": "todo", "code": r["key"], "field": r["key"], "message": _message(r),
-        "current_value": r["value"], "target": r["target"], "impact": _impact(r),
-    } for r in rows if r["sub_score"] < 100 and _impact(r) > 0]
+        "current_value": r["value"], "target": r["target"], "impact": _impact(r, rows),
+    } for r in rows if r.get("scored", True) and r["sub_score"] < 100 and _impact(r, rows) > 0]
     todos.sort(key=lambda t: (-t["impact"], EFFORT[t["code"]]))
     return todos
