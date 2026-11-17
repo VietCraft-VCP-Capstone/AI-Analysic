@@ -14,7 +14,7 @@ from app.api.v1._live import (
     san_pham_live,
 )
 from app.api.v1._competitor_live import dong_live, mo_ta_live, ten_tag_live
-from app.api.v1._doi_thu_ai import gia_de_xuat, may_giong
+from app.api.v1._competitor_ai import gia_de_xuat, may_giong
 from app.api.v1._mart import db, tien
 from app.api.v1._template import (
     CurrentShop,

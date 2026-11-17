@@ -132,6 +132,7 @@ def build_product_potential_profile(
     shop_has_similar_sales: bool = False,
     shop_cr_in_category: Optional[float] = None,
     shop_lead_time_days: int = 4,
+    model_ctx: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Xây dựng Hồ Sơ Tiềm Năng 5 Lớp Độc Lập cho một sản phẩm đề xuất.
@@ -161,14 +162,54 @@ def build_product_potential_profile(
         layer1_status = "fail"
         layer1_text = f"Lượng tìm kiếm ở mức nền thấp (< 10 điểm)"
 
+    model_ctx = model_ctx or {}
+    layer_models: Dict[str, Dict[str, Any]] = {
+        "demand": {"model": "Thống kê tăng trưởng 8 tuần (chưa có dự báo DL cho từ khóa này)", "metrics": {"wow_growth_pct": wow_growth_pct}},
+        "repeatability": {"model": "Đếm năm đỉnh trên chuỗi Trends", "metrics": {}},
+        "competition": {"model": "Đếm số shop trong mẫu listing", "metrics": {}},
+    }
+
+    # Lớp 1 (nâng cấp): dùng mức cầu kỳ vọng từ QuantileForecaster (P10/P50/P90) khi có
+    up = model_ctx.get("uplift")
+    if up and up.get("uplift_p50"):
+        p10, p50, p90 = float(up["uplift_p10"]), float(up["uplift_p50"]), float(up["uplift_p90"])
+        if p10 >= 1.05:
+            layer1_status = "pass"
+        elif p50 >= 1.10:
+            layer1_status = "uncertain"
+        else:
+            layer1_status = "fail"
+        layer1_text = f"Mô hình dự báo mức cầu ×{p50:.2f} so với nền (khoảng 80%: ×{p10:.2f}–×{p90:.2f})"
+        layer_models["demand"] = {
+            "model": f"{up.get('method', 'QuantileForecaster')} · {('dự báo' if up.get('basis') == 'forecast' else 'cùng kỳ các năm trước')}",
+            "metrics": {"uplift_p10": p10, "uplift_p50": p50, "uplift_p90": p90, "wow_growth_pct": wow_growth_pct,
+                        "basis": up.get("basis"), "elasticity_beta": up.get("elasticity_beta"),
+                        "calibrated": up.get("calibrated", False)},
+        }
+
     # 2. LỚP 2: CÓ LẶP LẠI KHÔNG? (Chu kỳ mùa vụ hay đột biến?)
     rep = analyze_trend_repeatability(trend_series, target_event_date.month)
     layer2_status = rep["status"]
     layer2_text = rep["evidence"]
+    stl_i = model_ctx.get("stl")
+    if stl_i and stl_i.get("seasonal_strength") is not None:
+        fs = float(stl_i["seasonal_strength"])
+        yp, ya = int(model_ctx.get("years_peaked", 0)), int(model_ctx.get("years_analyzed", 0))
+        if fs >= 0.6 and yp >= 2:
+            layer2_status = "pass"
+        elif fs >= 0.35:
+            layer2_status = "uncertain"
+        else:
+            layer2_status = "fail"
+        layer2_text = f"Độ mạnh mùa vụ STL = {fs:.2f}/1 · đỉnh rơi đúng dịp {yp}/{ya} năm"
+        rep["anti_evidence"] = None if layer2_status == "pass" else (
+            f"Mùa vụ yếu (STL {fs:.2f}): phần lớn biến động là xu hướng/nhiễu, không chắc lặp lại."
+        )
+        layer_models["repeatability"] = {"model": "STL robust (statsmodels) · Wang–Smith–Hyndman", "metrics": {
+            "seasonal_strength": fs, "trend_strength": stl_i.get("trend_strength"), "years_peaked": yp, "years_analyzed": ya}}
 
     # 3. LỚP 3: CÓ CHỖ CHO BẠN KHÔNG? (Cạnh tranh có chấp nhận được?)
     n_sellers = len({str(l.get("shop_id") or l.get("shop_name")) for l in competitor_listings if l.get("shop_id") or l.get("shop_name")})
-    # Nếu không có dữ liệu đối thủ trực tiếp thì ước lượng từ danh sách listing mẫu
     if n_sellers == 0:
         n_sellers = max(3, len(competitor_listings))
 
@@ -176,15 +217,31 @@ def build_product_potential_profile(
     min_p = min(prices) if prices else int(retail_price_vnd * 0.8)
     max_p = max(prices) if prices else int(retail_price_vnd * 1.3)
 
-    if n_sellers <= 25:
-        layer3_status = "pass"
-        layer3_text = f"{n_sellers} người bán tham gia, phân khúc giá {min_p // 1000}k–{max_p // 1000}k"
-    elif n_sellers <= 60:
-        layer3_status = "uncertain"
-        layer3_text = f"Mức độ cạnh tranh khá dày ({n_sellers} người bán trên sàn)"
+    comp = model_ctx.get("competition")
+    if comp and comp.get("status") == "measured":
+        n_sellers = comp["n_sellers"]
+        hhi, top3 = comp["hhi"], comp["top3_share_pct"]
+        if top3 >= 85 and hhi >= 4000:
+            layer3_status = "fail"
+        elif hhi < 2500 and top3 < 70:
+            layer3_status = "pass"
+        else:
+            layer3_status = "uncertain"
+        pp = comp.get("my_price_percentile")
+        layer3_text = (f"{n_sellers} shop · top-3 giữ {top3:.0f}% doanh số · HHI {hhi}"
+                       + (f" · giá bạn nằm ở phân vị {pp}" if pp is not None else ""))
+        layer_models["competition"] = {"model": "HHI (độ tập trung người bán) trên listing sàn cùng ngành", "metrics": comp}
     else:
-        layer3_status = "fail"
-        layer3_text = f"Thị trường bão hòa với hơn {n_sellers} shop đang bán"
+        if n_sellers <= 25:
+            layer3_status = "pass"
+            layer3_text = f"{n_sellers} người bán tham gia, phân khúc giá {min_p // 1000}k–{max_p // 1000}k"
+        elif n_sellers <= 60:
+            layer3_status = "uncertain"
+            layer3_text = f"Mức độ cạnh tranh khá dày ({n_sellers} người bán trên sàn)"
+        else:
+            layer3_status = "fail"
+            layer3_text = f"Thị trường bão hòa với hơn {n_sellers} shop đang bán"
+        layer3_text += " (mẫu nhỏ — độ tin cậy thấp)"
 
     # 4. LỚP 4: CÓ LÃI KHÔNG? (Hòa vốn sau bao nhiêu đơn?)
     financials = calculate_break_even(
@@ -300,11 +357,11 @@ def build_product_potential_profile(
         "verdict": "dat" if layer1_status in ("pass", "uncertain") and layer4_status == "pass" and layer5_status != "fail" else "chua_chac" if layer5_status != "fail" else "khong_dat",
         "verdict_label": "Đạt hồ sơ" if layer1_status in ("pass", "uncertain") and layer4_status == "pass" and layer5_status != "fail" else "Cần cân nhắc" if layer5_status != "fail" else "Không khuyến nghị",
         "layers": {
-            "demand": {"status": layer1_status, "title": "Nhu cầu", "text": layer1_text, "action_label": "Xem xu hướng", "name": "Nhu cầu thị trường", "question": "Nhu cầu có thật và đang tăng?", "claim": layer1_text, "evidence": "Dữ liệu Google Trends VN"},
-            "repeatability": {"status": layer2_status, "title": "Lặp lại", "text": layer2_text, "action_label": "Xem các năm", "name": "Tính lặp lại", "question": "Năm nào cũng lặp lại vào dịp này?", "claim": layer2_text, "evidence": "Chuỗi lịch sử đa năm"},
-            "competition": {"status": layer3_status, "title": "Cạnh tranh", "text": layer3_text, "action_label": "Xem người bán", "name": "Cạnh tranh", "question": "Có chen chân vào được không?", "claim": layer3_text, "evidence": "Số đối thủ cùng ngành"},
-            "profitability": {"status": layer4_status, "title": "Lợi nhuận", "text": layer4_text, "action_label": "Xem / Sửa bảng tính", "name": "Biên lợi nhuận", "question": "Bán có lời sau mọi chi phí không?", "claim": layer4_text, "evidence": financials["formula_explanation"]},
-            "capacity": {"status": layer5_status, "title": "Năng lực", "text": layer5_text, "action_label": "Xem tiến độ xưởng", "name": "Năng lực đáp ứng", "question": "Có làm kịp và giao kịp trước lễ không?", "claim": layer5_text, "evidence": "Lead time sản xuất và hạn chót giao hàng"},
+            "demand": {"status": layer1_status, "title": "Nhu cầu", "text": layer1_text, "action_label": "Xem xu hướng", "name": "Nhu cầu thị trường", "question": "Nhu cầu có thật và đang tăng?", "claim": layer1_text, "evidence": "Dữ liệu Google Trends VN", **layer_models["demand"]},
+            "repeatability": {"status": layer2_status, "title": "Lặp lại", "text": layer2_text, "action_label": "Xem các năm", "name": "Tính lặp lại", "question": "Năm nào cũng lặp lại vào dịp này?", "claim": layer2_text, "evidence": "Chuỗi lịch sử đa năm", **layer_models["repeatability"]},
+            "competition": {"status": layer3_status, "title": "Cạnh tranh", "text": layer3_text, "action_label": "Xem người bán", "name": "Cạnh tranh", "question": "Có chen chân vào được không?", "claim": layer3_text, "evidence": "Số đối thủ cùng ngành", **layer_models["competition"]},
+            "profitability": {"status": layer4_status, "title": "Lợi nhuận", "text": layer4_text, "action_label": "Xem / Sửa bảng tính", "name": "Biên lợi nhuận", "question": "Bán có lời sau mọi chi phí không?", "claim": layer4_text, "evidence": financials["formula_explanation"], "model": "Break-even: giá bán − phí sàn 10% − giá vốn (" + str(model_ctx.get("cost_basis", "ước tính 45% giá bán")) + ")", "metrics": {"margin_pct": financials["margin_pct"], "units_to_break_even": financials["units_to_break_even"]}},
+            "capacity": {"status": layer5_status, "title": "Năng lực", "text": layer5_text, "action_label": "Xem tiến độ xưởng", "name": "Năng lực đáp ứng", "question": "Có làm kịp và giao kịp trước lễ không?", "claim": layer5_text, "evidence": "Lead time sản xuất và hạn chót giao hàng", "model": "Hạn chốt đơn − (lead time shop + 4 ngày ship) · lead time: " + str(model_ctx.get("lead_basis", "mặc định 4 ngày")), "metrics": {"days_to_cut_off": days_to_cut_off, "lead_time_days": shop_lead_time_days}},
         },
         "financials": financials,
         "break_even": {
@@ -360,3 +417,4 @@ if __name__ == "__main__":
     assert "trial_plan" in profile
     print("✓ Đã sinh đầy đủ 5 lớp bằng chứng, lý do có thể sai và kế hoạch thử nhỏ.")
     print("✅ TẤT CẢ SELF-CHECKS CỦA POTENTIAL_PROFILE.PY ĐÃ PASS!")
+

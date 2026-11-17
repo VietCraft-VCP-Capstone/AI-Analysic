@@ -220,7 +220,7 @@ SHOPPING_EVENTS = [
      "groups": ["fashion", "bags", "accessories", "home"], "date_fn": _fixed(11, 20), "icon": "book-open", "badge": "Dịp quà tặng tri ân",
      "category_focus": "Sổ da khắc tên, bút gỗ kỷ niệm, bình giữ nhiệt in câu chúc, tranh chữ mộc",
      "default_search_keywords": ["quà 20/11", "quà tặng thầy cô", "quà lưu niệm"]},
-    {"key": "12/12", "name": "Siêu sale 12/12", "prep_days": 21, "lead_time_days": 7,
+    {"key": "12/12", "name": "Siêu sale 12/12", "prep_days": 28, "lead_time_days": 7,
      "groups": ALL_GROUPS, "date_fn": _fixed(12, 12), "icon": "shopping-bag", "badge": "Xả kho & Kích cầu cuối năm",
      "category_focus": "Set quà Noel sớm, áo khoác nỉ, đồ trang trí năm mới",
      "default_search_keywords": ["áo hoodie", "quà tặng", "áo vintage"]},

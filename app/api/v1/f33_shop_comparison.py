@@ -9,7 +9,7 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 
 from app.api.v1._competitor_live import meta_doi_thu, nguon_doi_thu
-from app.api.v1._doi_thu_ai import nhom_chien_luoc
+from app.api.v1._competitor_ai import nhom_chien_luoc
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, ok
 

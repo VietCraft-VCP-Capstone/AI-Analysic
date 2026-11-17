@@ -8,7 +8,8 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.api.v1._doi_thu_ke_hoach import _so, _tien, goi_llm
+from app.api.v1._competitor_plan import _tien
+from app.api.v1._llm import _so, goi_llm
 
 CACHE_GIAY = 1800
 DAI_TOI_DA = 150
