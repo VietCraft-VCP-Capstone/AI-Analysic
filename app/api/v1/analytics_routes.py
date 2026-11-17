@@ -61,6 +61,7 @@ DA_LAM: Dict[str, str] = {
     "F39": "app.api.v1.f39_niches",
     "F40": "app.api.v1.f40_radar",
     "F41": "app.api.v1.f41_recommendations",
+    "F43": "app.api.v1.f43_money",
 }
 
 

@@ -1,0 +1,107 @@
+import sys
+import time
+from datetime import date, timedelta
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+ROOT_DIR = Path(__file__).resolve().parents[3]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from fastapi import APIRouter
+
+from app.api.v1._live import _so, db_live, la_shop_live, san_pham_live
+from app.api.v1._live_data import DON_HOP_LE, bat_dau, oid
+from app.api.v1._money_calc import tong_hop
+from app.api.v1._money_range import doc_khoang_tien
+from app.api.v1._money_comment import goi_y
+from app.api.v1._money_market import doan_slug, doc_tiki, dong_thi_truong
+from app.api.v1._template import CurrentShop, build_meta, insufficient, ok
+
+router = APIRouter()
+
+
+def _meta(shop_id: str, n: int) -> Dict[str, Any]:
+    return build_meta(model_version="live-read-1.0", scope="shop", scope_id=shop_id, database="vietcraft",
+                      collection="orders", mode="live", attributed_to_live_shop=True, sample_size=n,
+                      identity_linked=True, confidence="high")
+
+
+def _hoan(ids: List[Any]) -> Tuple[Dict[str, int], Dict[str, int]]:
+    """(hoàn theo đơn, hoàn theo món). Luồng cũ cả đơn; luồng đổi trả mới (POD) theo order_item_id."""
+    hoan: Dict[str, int] = {}
+    mon: Dict[str, int] = {}
+    loc = {"order_id": {"$in": ids}, "status": "REFUNDED", "responsible_party": {"$nin": ["PRINTER", "PLATFORM"]}}
+    for r in db_live()["refund_requests"].find(loc, {"order_id": 1, "refund_amount": 1}):
+        k = str(r["order_id"])
+        hoan[k] = hoan.get(k, 0) + int(round(_so(r.get("refund_amount")) or 0))
+    loc_moi = {"order_id": {"$in": [str(i) for i in ids]}, "status": "REFUNDED", "fault_party": "SELLER"}
+    for r in db_live()["return_refund_executions"].find(loc_moi, {"order_id": 1, "order_item_id": 1, "amount_minor": 1}):
+        tien = int(r.get("amount_minor") or 0)
+        hoan[r["order_id"]] = hoan.get(r["order_id"], 0) + tien
+        mon[r["order_item_id"]] = mon.get(r["order_item_id"], 0) + tien
+    return hoan, mon
+
+
+_THI_TRUONG: Dict[str, Tuple[float, Any]] = {}
+
+
+def _thi_truong(shop_id: str):
+    co = _THI_TRUONG.get(shop_id)
+    if co and time.time() - co[0] < 3600:  # dữ liệu Tiki cào theo ngày, không theo khoảng 7/30/90
+        return co[1]
+    try:
+        cats = [c for p in san_pham_live(shop_id) for c in p.get("categories") or []]
+        slug = doan_slug(cats)
+        kq = dong_thi_truong(doc_tiki(slug), slug) if slug else None
+    except Exception:
+        return None
+    _THI_TRUONG[shop_id] = (time.time(), kq)
+    return kq
+
+
+KHONG_GOI_Y = {"source": "none", "provider": None, "tips": {}}
+
+
+def _bao_cao(shop_id: str, timeRange: str):
+    """Trả (báo cáo, số đơn) hoặc (phản hồi insufficient, None)."""
+    ngay, nhan = doc_khoang_tien(timeRange)
+    het = bat_dau((date.fromisoformat(ngay[-1]) + timedelta(days=1)).isoformat())
+    if not la_shop_live(shop_id):
+        return insufficient("Trang này chỉ tính cho gian hàng thật trên sàn.", _meta(shop_id, 0)), None
+
+    don = list(db_live()["orders"].find(
+        {**DON_HOP_LE, "shop_id": oid(shop_id), "created_at": {"$gte": bat_dau(ngay[0]), "$lt": het},
+         "payment_status": {"$in": ["PAID", "REFUNDED"]}, "order_code": {"$not": {"$regex": "^REPLACE-"}}},
+        {"items": 1, "created_at": 1, "financial_breakdown": 1, "coupon_code": 1, "is_pod": 1}))
+    if not don:
+        return insufficient(f"Shop chưa có đơn đã thanh toán trong {nhan}.", _meta(shop_id, 0)), None
+
+    ten = {c["code"]: c.get("title") or "" for c in db_live()["coupons"].find(
+        {"shop_id": oid(shop_id)}, {"code": 1, "title": 1})}
+    hoan, hoan_mon = _hoan([d["_id"] for d in don])
+    bc = tong_hop(don, set(ten), hoan, ngay, hoan_mon)
+    for v in bc["vouchers"]:
+        v["title"] = ten.get(v["code"], "")
+    bc["market"] = _thi_truong(shop_id)
+    bc["range"], bc["from"], bc["to"] = timeRange, ngay[0], ngay[-1]
+    return bc, len(don)
+
+
+# Số liệu trả ngay; gợi ý AI (gọi LLM, 1–7s) để FE tải riêng ở /advice.
+@router.get("/api/analytics/shop/money", tags=["F43 · Hưng"])
+def money(shop_id: str = CurrentShop, timeRange: str = "30d"):
+    bc, n = _bao_cao(shop_id, timeRange)
+    if n is None:
+        return bc
+    return ok({**bc, "advice": KHONG_GOI_Y}, _meta(shop_id, n))
+
+
+@router.get("/api/analytics/shop/money/advice", tags=["F43 · Hưng"])
+def money_advice(shop_id: str = CurrentShop, timeRange: str = "30d"):
+    bc, n = _bao_cao(shop_id, timeRange)
+    if n is None:
+        return bc
+    kq = goi_y(shop_id, bc)
+    # data null khi LLM lỗi: FE không cache 5 phút, lần sau mở lại sẽ gọi lại
+    return ok(kq if kq["tips"] else None, _meta(shop_id, n))

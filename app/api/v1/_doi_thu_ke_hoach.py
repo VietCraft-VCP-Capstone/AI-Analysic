@@ -151,7 +151,7 @@ def _goi(url: str, body: Dict, headers: Dict[str, str], lay: Callable[[Dict], st
         return None
 
 
-def goi_llm(loi_nhac: str) -> Tuple[Optional[str], Optional[str]]:
+def goi_llm(loi_nhac: str, gemini: str = "gemini-3.5-flash") -> Tuple[Optional[str], Optional[str]]:
     """(văn bản, nhà cung cấp) từ khoá đầu tiên có trong môi trường; không có khoá hoặc lỗi thì (None, None)."""
     if os.getenv("ANTHROPIC_API_KEY"):
         return _goi("https://api.anthropic.com/v1/messages",
@@ -160,7 +160,7 @@ def goi_llm(loi_nhac: str) -> Tuple[Optional[str], Optional[str]]:
                     lambda b: b["content"][0]["text"]), f"anthropic/{MO_HINH_CLAUDE}"
     khoa = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if khoa:
-        m = "gemini-3.5-flash"                         # cùng họ mô hình service mùa vụ của nhóm đang dùng
+        m = gemini
         return _goi(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={khoa}",
                     {"contents": [{"parts": [{"text": loi_nhac}]}], "generationConfig": {"temperature": 0.3}},
                     {}, lambda b: b["candidates"][0]["content"]["parts"][0]["text"]), f"gemini/{m}"
