@@ -2582,24 +2582,29 @@ def seasonal(
                 _ev_d = date.fromisoformat(_ev_str)
                 _st_d = date.fromisoformat(_st_str)
                 _win_d = max(7, (_ev_d - _st_d).days)
-                _kw0 = (_camp.get("search_keywords") or ["quà tặng"])[0]
-                _s_obj, _m_key, _ = _tra_cuu_trend(_kw0)
-                if _s_obj is None:
-                    continue
-                _ckey = f"seasonal:dl_uplift:v1:{_m_key}:{_ev_d.isoformat()}:{_win_d}:{hom_nay.isoformat()}"
-                _up_c = cache_get_json(_ckey)
-                if not isinstance(_up_c, dict):
-                    _ev_info_c = next((e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == _camp["id"]), None)
-                    _ev_by_yr: Dict[int, date] = {}
-                    if _ev_info_c:
-                        for _yr in range(2021, hom_nay.year + 2):
-                            _tw_c = calendar_vn.calculate_occasion_window(_ev_info_c, date(_yr, 6, 1))
-                            if _tw_c and _tw_c.get("event_date"):
-                                _ev_by_yr[_yr] = date.fromisoformat(_tw_c["event_date"])
-                    _up_c = event_demand_uplift(series=_s_obj, event_dates=_ev_by_yr, event_date=_ev_d, window_days=_win_d, today=hom_nay)
-                    if _up_c:
-                        cache_set_json(_ckey, _up_c, ttl_seconds=1800)
-                if isinstance(_up_c, dict) and _up_c.get("uplift_p10") and _up_c.get("uplift_p90"):
+                _cand_kws = list(dict.fromkeys(list(_camp.get("search_keywords") or []) + ["quà tặng"]))
+                _up_c = None
+                _ev_info_c = next((e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == _camp["id"]), None)
+                for _kw_c in _cand_kws:
+                    _s_obj, _m_key, _ = _tra_cuu_trend(_kw_c)
+                    if _s_obj is None:
+                        continue
+                    _ckey = f"seasonal:dl_uplift:v1:{_m_key}:{_ev_d.isoformat()}:{_win_d}:{hom_nay.isoformat()}"
+                    _cand_up = cache_get_json(_ckey)
+                    if not isinstance(_cand_up, dict):
+                        _ev_by_yr: Dict[int, date] = {}
+                        if _ev_info_c:
+                            for _yr in range(2021, hom_nay.year + 2):
+                                _tw_c = calendar_vn.calculate_occasion_window(_ev_info_c, date(_yr, 6, 1))
+                                if _tw_c and _tw_c.get("event_date"):
+                                    _ev_by_yr[_yr] = date.fromisoformat(_tw_c["event_date"])
+                        _cand_up = event_demand_uplift(series=_s_obj, event_dates=_ev_by_yr, event_date=_ev_d, window_days=_win_d, today=hom_nay)
+                        if _cand_up:
+                            cache_set_json(_ckey, _cand_up, ttl_seconds=1800)
+                    if isinstance(_cand_up, dict) and _cand_up.get("uplift_p10") and _cand_up.get("uplift_p90"):
+                        _up_c = _cand_up
+                        break
+                if isinstance(_up_c, dict):
                     _o10 = max(1, round(shop_rate_90 * _win_d * float(_up_c["uplift_p10"])))
                     _o90 = max(_o10, round(shop_rate_90 * _win_d * float(_up_c["uplift_p90"])))
                     _camp["expected_orders"] = f"{_o10}" if _o10 == _o90 else f"{_o10}–{_o90}"
@@ -2623,7 +2628,7 @@ def seasonal(
             "title": "Tổng quan",
             "headline": f"{active_camp['name']} — {n_pass}/{len(potential_profiles)} ý tưởng đạt chuẩn triển khai",
             "bullets": [f"Còn {days_to_event} ngày đến cao điểm · {days_to_cut} ngày đến hạn chốt đơn"],
-            "next_step": "Xem ý tưởng phù hợp ngành của bạn", "cta_tab": "act1",
+            "next_step": "Xem ý tưởng", "cta_tab": "act1",
         },
         "ideas": {
             "title": "Ý tưởng",
@@ -2633,7 +2638,7 @@ def seasonal(
                  else "Chưa đủ đơn dịp trước của shop để so với ngành — đang dùng mặt bằng ngành/mô hình"),
                 f"{sum(1 for i in ready_ideas if i.get('evidence_level') == 'template')} ý tưởng chỉ là gợi ý tham khảo (chưa có dữ liệu bán thật)",
             ],
-            "next_step": "Chọn ý tưởng và nhận kế hoạch hành động", "cta_tab": "act2",
+            "next_step": "Sang Áp dụng", "cta_tab": "act2",
         },
         "apply": {
             "title": "Áp dụng",
@@ -2641,7 +2646,7 @@ def seasonal(
             "bullets": [f"Mỗi kế hoạch lùi từ hạn chốt {cut_off_d.strftime('%d/%m')} với mốc, KPI và dừng lỗ",
                         "Khoảng kỳ vọng đơn dựa trên nhịp đơn nền của shop × mức cầu dự báo" if impact.get("baseline_orders_per_day") is not None
                         else "Shop chưa đủ đơn nền 8 tuần để ước lượng kỳ vọng đơn"],
-            "next_step": "Theo dõi thành quả so với không áp dụng", "cta_tab": "act3",
+            "next_step": "Xem thành quả", "cta_tab": "act3",
         },
         "results": {
             "title": "Thành quả",
