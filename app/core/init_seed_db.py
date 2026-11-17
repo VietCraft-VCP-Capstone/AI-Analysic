@@ -31,15 +31,6 @@ def ensure_model_indexes(db) -> dict:
     c_run.create_index([("model_name", ASCENDING), ("started_at", ASCENDING)])
     created["model_run"] = [idx["name"] for idx in c_run.list_indexes()]
 
-    # 2. forecast_point — Kết quả dự báo
-    c_fc = db["forecast_point"]
-    c_fc.create_index(
-        [("entity_type", ASCENDING), ("entity_id", ASCENDING), ("forecast_date", ASCENDING)],
-        unique=True
-    )
-    c_fc.create_index([("run_id", ASCENDING)])
-    created["forecast_point"] = [idx["name"] for idx in c_fc.list_indexes()]
-
     # 3. seasonal_profile — Thành phần mùa vụ
     c_sp = db["seasonal_profile"]
     c_sp.create_index(
