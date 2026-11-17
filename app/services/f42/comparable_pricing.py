@@ -104,6 +104,32 @@ def _contains(text_prepped: str, phrase_prepped: str) -> bool:
     return f" {phrase_prepped} " in f" {text_prepped} "
 
 
+# Từ đầu quá chung, không đủ để coi là cùng loại ("Bộ ấm chén" ≠ "Bộ quần áo")
+_GENERIC_HEAD = {"bo", "do", "phu", "san", "hop"}
+
+
+def _head_tokens(prep: str) -> List[str]:
+    """2 từ có nghĩa đầu tiêu đề — tiếng Việt đặt danh từ chính ở đầu ("dong ho", "nen thom")."""
+    return [t for t in prep.split() if t not in _LEADING_NOISE and not any(ch.isdigit() for ch in t)][:2]
+
+
+def _same_product_type(q_head: List[str], c_prep: str) -> bool:
+    """
+    Tin c cùng loại với truy vấn khi MỞ ĐẦU bằng cùng danh từ chính ("giày nam chelsea" ~
+    "giày boots"); từ đầu quá chung ("bộ", "đồ") thì phải trùng cả 2 từ đầu.
+    Chỉ so ở ĐẦU tiêu đề: "Balo laptop" không dùng để định giá "Laptop Dell", "bờm đồng hồ la mã"
+    hay "hình xăm đồng hồ" không dùng cho "đồng hồ nam".
+    """
+    if not q_head:
+        return True
+    c_head = _head_tokens(c_prep)
+    if not c_head:
+        return False
+    if q_head[0] in _GENERIC_HEAD:
+        return c_head == q_head
+    return c_head[0] == q_head[0]
+
+
 def weighted_quantile(values: np.ndarray, weights: np.ndarray, q: float) -> float:
     order = np.argsort(values)
     v, w = values[order], weights[order]
@@ -117,18 +143,23 @@ def round_price_nice(val: float) -> int:
     if val <= 0:
         return 0
     step = 1_000 if val < 100_000 else (5_000 if val < 1_000_000 else 10_000)
-    return int(round(val / step) * step)
+    return int(math.floor(val / step + 0.5) * step)  # nửa lên, không làm tròn về số chẵn
 
 
 _ACCESSORY_MARKERS = [
-    "tui dung", "tui deo", "tui chong soc", "bao da", "bao dung", "op lung", "op",
+    # Phụ kiện công nghệ / điện tử / gia dụng
+    "tui dung", "tui deo", "tui chong soc", "bao da", "bao dung", "op lung", "op dien thoai", "op iphone", "op ipad", "op airpods", "op samsung", "op xiaomi", "op oppo",
     "kinh cuong luc", "cuong luc", "mieng dan", "dan man hinh", "day deo", "day sac",
     "cap sac", "cu sac", "dock sac", "khay nhom", "khay nuong", "khay lot", "khay giay",
     "giay nen", "giay bac", "vi nuong", "khoa buom", "khoa kim", "day dong ho",
-    "chot dong ho", "hop dung", "gia do", "chan de", "mieng lot", "de lot", "lot ly",
+    "chot dong ho", "khoa dong ho", "dung phu kien", "hop dung", "gia do", "chan de", "mieng lot", "de lot", "lot ly",
     "lot chuot", "vo boc", "nap day", "dau chuyen", "jack chuyen", "filter", "nap ong kinh",
     "mang loc", "loi loc", "khung vien", "nap lung", "pin thay the", "pin du phong",
-    "adapter", "remote", "remot", "dieu khien", "de giu", "mieng dan camera", "kinh bao ve"
+    "adapter", "remote", "remot", "dieu khien", "de giu", "mieng dan camera", "kinh bao ve",
+    # Phụ kiện thời trang / may mặc (không dùng đai nịt, cà vạt để định giá váy đầm)
+    "dai nit", "that lung", "ca vat", "caravat", "no deo co", "cai ao", "tram cai ao",
+    "khuyen tai", "bong tai", "vong tay", "day chuyen", "day nit", "tat chan", "tat vo", "vo chan", "gang tay",
+    "khan quang", "mieng dan nguc", "day ao", "moc ao", "kep toc", "bang do", "nit dam"
 ]
 
 
@@ -164,9 +195,11 @@ class ComparableIndex:
         self.n_docs = self.matrix.shape[0]
 
         # Phần dữ liệu sống của sàn
+        # (rows, matrix) gán MỘT lần: endpoint chạy trong threadpool, gán 2 biến riêng lẻ từng để
+        # luồng khác thấy matrix cũ + rows mới → IndexError bị nuốt, mất phần dữ liệu sàn.
         self._live_ts = 0.0
-        self._live_matrix: Optional[csr_matrix] = None
-        self._live_rows: List[Dict[str, Any]] = []
+        self._live: Tuple[List[Dict[str, Any]], Optional[csr_matrix]] = ([], None)
+        self._live_lock = threading.Lock()
 
     # ------------------------------------------------------------------ build
     @classmethod
@@ -194,37 +227,33 @@ class ComparableIndex:
         return pd.concat(frames, ignore_index=True)
 
     def refresh_live(self, db_live: Any) -> None:
-        """Nạp sản phẩm đang bán trên sàn (giá thật của chính VietCraft)."""
+        """Nạp sản phẩm đang bán công khai trên sàn, giá thật lấy từ product_variants.retail_price."""
         if db_live is None or time.time() - self._live_ts < LIVE_REFRESH_S:
             return
-        from app.services.f42.pricing_engine import to_float_price
+        # Chỉ một luồng nạp lại; các luồng khác dùng tạm bản cũ thay vì cùng quét 20k sản phẩm
+        if not self._live_lock.acquire(blocking=False):
+            return
+        try:
+            self._refresh_live_locked(db_live)
+        finally:
+            self._live_lock.release()
+
+    def _refresh_live_locked(self, db_live: Any) -> None:
+        if time.time() - self._live_ts < LIVE_REFRESH_S:
+            return
+        from app.services.f42.pricing_engine import fetch_live_listings
 
         rows: List[Dict[str, Any]] = []
-        try:
-            cursor = db_live["products"].find(
-                {"is_hidden": {"$ne": True}, "status": {"$ne": "UNPUBLISHED"}},
-                {"title": 1, "min_price": 1, "max_price": 1, "category_ids": 1},
-            ).limit(20000)
-            for p in cursor:
-                lo = to_float_price(p.get("min_price"))
-                hi = to_float_price(p.get("max_price"))
-                price = lo if lo else hi
-                if not price or not (PRICE_MIN <= price <= PRICE_MAX):
-                    continue
-                title = normalize_nfc(p.get("title") or "")
-                prep = _prep(title)
-                if len(prep) < 3:
-                    continue
-                rows.append({
-                    "title": title, "prep": prep, "price": price,
-                    "category_ids": [str(c) for c in (p.get("category_ids") or [])],
-                })
-        except Exception:
-            self._live_ts = time.time()
-            return
+        for r in fetch_live_listings(db_live):
+            if not (PRICE_MIN <= r["price"] <= PRICE_MAX):
+                continue
+            prep = _prep(r["title"])
+            if len(prep) < 3:
+                continue
+            rows.append({"title": r["title"], "prep": prep, "price": r["price"], "category_ids": r["category_ids"]})
 
-        self._live_rows = rows
-        self._live_matrix = self.vectorizer.transform([r["prep"] for r in rows]) if rows else None
+        matrix = self.vectorizer.transform([r["prep"] for r in rows]) if rows else None
+        self._live = (rows, matrix)
         self._live_ts = time.time()
 
     # ------------------------------------------------------------------ query
@@ -237,6 +266,9 @@ class ComparableIndex:
             return []
 
         q_is_acc = any(_contains(prep, m) for m in _ACCESSORY_MARKERS)
+        # Chỉ so giá với tin cùng loại sản phẩm: giống chữ thôi chưa đủ
+        # ("Đồng hồ nam dây da" từng được định giá theo "giày boots nam", "áo đông xuân nam").
+        q_head = _head_tokens(prep)
 
         out: List[Comparable] = []
         sims = (self.matrix @ q.T).toarray().ravel()
@@ -249,6 +281,8 @@ class ComparableIndex:
             if sims[i] <= 0:
                 continue
             c_prep = self.preps[i]
+            if not _same_product_type(q_head, c_prep):
+                continue
             c_is_acc = any(_contains(c_prep, m) for m in _ACCESSORY_MARKERS)
             # Không dùng phụ kiện để định giá thiết bị chính
             if not q_is_acc and c_is_acc:
@@ -264,15 +298,18 @@ class ComparableIndex:
             if len(out) >= top_k:
                 break
 
-        if self._live_matrix is not None and self._live_rows:
-            lsims = (self._live_matrix @ q.T).toarray().ravel()
+        live_rows, live_matrix = self._live  # đọc snapshot một lần
+        if live_matrix is not None and live_rows:
+            lsims = (live_matrix @ q.T).toarray().ravel()
             lk = min(top_k * 2, len(lsims))
             lidx = np.argpartition(-lsims, lk - 1)[:lk]
             sorted_lidx = lidx[np.argsort(-lsims[lidx])]
             for i in sorted_lidx:
                 if lsims[i] <= 0:
                     continue
-                r = self._live_rows[i]
+                r = live_rows[i]
+                if not _same_product_type(q_head, r["prep"]):
+                    continue
                 c_is_acc = any(_contains(r["prep"], m) for m in _ACCESSORY_MARKERS)
                 if not q_is_acc and c_is_acc:
                     continue

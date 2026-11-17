@@ -1,3 +1,4 @@
+import logging
 import math
 import re
 from typing import Any, Dict, List, Optional
@@ -7,6 +8,8 @@ from bson import ObjectId
 from app.services.f42 import config
 from app.services.f42.schemas import ComparableItem, PriceRange, PricingResult
 from app.services.f42.vi_text import contains_phrase_lenient, normalize_nfc
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +99,8 @@ def round_price(val: float, step: int = config.PRICE_ROUND_STEP) -> int:
     """Làm tròn tiền theo bước quy định (mặc định 1.000 VND)."""
     if val <= 0:
         return 0
-    return int(round(val / step) * step)
+    # Làm tròn nửa lên (round() của Python làm tròn về số chẵn: 2.500 → 2.000 nhưng 3.500 → 4.000)
+    return int(math.floor(val / step + 0.5) * step)
 
 
 def format_vnd(amount: float) -> str:
@@ -139,6 +143,7 @@ def _apply_cost_floor(
     """Không bao giờ gợi ý giá khiến seller bán dưới giá vốn + biên tối thiểu."""
     if blank_cost <= 0:
         return p25, p50, p75
+    market_p75 = p75
     if p50 < blank_cost * cfg.COST_FLOOR_RATIO:
         warnings.append("Giá thị trường của sản phẩm tương tự đang thấp hơn hoặc sát giá vốn của bạn.")
     min_safe = round_price(blank_cost * cfg.COST_MIN_SUGGEST_RATIO, cfg.PRICE_ROUND_STEP)
@@ -146,9 +151,16 @@ def _apply_cost_floor(
         p50 = min_safe
         p25 = max(p25, min_safe)
         p75 = max(p75, p50)
-    if blank_cost > p75:
+    if blank_cost > market_p75:
         warnings.append("Giá vốn của bạn cao hơn 75% sản phẩm tương tự, sẽ khó cạnh tranh về giá.")
     return p25, p50, p75
+
+
+def _floor_note(market_p50: int, suggested: int) -> str:
+    if suggested > market_p50:
+        return (f" Giá đề xuất đã được nâng lên {format_vnd(suggested)} (giá vốn × "
+                f"{str(config.COST_MIN_SUGGEST_RATIO).replace('.', ',')}) để không bán lỗ.")
+    return ""
 
 
 def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> PricingResult:
@@ -173,7 +185,8 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
         )
 
     warnings: List[str] = []
-    p25, p50, p75 = _apply_cost_floor(est.p25, est.p50, est.p75, blank_cost, warnings, cfg)
+    m25, m50, m75 = est.p25, est.p50, est.p75  # phân vị thị trường thật, trước khi áp giá vốn
+    p25, p50, p75 = _apply_cost_floor(m25, m50, m75, blank_cost, warnings, cfg)
 
     if est.confidence == "low":
         warnings.append(
@@ -193,12 +206,16 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
         parts.append(f"các tin cùng thương hiệu {est.detected_brand} có giá trung vị {format_vnd(est.brand_median)}")
     explanation = (
         "; ".join(parts)
-        + f". Khoảng giá phổ biến {format_vnd(p25)} – {format_vnd(p75)}, mức đề xuất cân bằng {format_vnd(p50)}."
+        + f". Giá thị trường P25: {format_vnd(m25)}, trung vị P50: {format_vnd(m50)}, P75: {format_vnd(m75)}."
+        + _floor_note(m50, p50)
     )
 
     comparables = [
         ComparableItem(
-            title=c.title[:140], price=int(round(c.price)), similarity=round(c.similarity, 3), source=c.source
+            title=c.title[:140],
+            price=int(round(c.price)),
+            similarity=round(c.similarity, 3),
+            source="Sàn VietCraft" if c.source == "vietcraft" else "Thị trường TMĐT"
         )
         for c in est.comparables[:8]
     ]
@@ -262,12 +279,13 @@ def compute_pricing(
         warnings.append(
             "Không tìm thấy sản phẩm thật sự giống, giá đang tính theo toàn bộ danh mục nên chỉ mang tính tham khảo."
         )
+        m25, m50, m75 = p25, p50, p75
         p25, p50, p75 = _apply_cost_floor(p25, p50, p75, blank_cost, warnings, cfg)
 
         explanation = (
             f"Dựa trên {sample_filtered} sản phẩm cùng danh mục trên sàn (sau khi lọc ngoại lai), "
-            f"khoảng giá phổ biến {format_vnd(p25)} – {format_vnd(p75)}. "
-            f"Mức đề xuất cân bằng: {format_vnd(p50)}."
+            f"khoảng giá phổ biến {format_vnd(m25)} – {format_vnd(m75)}, trung vị {format_vnd(m50)}. "
+            f"Mức đề xuất: {format_vnd(p50)}." + _floor_note(m50, p50)
         )
 
         return PricingResult(
@@ -292,8 +310,9 @@ def compute_pricing(
     elif blank_cost > 0:
         margin = target_margin if target_margin is not None else cfg.DEFAULT_TARGET_MARGIN
         suggested_price = round_price(blank_cost * (1 + margin), cfg.PRICE_ROUND_STEP)
-        low_price = round_price(blank_cost * 1.15, cfg.PRICE_ROUND_STEP)
-        high_price = round_price(blank_cost * (1 + margin * 1.5), cfg.PRICE_ROUND_STEP)
+        # Khoảng giá luôn chứa giá đề xuất (biên mục tiêu < 15% từng cho low > giá đề xuất)
+        low_price = min(round_price(blank_cost * 1.15, cfg.PRICE_ROUND_STEP), suggested_price)
+        high_price = max(round_price(blank_cost * (1 + margin * 1.5), cfg.PRICE_ROUND_STEP), suggested_price)
 
         warnings.append("Chưa tìm thấy sản phẩm tương tự để so giá thị trường.")
         explanation = (
@@ -346,78 +365,89 @@ def compute_pricing(
         )
 
 
+def _variant_min_prices(db_live: Any, product_ids: List[Any], chunk: int = 5000) -> Dict[Any, float]:
+    """Giá bán thấp nhất (retail_price) của các biến thể đang hoạt động, theo product_id."""
+    out: Dict[Any, float] = {}
+    for i in range(0, len(product_ids), chunk):
+        batch = product_ids[i:i + chunk]
+        rows = db_live["product_variants"].aggregate([
+            {"$match": {"product_id": {"$in": batch}, "is_active": {"$ne": False}}},
+            {"$group": {"_id": "$product_id", "min_price": {"$min": "$retail_price"}}},
+        ])
+        for r in rows:
+            val = to_float_price(r.get("min_price"))
+            if val:
+                out[r["_id"]] = val
+    return out
+
+
+def fetch_live_listings(
+    db_live: Any,
+    extra_filter: Optional[Dict[str, Any]] = None,
+    limit: int = config.LIVE_MAX_PRODUCTS,
+    cfg=config,
+) -> List[Dict[str, Any]]:
+    """
+    Sản phẩm đang bán công khai trên sàn kèm giá thật.
+
+    Giá lấy từ product_variants.retail_price (Decimal128) — collection products KHÔNG có
+    min_price/max_price. Mỗi sản phẩm chỉ đóng góp MỘT giá (biến thể rẻ nhất) để không
+    đếm trùng. Nếu một bản ghi cũ có min_price thì dùng làm phương án dự phòng.
+    """
+    if db_live is None:
+        return []
+    query: Dict[str, Any] = dict(cfg.LIVE_PRODUCT_FILTER)
+    if extra_filter:
+        query = {"$and": [query, extra_filter]}
+    try:
+        prods = list(db_live["products"].find(
+            query,
+            {"title": 1, "category_ids": 1, "categories": 1, "tags": 1, "materials": 1,
+             "min_price": 1, "max_price": 1},
+        ).limit(limit))
+        price_map = _variant_min_prices(db_live, [p["_id"] for p in prods]) if prods else {}
+    except Exception as exc:  # DB lỗi không được làm hỏng cả response
+        logger.warning("f42.fetch_live_listings_failed", extra={"error": str(exc)})
+        return []
+
+    rows: List[Dict[str, Any]] = []
+    for p in prods:
+        price = price_map.get(p["_id"]) or to_float_price(p.get("min_price")) or to_float_price(p.get("max_price"))
+        if not price:
+            continue
+        rows.append({
+            "_id": p["_id"],
+            "title": normalize_nfc(p.get("title") or ""),
+            "price": price,
+            "category_ids": [str(c) for c in (p.get("category_ids") or [])],
+            "tags": [t for t in (p.get("tags") or []) if isinstance(t, str)],
+            "materials": [m for m in (p.get("materials") or []) if isinstance(m, str)],
+        })
+    return rows
+
+
 def fetch_prices_from_db(
     category_id: Optional[str],
     db_live: Any,
     material: Optional[str] = None
 ) -> List[float]:
     """
-    Truy vấn giá sản phẩm cùng category_id từ collection products và product_variants.
-    Hỗ trợ ưu tiên biến thể hoặc sản phẩm có cùng chất liệu khi có sẵn dữ liệu.
+    Giá (mỗi sản phẩm một giá) của các sản phẩm đang bán cùng danh mục.
+    Nếu có >= MIN_SAMPLE_LOW sản phẩm cùng chất liệu thì ưu tiên nhóm đó.
     """
     if not category_id or db_live is None:
         return []
-
-    prices: List[float] = []
-    mat_specific_prices: List[float] = []
-
-    try:
-        # 1. Tìm trong products theo ObjectId hoặc string
-        match_query: Dict[str, Any] = {"is_hidden": {"$ne": True}}
-        if ObjectId.is_valid(category_id):
-            oid = ObjectId(category_id)
-            match_query["$or"] = [
-                {"category_ids": oid},
-                {"category_id": oid},
-                {"categories": category_id}
-            ]
-        else:
-            match_query["$or"] = [
-                {"categories": category_id},
-                {"category_id": category_id}
-            ]
-
-        prods = list(db_live["products"].find(
-            match_query,
-            {"_id": 1, "title": 1, "min_price": 1, "max_price": 1}
-        ).limit(150))
-
-        prod_ids = [p["_id"] for p in prods]
-        prod_title_map = {p["_id"]: p.get("title", "") for p in prods}
-
-        # 2. Lấy giá từ biến thể hoạt động
-        if prod_ids:
-            variants = list(db_live["product_variants"].find(
-                {"product_id": {"$in": prod_ids}, "is_active": {"$ne": False}},
-                {"retail_price": 1, "material": 1, "product_id": 1}
-            ).limit(300))
-
-            for v in variants:
-                val = to_float_price(v.get("retail_price"))
-                if val:
-                    prices.append(val)
-                    if material:
-                        v_mat = v.get("material") or ""
-                        p_title = prod_title_map.get(v.get("product_id"), "")
-                        if (v_mat and contains_phrase_lenient(v_mat, material)) or \
-                           (p_title and contains_phrase_lenient(p_title, material)):
-                            mat_specific_prices.append(val)
-
-        # 3. Bổ sung min_price / max_price từ chính sản phẩm nếu ít biến thể
-        if len(prices) < 5:
-            for p in prods:
-                min_p = to_float_price(p.get("min_price"))
-                max_p = to_float_price(p.get("max_price"))
-                if min_p:
-                    prices.append(min_p)
-                if max_p and max_p != min_p:
-                    prices.append(max_p)
-
-        # Nếu tìm thấy đủ mẫu cùng chất liệu (>= 5 sản phẩm), ưu tiên mẫu đó
-        if len(mat_specific_prices) >= 5:
-            return mat_specific_prices
-
-    except Exception:
-        pass
-
+    ors: List[Dict[str, Any]] = [{"categories": category_id}]
+    if ObjectId.is_valid(category_id):
+        ors.append({"category_ids": ObjectId(category_id)})
+    rows = fetch_live_listings(db_live, {"$or": ors}, limit=500)
+    prices = [r["price"] for r in rows]
+    if material:
+        mat_prices = [
+            r["price"] for r in rows
+            if any(contains_phrase_lenient(m, material) for m in r["materials"])
+            or contains_phrase_lenient(r["title"], material)
+        ]
+        if len(mat_prices) >= config.MIN_SAMPLE_LOW:
+            return mat_prices
     return prices
