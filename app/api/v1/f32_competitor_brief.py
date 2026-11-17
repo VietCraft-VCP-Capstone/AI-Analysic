@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 
 from app.api.v1._competitor_live import dong_live, mo_ta_live, ten_tag_live, theo_doi_live
-from app.api.v1._doi_thu_ai import gia_de_xuat, may_giong
-from app.api.v1._doi_thu_ke_hoach import gom_su_that, ke_hoach_luat
+from app.api.v1._competitor_ai import gia_de_xuat, may_giong
+from app.api.v1._competitor_plan import gom_su_that, ke_hoach_luat
 from app.api.v1._live import la_shop_live, san_pham_live
 from app.api.v1._template import CurrentShop, build_meta, insufficient, ok
 from app.api.v1.f32_competitors import competitors

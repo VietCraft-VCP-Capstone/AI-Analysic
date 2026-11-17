@@ -3,7 +3,7 @@ Không dùng mô hình ngôn ngữ: cùng số liệu luôn ra cùng kế hoạc
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
-from app.api.v1._doi_thu_toan_canh import vung_ban_chay
+from app.api.v1._competitor_landscape import vung_ban_chay
 
 TOI_DA_VIEC = 10      # trang chia 5 việc mỗi trang, trang đầu vẫn là 5 việc gấp nhất
 MOI_LOAI = 2          # mỗi loại việc tối đa 2 dòng để kế hoạch không toàn một việc

@@ -14,8 +14,8 @@ if str(ROOT_DIR) not in sys.path:
 from bson import ObjectId
 
 from app.api.v1 import _live
-from app.api.v1._chat_lieu import chuan_hoa, tap_chuan
-from app.api.v1._doi_thu_ai import diem_de_doa, may_giong, suc_manh_shop, tang_dot_bien
+from app.api.v1._materials import chuan_hoa, tap_chuan
+from app.api.v1._competitor_ai import diem_de_doa, may_giong, suc_manh_shop, tang_dot_bien
 from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, la_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import build_meta, mart_not_ready, meta_from_record, not_found, ok

@@ -489,7 +489,7 @@ không đọc `mart_competitor` và không có bảng mới. Shop thật chỉ s
 
 ### AI đối thủ (độ giống sản phẩm) — thêm 18/10/2026, chỉ shop thật
 
-Bộ máy `app/api/v1/_doi_thu_ai.py`: TF-IDF (tên + từ khoá có dấu, mô tả nhẹ hơn, cụm ký tự của tên) và độ giống
+Bộ máy `app/api/v1/_competitor_ai.py`: TF-IDF (tên + từ khoá có dấu, mô tả nhẹ hơn, cụm ký tự của tên) và độ giống
 cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải có ít nhất một từ hiếm chung hoặc giống ≥ 0,35.
 Đo chất lượng bằng script đo riêng, không nằm trong repo.
 
@@ -504,7 +504,7 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   `rival_shops_by_category` (thêm 27/10): `{all: [...], by_category: {<danh mục>: [...]}}`, mỗi phần tử như trên kèm `categories`
   (danh mục của mình có sản phẩm bị trùng), tối đa 10 shop mỗi danh sách. `all` tính trên mọi sản phẩm của shop, không phụ thuộc
   `categoryId`, để gợi ý theo dõi không bỏ sót đối thủ ở danh mục phụ. FE bỏ shop đã theo dõi rồi hiện 3 shop đầu.
-- F32 toàn cảnh danh mục (thêm 11/11, chỉ shop thật, `_doi_thu_toan_canh.py`, thống kê chứ không phải AI):
+- F32 toàn cảnh danh mục (thêm 11/11, chỉ shop thật, `_competitor_landscape.py`, thống kê chứ không phải AI):
   `shops[]` mỗi shop trong danh mục `{shop_id, shop_name, is_me, n_listings, types[{name, count}], materials[] (3 chất liệu
   nhiều nhất, tên chuẩn), new_30d, price_vnd{p25, median, p75}, units_90d, share_pct, rating (rating_shrunk gộp theo số lượt),
   n_reviews, favorites, response_minutes, weekly_units[8] (số bán theo tuần trong danh mục), trend, similar_listings, rivalry,
@@ -543,7 +543,7 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 
 ### Kế hoạch tuần này · `/api/analytics/competitor-brief` (GET, ngoài bảng 16 endpoint) — thêm 18/10/2026, chỉ shop thật
 
-BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_doi_thu_ke_hoach.py`
+BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_competitor_plan.py`
 gom các sự thật đã tính ở F32–F36 (cạnh tranh cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
 từ khoá ≥ 2 sản phẩm giống dùng, mẫu gần như trùng hàng của mình, giá ngoài vùng bán chạy, shop cùng phân khúc bán gấp đôi,
 đánh giá dồn về top 5, thời gian phản hồi, đối thủ trực tiếp chưa theo dõi, lấy từ `rival_shops_by_category.all`) rồi lập tối đa 10 việc,

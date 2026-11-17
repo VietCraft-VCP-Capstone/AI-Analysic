@@ -13,7 +13,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
-from app.api.v1._chat_lieu import chuan_hoa, tap_chuan
+from app.api.v1._materials import chuan_hoa, tap_chuan
 
 # Hai ngưỡng đo trên 17.000 tin Shopee chưa dùng để chỉnh (22/10/2026), đáp án là nhãn "cùng sản phẩm":
 NGUONG_GIONG = 0.15         # liệt kê đối thủ: bắt được 79% hàng cùng sản phẩm trong top 5

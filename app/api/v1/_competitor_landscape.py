@@ -15,8 +15,8 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
-from app.api.v1._chat_lieu import chuan_hoa
-from app.api.v1._doi_thu_ai import tang_dot_bien
+from app.api.v1._materials import chuan_hoa
+from app.api.v1._competitor_ai import tang_dot_bien
 
 SO_TUAN = 8
 CUA_SO_MOI_NGAY = 56          # 8 tuần, cùng cửa sổ với phần Theo dõi

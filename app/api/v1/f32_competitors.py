@@ -10,8 +10,8 @@ from fastapi import APIRouter
 
 from app.api.v1._competitor_live import (_bay_gio, danh_muc_cua_toi, loai_cua_toi, meta_doi_thu, mo_ta_live,
                                          nguon_doi_thu, ten_tag_live, tuan_ban_trong_dm)
-from app.api.v1._doi_thu_ai import may_giong, shop_canh_tranh_nhat, shop_nen_theo_doi
-from app.api.v1._doi_thu_toan_canh import diem_gia, tong_hop_shop
+from app.api.v1._competitor_ai import may_giong, shop_canh_tranh_nhat, shop_nen_theo_doi
+from app.api.v1._competitor_landscape import diem_gia, tong_hop_shop
 from app.api.v1._mart import tien
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, ok
 
