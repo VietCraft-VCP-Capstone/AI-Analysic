@@ -41,13 +41,15 @@ def test_breakdown_has_six_rows_and_sums():
     result = _calc(with_id(base_product())).calculate(PRODUCT_ID)
     assert [r["key"] for r in result["breakdown"]] == list(KEYS)
     assert len(result["breakdown"]) == 6
-    assert round(sum(r["points"] for r in result["breakdown"]), 1) == result["score"]
+    scored = [r for r in result["breakdown"] if r["scored"]]
+    assert round(sum(r["points"] for r in scored) * 100 / sum(r["weight"] for r in scored), 1) == result["score"]
 
 
 def test_material_todo_impact_equals_weight():
     result = _calc(_no_material_product()).calculate(PRODUCT_ID)
     todo = next(t for t in result["todos"] if t["code"] == "material")
-    assert todo["impact"] == 10.0
+    fixed = _calc({**_no_material_product(), "materials": ["cotton"]}).calculate(PRODUCT_ID)
+    assert todo["impact"] == round(fixed["score"] - result["score"], 1)
     assert todo["message"] == "Ghi rõ chất liệu (ví dụ: cotton, len, gốm…) vào ô Chất liệu"
 
 

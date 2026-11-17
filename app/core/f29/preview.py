@@ -10,7 +10,10 @@ INPUT_OF = {"image": "n_images", "description": "description_length", "tags": "n
 
 def _sub(key: str, used: Dict[str, Any], rows: Dict[str, Any], pc: Dict[str, Any]) -> float:
     if key == "price":
-        return factors.price_score(used["price"], rows["price"]["reference"]["price"], pc)
+        ref = rows["price"]["reference"]
+        if not ref["comparable"]:
+            return 0.0
+        return factors.price_score(used["price"], ref["price"], pc)
     return factors.ratio_score(float(used[INPUT_OF[key]]), float(rows[key]["target"]))
 
 
@@ -29,16 +32,23 @@ def preview_health(
     given = {k: v for k, v in overrides.items() if v is not None}
     used = {**now_in, **{k: v for k, v in given.items() if k in LEVERS}}
 
-    subs: Dict[str, float] = {}
+    unscored = {"price"} if used["price"] is not None and not rows["price"]["reference"]["comparable"] else set()
+    subs: Dict[str, Optional[float]] = {}
     points: Dict[str, float] = {}
     for key in KEYS:
+        if key in unscored:
+            subs[key], points[key] = None, 0.0
+            continue
         if key in ("review", "material"):
             subs[key], points[key] = rows[key]["sub_score"], rows[key]["points"]
             continue
         sub = _sub(key, used, rows, pc)
         subs[key], points[key] = round(sub, 1), round(w[key] * sub / 100, 1)
 
-    score = round(sum(points[k] for k in KEYS), 1)
+    scored = [k for k in KEYS if k not in unscored]
+    score = round(sum(points[k] for k in scored) * 100 / sum(w[k] for k in scored), 1)
+    if current.get("cap"):
+        score = min(score, current["cap"]["score"])
     empty = {"image": not used["n_images"], "description": not used["description_length"],
              "tags": not used["n_tags"], "price": used["price"] is None}
     return {

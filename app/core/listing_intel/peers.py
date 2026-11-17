@@ -1,6 +1,7 @@
 import numpy as np
 
 from .axes import issue
+from .lexicon import attributes
 from .normalize import fold, ngrams, norm
 from .tags_axis import tag_report
 from .trend_axis import LO, HI, momentum
@@ -9,6 +10,11 @@ from .types import AxisResult
 UP = 0.1
 MIN_TAGS = 3
 MAX_KEYWORDS = 10
+DANGLING_END = {"đi", "và", "cho", "của", "với", "là", "có", "để", "từ", "trong", "khi", "thì", "mà", "hay",
+                "hoặc", "các", "những", "một", "được", "thể", "thời", "phong", "cá", "trẻ", "chất", "kiểu",
+                "năng", "thoải", "đơn", "hàn", "sang", "tinh"}
+DANGLING_START = {"và", "của", "với", "là", "thì", "mà", "hay", "hoặc", "các", "những", "được", "thao", "trang",
+                  "cách", "tính", "trung", "liệu", "dáng", "động", "mái", "giản", "quốc", "trọng", "tế"}
 TAG_ISSUES = {
     "duplicate": ("duplicate_tag", "Có tag trùng lặp, nên xoá bớt và thay bằng từ khoá khác."),
     "pending": ("pending_tag", "Có tag đang chờ duyệt, chưa giúp khách tìm thấy sản phẩm."),
@@ -39,7 +45,7 @@ def tag_raw(inp, ctx, terms, pending) -> float:
 
 def tags_axis(inp, peer_raws, ctx, pending, approved=frozenset()):
     raw, verdicts, suggestions = tag_report(inp.tags, inp.title, inp.group, ctx.lift, rising(ctx), pending,
-                                            None, None, approved)
+                                            None, None, approved, facts=" ".join([inp.description, *inp.materials]))
     pct = percentile(raw, peer_raws)
     found = {v["verdict"] for v in verdicts}
     issues = [issue(*TAG_ISSUES[k]) for k in TAG_ISSUES if k in found]
@@ -60,6 +66,13 @@ def trend_axis(h: float, ms: list, feats: dict, peer_h: list[float]) -> AxisResu
     return AxisResult(score=score, features=metrics, issues=issues)
 
 
+def _whole_term(gram: str) -> bool:
+    words = gram.split()
+    if len(words) == 1:
+        return gram in {norm(t) for terms in attributes(gram).values() for t in terms}
+    return words[-1] not in DANGLING_END and words[0] not in DANGLING_START
+
+
 def keywords(inp, ms, ctx) -> list[dict]:
     table = ctx.lift.get(inp.group) or {}
     title = f" {fold(inp.title)} "
@@ -67,6 +80,6 @@ def keywords(inp, ms, ctx) -> list[dict]:
     for k, _ in ms:
         out[k] = {"term": k, "lift": table.get(norm(k)), "trend": direction(momentum(ctx.trend_series[k], ctx.at)),
                   "in_title": f" {fold(k)} " in title}
-    for g in sorted({g for g in ngrams(inp.title) if g in table}, key=lambda g: -abs(table[g])):
+    for g in sorted({g for g in ngrams(inp.title) if g in table and _whole_term(g)}, key=lambda g: -abs(table[g])):
         out.setdefault(g, {"term": g, "lift": table[g], "trend": None, "in_title": True})
     return list(out.values())[:MAX_KEYWORDS]

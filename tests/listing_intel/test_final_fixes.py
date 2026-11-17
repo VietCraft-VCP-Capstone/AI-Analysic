@@ -66,5 +66,6 @@ def test_market_reason_matches_cause():
 
 
 def test_tag_reason_uses_vietnamese_label_and_comma():
-    _, _, sugg = tag_report(["áo"], "áo khoác", "fashion", {"fashion": {"cotton": 0.25}}, set(), set(), None, None)
+    _, _, sugg = tag_report(["áo"], "áo khoác", "fashion", {"fashion": {"cotton": 0.25}}, set(), set(), None, None,
+                            facts="cotton 100%")
     assert sugg[0]["reason"].endswith("nhóm Thời trang (độ lift 0,25)")

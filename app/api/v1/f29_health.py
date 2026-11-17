@@ -19,8 +19,8 @@ from app.core.f29.ml.scorer import load_model, score_listing
 from app.core.f29.preview import preview_health
 
 router = APIRouter()
-NO_SHOP = "Cần cấu hình gian hàng trước khi xem sức khoẻ listing"
-NO_WEIGHTS = "Điểm sức khoẻ đang được cập nhật, vui lòng thử lại sau."
+NO_SHOP = "Cần cấu hình gian hàng trước khi xem điểm tối ưu sản phẩm"
+NO_WEIGHTS = "Điểm tối ưu sản phẩm đang được cập nhật, vui lòng thử lại sau."
 
 
 def _kiem_quyen_listing(id: str, shop_id: str) -> None:
@@ -101,14 +101,19 @@ def health_preview(id: str, body: HealthPreviewBody, shop_id: str = CurrentShop)
 def health_ml(id: str, shop_id: str = CurrentShop):
     meta_args = dict(scope="listing", scope_id=id, database="vietcraft", mode="live")
     if not la_shop_live(shop_id):
-        return insufficient("Cần cấu hình gian hàng trước khi xem sức khoẻ listing", build_meta(**meta_args))
+        return insufficient("Cần cấu hình gian hàng trước khi xem độ sẵn sàng chuyển đổi của sản phẩm", build_meta(**meta_args))
 
     _kiem_quyen_listing(id, shop_id)
 
     result = score_listing(id)
     version = load_model()[1]["model_version"]
     if isinstance(result, str):
-        return insufficient(result, build_meta(model_version=version, collection="orders", **meta_args))
+        from app.core.f29.ml.cold_start import estimate_cold_start_propensity
+        cold_res = estimate_cold_start_propensity(id, db_live())
+        if cold_res:
+            result = cold_res
+        else:
+            return insufficient(result, build_meta(model_version=version, collection="orders", **meta_args))
 
     meta = build_meta(model_version=version, collection="orders", attributed_to_live_shop=True,
                       sample_size=result["peer_group"]["size"],
@@ -142,5 +147,5 @@ def sync_listing_health(id: str, shop_id: str = CurrentShop):
         not_found("listing")
     if "error" in result:
         return insufficient(NO_WEIGHTS, build_meta(**meta_args))
-    return insufficient("Không thể tính điểm sức khỏe", build_meta(**meta_args))
+    return insufficient("Không thể tính điểm tối ưu sản phẩm", build_meta(**meta_args))
 

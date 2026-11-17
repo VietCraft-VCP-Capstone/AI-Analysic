@@ -63,9 +63,9 @@ def _get_last_scan_time(job_id: str, default_lookback_minutes: int = DEFAULT_LOO
     return datetime.now(timezone.utc) - timedelta(minutes=default_lookback_minutes)
 
 
-def _set_last_scan_time(job_id: str, ts: datetime, failed_ids: Optional[List[str]] = None) -> None:
+def _set_last_scan_time(job_id: str, ts: datetime, failed_ids: Optional[List[str]] = None, **extra) -> None:
     db = db_live()
-    data = {"last_scan_time": ts, "updated_at": datetime.now(timezone.utc)}
+    data = {"last_scan_time": ts, "updated_at": datetime.now(timezone.utc), **extra}
     if failed_ids is not None:
         data["failed_product_ids"] = failed_ids
     db[STATE_COLLECTION].update_one(
@@ -99,6 +99,8 @@ def _recalculate_and_save(
 
 
 def scan_changed_products() -> int:
+    if needs_full_rescan(db_live()):
+        return nightly_full_rescan()
     if not _acquire_lock("lock_f29_minute_scan", ttl_seconds=180):
         print("[f29_scheduler] Lock scan_changed dang ban, bo qua luot nay.", flush=True)
         return 0
@@ -144,8 +146,8 @@ def scan_changed_products() -> int:
 
 
 def needs_full_rescan(db) -> bool:
-    latest = db["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
-    return latest is None or latest.get("model_version") != MODEL_VERSION
+    state = db[STATE_COLLECTION].find_one({"_id": STATE_ID_NIGHTLY}) or {}
+    return state.get("model_version") != MODEL_VERSION
 
 
 def nightly_full_rescan() -> int:
@@ -159,7 +161,7 @@ def nightly_full_rescan() -> int:
         all_ids = [p["_id"] for p in db["products"].find(LOC_SP_THAT, {"_id": 1})]
         n_ok, stopped, failed_ids = _recalculate_and_save(all_ids) if all_ids else (0, False, [])
         if not stopped:
-            _set_last_scan_time(STATE_ID_NIGHTLY, scan_started_at)
+            _set_last_scan_time(STATE_ID_NIGHTLY, scan_started_at, model_version=MODEL_VERSION)
             _set_last_scan_time(STATE_ID_MINUTE_SCAN, scan_started_at, failed_ids)
         return n_ok
     finally:

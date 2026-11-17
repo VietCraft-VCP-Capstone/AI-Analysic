@@ -1,4 +1,5 @@
 import hashlib
+import math
 from datetime import datetime, timezone
 from statistics import median
 from typing import Any, Dict, FrozenSet, List, Optional, Tuple
@@ -6,15 +7,15 @@ from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 from app.api.v1._live import LOC_SP_THAT, db_live
 from app.config import settings
-from app.core.f29 import basis, breakdown, factors, material, review_stats, scoring, weights
-from app.core.f29.constants import MODEL_VERSION
+from app.core.f29 import basis, breakdown, category_check, factors, material, review_stats, scoring, weights
+from app.core.f29.constants import BLOCKER_CAP, BLOCKER_FIELDS, MODEL_VERSION
 from app.core.f29.factors import KEYS
-from app.core.f29.price_ref import PriceRef, category_of, product_group, product_price
-from app.core.f29.price_suggest import suggest
-from app.core.f29.todos import build_todos, build_warnings, content_peer_stats
+from app.core.f29.price_ref import PriceRef, category_of, product_price
+from app.core.f29.todos import build_todos, build_warnings, content_peer_stats, price_check
 
 VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -38,11 +39,28 @@ class HealthScoreCalculator:
         self._pending_tags: Optional[FrozenSet] = None
         self._peers: Dict[Any, Tuple[List[int], List[int], List[int], bool]] = {}
         self._price_ref: Optional[PriceRef] = None
+        self._categories: Optional[List[str]] = None
+
+    def category_names(self) -> List[str]:
+        if self._categories is None:
+            self._categories = [c["name"] for c in self.live_db["categories"].find({}, {"name": 1})
+                                if isinstance(c.get("name"), str)]
+        return self._categories
+
+    def _category_hint(self, product: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        cats = product.get("categories")
+        current = cats[0] if isinstance(cats, list) and cats and isinstance(cats[0], str) else None
+        better = category_check.better_category(product.get("title") or "", current, self.category_names())
+        if not better:
+            return None
+        return {"type": "info", "field": "categories", "current_value": current, "target": better, "impact": 0,
+                "message": f"Có danh mục “{better}” khớp với tên sản phẩm hơn “{current}”, đổi để khách lọc tìm thấy và so sánh đúng hơn"}
 
     def pending_tag_ids(self) -> FrozenSet:
         if self._pending_tags is None:
+            tags = self.live_db["tags"]
             self._pending_tags = frozenset(
-                t["_id"] for t in self.live_db["tags"].find({"status": "pending"}, {"_id": 1}))
+                t["_id"] for field in ("status", "review_status") for t in tags.find({field: "pending"}, {"_id": 1}))
         return self._pending_tags
 
     def _get_status_from_score(self, score: float) -> str:
@@ -94,15 +112,12 @@ class HealthScoreCalculator:
         p0 = review_stats.platform_p0(self.live_db)
         m = float(cfg["review"]["m"])
 
-        low_full = float(pc["low_full"])
-        full_at = float(pc["full_at"])
-        if price is not None and ref.get("price"):
-            if price < ref["price"] * low_full:
-                price_target = ref["price"] * low_full
-            else:
-                price_target = ref["price"] * full_at
-        else:
-            price_target = ref["price"] * full_at if ref.get("price") else None
+        price_target, full = None, None
+        if ref["comparable"]:
+            full = {"low": math.ceil(ref["price"] * float(pc["low_full"]) / 1000) * 1000,
+                    "high": math.floor(ref["price"] * float(pc["full_at"]) / 1000) * 1000}
+            low = price is not None and price < ref["price"] * float(pc["low_full"])
+            price_target = ref["price"] * float(pc["low_full"] if low else pc["full_at"])
 
         values = {"image": n_images, "description": desc_w, "tags": n_tags,
                   "material": int(has_mat), "review": n_reviews, "price": price}
@@ -116,14 +131,15 @@ class HealthScoreCalculator:
             "tags": factors.ratio_score(float(n_tags), float(t["tags"])),
             "material": 100.0 if has_mat else 0.0,
             "review": factors.review_score(n_good, n_reviews, p0, m),
-            "price": factors.price_score(price, ref["price"], pc),
+            "price": factors.price_score(price, ref["price"], pc) if ref["comparable"] else 0.0,
         }
+        unscored = {"price"} if price is not None and not ref["comparable"] else set()
         missing = {k for k in KEYS if not values[k]}
         extra = {"tags": {"pending": scoring.count_pending_tags(product, pending)},
                  "review": {"n_good": n_good, "p0": p0, "m": m},
-                 "price": {"reference": ref,
-                           "suggestion": suggest(product.get("title") or "", product_group(product))}}
-        return breakdown.build(subs, values, targets, peers, missing, cfg["weights"], extra)
+                 "price": {"reference": ref, "full": full,
+                           "suggestion": {"low": ref["low"], "high": ref["high"]} if ref["low"] else None}}
+        return breakdown.build(subs, values, targets, peers, missing, cfg["weights"], extra, unscored)
 
     def calculate(self, product_id: str) -> Optional[Dict[str, Any]]:
         try:
@@ -147,8 +163,16 @@ class HealthScoreCalculator:
         ))
         n_good, n_reviews = review_stats.product_counts(self.live_db, product_oid)
         rows, score = self._rows(product, variants, cfg, (n_good, n_reviews))
-        infos = [{"type": "info", "field": h["field"], "message": h["message"], "current_value": None,
-                  "target": None, "impact": 0} for h in self._get_content_hints(product)]
+        infos = [{"type": h.get("type", "info"), "field": h["field"], "message": h["message"], "current_value": None,
+                  "target": h.get("target"), "impact": 0} for h in self._get_content_hints(product)]
+        price_warning = price_check(next(r for r in rows if r["key"] == "price"))
+        category_hint = self._category_hint(product)
+        warnings = (self._get_warnings(product, variants) + ([price_warning] if price_warning else [])
+                    + infos + ([category_hint] if category_hint else []))
+        blockers = sorted({w["field"] for w in warnings if w["type"] == "warning" and w["field"] in BLOCKER_FIELDS})
+        cap = {"score": BLOCKER_CAP, "raw": score, "fields": blockers} if blockers and score > BLOCKER_CAP else None
+        if cap:
+            score = BLOCKER_CAP
 
         raw_imgs = product.get("images")
         thumb = raw_imgs[0] if isinstance(raw_imgs, list) and raw_imgs else (raw_imgs if isinstance(raw_imgs, str) else None)
@@ -163,7 +187,8 @@ class HealthScoreCalculator:
             "axes_missing": [r["key"] for r in rows if r["missing"]],
             "breakdown": rows,
             "todos": build_todos(rows),
-            "warnings": self._get_warnings(product, variants) + infos,
+            "warnings": warnings,
+            "cap": cap,
             "computed_at": now_utc.isoformat().replace("+00:00", "Z"),
             "model_version": MODEL_VERSION,
             "content_hash": scoring.content_hash(product),
@@ -207,9 +232,10 @@ class HealthScoreCalculator:
             "updated_at": now,
         }
 
-        self.live_db["listing_health_scores"].update_one(
-            {"product_id": product_oid},
-            {"$set": doc, "$setOnInsert": {"created_at": now}},
-            upsert=True,
-        )
+        update = {"$set": doc, "$setOnInsert": {"created_at": now}}
+        scores = self.live_db["listing_health_scores"]
+        try:
+            scores.update_one({"product_id": product_oid, "date": date_dt}, update, upsert=True)
+        except DuplicateKeyError:
+            scores.update_one({"product_id": product_oid}, update)
         return str(product_oid)

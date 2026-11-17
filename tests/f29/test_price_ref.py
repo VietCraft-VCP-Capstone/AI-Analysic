@@ -9,6 +9,8 @@ from tests.f29.fake_price import FakePriceModel
 
 PARAMS = {"full_at": 1.0, "zero_at": 2.0, "min_peers": 8}
 TARGET_CAT = "Váy Đầm"
+TIKI_REF = {"price": 189000.0, "source": "tiki", "n": 0, "kind": "std", "comparable": False,
+            "low": None, "high": None, "materials": [], "same_n": 0, "prices": []}
 
 
 def _oid(i: int) -> ObjectId:
@@ -60,14 +62,14 @@ def test_reference_uses_model_when_few_peers(fake_price_model):
 
 def test_reference_falls_back_to_tiki_without_model():
     ref = PriceRef(_db((0, TARGET_CAT, 100000)), PARAMS).reference(_target())
-    assert ref == {"price": 189000.0, "source": "tiki", "n": 0, "kind": "std"}
+    assert ref == TIKI_REF
 
 
 def test_reference_falls_back_to_tiki_when_predict_fails(monkeypatch):
     model = FakePriceModel(error=RuntimeError("boom"))
     monkeypatch.setattr(price_suggest, "_load", lambda path: (model, -0.2, 0.2))
     ref = PriceRef(_db((0, TARGET_CAT, 100000)), PARAMS).reference(_target())
-    assert ref == {"price": 189000.0, "source": "tiki", "n": 0, "kind": "std"}
+    assert ref == TIKI_REF
 
 
 def test_pod_product_does_not_use_std_peers():
@@ -139,3 +141,36 @@ def test_reference_excludes_same_shop():
     ref = PriceRef(db, PARAMS).reference(products[0])
     assert ref["source"] != "category"
 
+
+
+def _material_db(peer_title, n=8):
+    products = [{"_id": _oid(0), "shop_id": _oid(500), "categories": [TARGET_CAT], "title": "Váy lụa tơ tằm"}]
+    products += [{"_id": _oid(i), "shop_id": _oid(501), "categories": [TARGET_CAT], "title": f"{peer_title} {i}"}
+                 for i in range(1, n + 1)]
+    variants = [{"product_id": p["_id"], "retail_price": str(100000 * (i + 1))} for i, p in enumerate(products)]
+    return make_calculator(products=products, product_variants=variants).live_db, products[0]
+
+
+def test_reference_same_material_is_comparable_with_band():
+    db, target = _material_db("Váy lụa")
+    ref = PriceRef(db, PARAMS).reference(target)
+    assert ref["source"] == "material" and ref["comparable"] is True and ref["materials"] == ["lụa"]
+    assert ref["n"] == 8 and ref["low"] <= ref["price"] <= ref["high"]
+
+
+def test_reference_other_material_is_not_comparable():
+    db, target = _material_db("Váy cotton")
+    ref = PriceRef(db, PARAMS).reference(target)
+    assert ref["source"] == "category" and ref["comparable"] is False
+
+
+def test_reference_too_few_same_material_falls_back():
+    db, target = _material_db("Váy lụa", n=7)
+    assert PriceRef(db, PARAMS).reference(target)["comparable"] is False
+
+
+def test_sample_keeps_ends_and_caps_length():
+    from app.core.f29.price_ref import _sample
+    out = _sample([float(x) for x in range(1000, 0, -1)], cap=5)
+    assert len(out) == 5 and out[0] == 1.0 and out[-1] == 1000.0 and out == sorted(out)
+    assert _sample([3.0, 1.0]) == [1.0, 3.0]

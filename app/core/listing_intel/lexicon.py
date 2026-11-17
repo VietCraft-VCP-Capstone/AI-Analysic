@@ -35,15 +35,35 @@ _BANNED_TERMS = [
 ]
 
 
+NEXT_EXCLUDE = {
+    "đồng": {"hồ", "nghiệp", "phục", "giá", "thời", "ý", "hành", "đội", "bộ", "nhất", "tiền", "bằng", "tình",
+             "điệu", "loạt", "dạng", "minh", "hương", "quê", "ruộng", "bào", "chí", "tâm", "hành"},
+    "dạ": {"hội", "quang", "dày", "con"},
+}
+PREV_EXCLUDE = {"đồng": {"cánh", "đồng", "một", "nghìn", "triệu", "giá"}}
+
+
+def _excluded(term, i, n, tokens) -> bool:
+    nxt = tokens[i + n][0] if i + n < len(tokens) else None
+    prev = tokens[i - 1][0] if i > 0 else None
+    return nxt in NEXT_EXCLUDE.get(term, ()) or prev in PREV_EXCLUDE.get(term, ())
+
+
 def _match(terms, tokens) -> list[str]:
     used, hit = set(), set()
     for term, parts in sorted(terms, key=lambda x: -len(x[0])):
         for i in _find(parts, tokens):
+            if _excluded(term, i, len(parts), tokens):
+                continue
             span = range(i, i + len(parts))
             if used.isdisjoint(span):
                 used.update(span)
                 hit.add(term)
     return [t for t, _ in terms if t in hit]
+
+
+def materials(text) -> list[str]:
+    return _match(_TERMS["material"], _tokens(norm(text)))
 
 
 def attributes(text) -> dict[str, list[str]]:
