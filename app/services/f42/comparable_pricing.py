@@ -27,9 +27,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 from app.services.f42.vi_text import clean_tokens, normalize_nfc, strip_accents
 
-# ---------------------------------------------------------------------------
-# Tham số (đã hiệu chỉnh bằng backtest trên tập test Tiki, xem scripts/backtest)
-# ---------------------------------------------------------------------------
 TOP_K = 40                 # số ứng viên lấy ra trước khi lọc
 MIN_SIM = 0.18             # độ tương đồng cosine tối thiểu để được coi là "tương đồng"
 REL_SIM = 0.55             # chỉ giữ tin có sim >= REL_SIM * sim của tin giống nhất
@@ -113,7 +110,7 @@ def _prep(text: str) -> str:
     return t.strip()
 
 
-# ---------------------------------------------------------------- nhận diện đúng mẫu (hãng + đời)
+# nhận diện đúng mẫu (hãng + đời)
 _MODEL_QUALIFIERS = {"pro", "max", "plus", "mini", "ultra", "lite", "se", "fe", "air", "note", "neo"}
 _UNIT_RE = re.compile(r"^\d+(gb|tb|mb|ml|l|cm|mm|m|kg|g|gr|w|mah|inch|hz|k)$")
 _CODE_RE = re.compile(r"^(?=.{2,})[a-z]{0,3}\d{1,4}[a-z]{0,2}$")   # 18, s25, a17, c85, 14t — không lấy "2" (áo 2 dây)
@@ -124,25 +121,37 @@ def _contains(text_prepped: str, phrase_prepped: str) -> bool:
     return f" {phrase_prepped} " in f" {text_prepped} "
 
 
-# Từ đầu quá chung, không đủ để coi là cùng loại ("Bộ ấm chén" ≠ "Bộ quần áo")
-_GENERIC_HEAD = {"bo", "do", "phu", "san", "hop"}
+# Từ đầu quá chung, không đủ để coi là cùng loại ("Bộ ấm chén" ≠ "Bộ quần áo",
+# "Áo quần" ≠ "Áo dài", "Giày thể thao" ≠ "Giày tây", "Máy lọc nước" ≠ "Máy sấy tóc")
+_GENERIC_HEAD = {
+    "bo", "do", "phu", "san", "hop", "ao", "quan", "giay", "dep", "tui", "vi",
+    "mu", "non", "may", "den", "binh", "vay", "dam", "khan",
+}
 
 
-def _head_tokens(prep: str) -> List[str]:
-    """2 từ có nghĩa đầu tiêu đề — tiếng Việt đặt danh từ chính ở đầu ("dong ho", "nen thom")."""
-    return [t for t in prep.split() if t not in _LEADING_NOISE and not any(ch.isdigit() for ch in t)][:2]
+def _head_tokens(prep: str, n: int = 2) -> List[str]:
+    """n từ có nghĩa đầu tiêu đề — tiếng Việt đặt danh từ chính ở đầu ("dong ho", "nen thom")."""
+    return [t for t in prep.split() if t not in _LEADING_NOISE and not any(ch.isdigit() for ch in t)][:n]
+
+
+def _type_head(prep: str) -> List[str]:
+    """Số từ đầu dùng để xác định loại sản phẩm: lấy 3 từ nếu từ đầu quá chung chung
+    ("bộ", "áo", "giày"...) vì từ thứ 2 vẫn chưa đủ phân biệt ("bộ áo quần" vs "bộ áo dài",
+    "giày thể thao" vs "giày tây"), ngược lại 2 từ là đủ."""
+    head2 = _head_tokens(prep, 2)
+    return _head_tokens(prep, 3) if head2 and head2[0] in _GENERIC_HEAD else head2
 
 
 def _same_product_type(q_head: List[str], c_prep: str) -> bool:
     """
     Tin c cùng loại với truy vấn khi MỞ ĐẦU bằng cùng danh từ chính ("giày nam chelsea" ~
-    "giày boots"); từ đầu quá chung ("bộ", "đồ") thì phải trùng cả 2 từ đầu.
+    "giày boots"); từ đầu quá chung ("bộ", "áo", "đồ"...) thì phải trùng đủ số từ đầu của q_head.
     Chỉ so ở ĐẦU tiêu đề: "Balo laptop" không dùng để định giá "Laptop Dell", "bờm đồng hồ la mã"
     hay "hình xăm đồng hồ" không dùng cho "đồng hồ nam".
     """
     if not q_head:
         return True
-    c_head = _head_tokens(c_prep)
+    c_head = _head_tokens(c_prep, len(q_head))
     if not c_head:
         return False
     if q_head[0] in _GENERIC_HEAD:
@@ -407,8 +416,8 @@ class ComparableIndex:
 
     @staticmethod
     def _type_matcher(prep: str):
-        """Hàm kiểm tra 1 tin cùng loại sản phẩm (2 từ đầu tiêu đề)."""
-        q_head = _head_tokens(prep)
+        """Hàm kiểm tra 1 tin cùng loại sản phẩm (2-3 từ đầu tiêu đề)."""
+        q_head = _type_head(prep)
         return lambda c_prep: _same_product_type(q_head, c_prep)
 
     def _snapshot_hits(self, snapshot, q, match, q_is_acc, source: str, limit: int) -> List[Comparable]:
@@ -475,8 +484,8 @@ class ComparableIndex:
         if q.nnz == 0:
             return [], None, False
         q_is_acc = _is_accessory(prep)
-        q_head = _head_tokens(prep)
-        type_strict = (lambda c: _head_tokens(c) == q_head) if len(q_head) == 2 else (lambda c: _same_product_type(q_head, c))
+        q_head = _type_head(prep)
+        type_strict = (lambda c: _head_tokens(c, len(q_head)) == q_head) if len(q_head) >= 2 else (lambda c: _same_product_type(q_head, c))
         type_loose = lambda c: _same_product_type(q_head, c)  # noqa: E731
         collect = lambda m: self._collect(q, m, q_is_acc, top_k, exclude_idx)  # noqa: E731
 

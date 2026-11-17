@@ -87,6 +87,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         ra(f"  [!] F29 price model khong warm-up duoc: {type(e).__name__}: {e}")
 
+    try:
+        from app.services.f42.comparable_pricing import ComparableIndex
+        ComparableIndex.get()
+        ra("  [OK] F42 comparable index (TF-IDF): da fit san (warm-up), request dau khong con cham.")
+    except Exception as e:
+        ra(f"  [!] F42 comparable index khong warm-up duoc: {type(e).__name__}: {e}")
+
     if settings.ENABLE_INPROCESS_SCHEDULER:
         try:
             from app.core.f29_scheduler import start_scheduler
