@@ -8,8 +8,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
-from app.api.v1._competitor_live import (_bay_gio, danh_muc_cua_toi, meta_doi_thu, mo_ta_live, nguon_doi_thu,
-                                         ten_tag_live, tuan_ban_trong_dm)
+from app.api.v1._competitor_live import (_bay_gio, danh_muc_cua_toi, loai_cua_toi, meta_doi_thu, mo_ta_live,
+                                         nguon_doi_thu, ten_tag_live, tuan_ban_trong_dm)
 from app.api.v1._doi_thu_ai import may_giong, shop_canh_tranh_nhat, shop_nen_theo_doi
 from app.api.v1._doi_thu_toan_canh import diem_gia, tong_hop_shop
 from app.api.v1._mart import tien
@@ -91,6 +91,8 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
         "low_sample": len(doi_thu) < TOI_THIEU_PHAN_VI,
         # Danh mục của sàn không có nhãn cứng ở FE như dữ liệu mồi nên trả kèm tên.
         **({"category_names": ten_dm} if ng["live"] else {}),
+        # Shop thật: loại hàng của bạn trong từng danh mục, để ô chọn ghi rõ "Áo (Áo thun, Hoodie)".
+        **({"my_types_by_category": loai_cua_toi(coll, shop_id)} if ng["live"] else {}),
         "my_listings": [{
             "listing_id": r["listing_id"],
             "title": r.get("title"),

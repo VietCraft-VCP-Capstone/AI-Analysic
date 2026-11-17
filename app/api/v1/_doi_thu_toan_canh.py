@@ -19,7 +19,7 @@ from app.api.v1._chat_lieu import chuan_hoa
 from app.api.v1._doi_thu_ai import tang_dot_bien
 
 SO_TUAN = 8
-CUA_SO_MOI_NGAY = 30
+CUA_SO_MOI_NGAY = 56          # 8 tuần, cùng cửa sổ với phần Theo dõi
 Z_THI_PHAN = 1.96          # thị phần đổi thật ở mức tin cậy 95%, không phải dao động ngẫu nhiên
 TOI_THIEU_XU_HUONG = 10    # dưới 10 sản phẩm bán trong 8 tuần thì chưa nói lên hay xuống
 CUNG_PHAN_KHUC = 0.10      # giá trung vị lệch dưới 10% là cùng phân khúc giá
@@ -75,13 +75,14 @@ def tong_hop_shop(rows: List[dict], toi: str, tuan: Dict[str, List[int]], trung:
         cl = Counter(c for r in ds for c in {c for m in r.get("materials") or [] for c in chuan_hoa(m)})
         ban = sum(r["est_sales_90d"] for r in ds)
         phan_hoi = next((r["shop_response_seconds"] for r in ds if r.get("shop_response_seconds")), None)
+        ti_le = next((r["shop_reply_rate"] for r in ds if r.get("shop_reply_rate") is not None), None)
         w = tuan.get(sid) or [0] * SO_TUAN
         d: Dict[str, Any] = {
             "shop_id": sid, "shop_name": ds[0].get("shop_name"), "is_me": sid == toi,
             "n_listings": len(ds),
             "types": [{"name": t, "count": n} for t, n in Counter(_loai(r) for r in ds).most_common()],
             "materials": [c for c, _ in cl.most_common(3)],
-            "new_30d": sum(1 for r in ds if (_ngay(r.get("created_at")) or moc_moi) > moc_moi),
+            "new_8w": sum(1 for r in ds if (_ngay(r.get("created_at")) or moc_moi) > moc_moi),
             "price_vnd": {"p25": int(np.percentile(gia, 25)), "median": int(np.median(gia)), "p75": int(np.percentile(gia, 75))},
             "units_90d": ban,
             "share_pct": round(100 * ban / tong_ban, 1) if tong_ban else 0.0,
@@ -90,6 +91,7 @@ def tong_hop_shop(rows: List[dict], toi: str, tuan: Dict[str, List[int]], trung:
             "n_reviews": sum(r.get("n_reviews") or 0 for r in ds),
             "favorites": sum(r.get("favorite_count") or 0 for r in ds),
             "response_minutes": round(phan_hoi / 60) if phan_hoi else None,
+            "reply_rate": ti_le,
             "weekly_units": list(w),
             "trend": _xu_huong(w, tuan_tong),
             "similar_listings": trung.get(sid, 0),
