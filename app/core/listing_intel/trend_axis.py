@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.seasonal import STL
 
-from app.core.calendar_vn import upcoming_events
+from app.core.listing_intel.events import upcoming_events
 from app.core.listing_intel.normalize import fold
 from app.core.metrics import mase
 

@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -24,6 +25,13 @@ def _sl(it: Dict[str, Any]) -> int:
     return int(it.get("quantity") or 1)
 
 
+def ngay_giao(don: Dict[str, Any]) -> Optional[str]:
+    """Ngày giao xong đầu tiên (giống BE); đơn cũ thiếu lịch sử thì dùng ngày tạo."""
+    lan = [r["changed_at"] for r in don.get("status_history") or []
+           if r.get("status") == "DELIVERED" and isinstance(r.get("changed_at"), datetime)]
+    return ngay_vn(min(lan) if lan else don.get("created_at"))
+
+
 def _net(don: Dict[str, Any], hoan: Dict[str, int]) -> int:
     return _v(_fb(don).get("seller_payout_amount")) - hoan.get(str(don["_id"]), 0)
 
@@ -44,7 +52,7 @@ def _dong_tien(don: List[Dict], ma_shop: Set[str], hoan: Dict[str, int]) -> Dict
 def _theo_ngay(don: List[Dict], hoan: Dict[str, int], ngay: List[str]) -> List[Dict[str, Any]]:
     tong = {n: {"date": n, "net_vnd": 0, "orders": 0} for n in ngay}
     for d in don:
-        n = ngay_vn(d.get("created_at"))
+        n = ngay_giao(d)
         if n in tong:
             tong[n]["net_vnd"] += _net(d, hoan)
             tong[n]["orders"] += 1
@@ -107,7 +115,7 @@ def _trung_binh(don: List[Dict], hoan: Dict[str, int]) -> int:
 
 def _so_sanh(don: List[Dict], ma_shop: Set[str], hoan: Dict[str, int]) -> Optional[Dict[str, int]]:
     co = [d for d in don if d.get("coupon_code") in ma_shop]
-    khong = [d for d in don if d.get("coupon_code") not in ma_shop]
+    khong = [d for d in don if not d.get("coupon_code")]  # đơn dùng voucher sàn không thuộc nhóm nào
     if len(co) < TOI_THIEU_SO_SANH or len(khong) < TOI_THIEU_SO_SANH:
         return None
     return {"with_orders": len(co), "with_avg_vnd": _trung_binh(co, hoan),
