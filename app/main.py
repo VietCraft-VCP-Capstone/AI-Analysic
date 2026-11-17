@@ -94,6 +94,12 @@ async def lifespan(app: FastAPI):
             ra("  [OK] F29 scheduler: da bat (in-process).")
         except Exception as e:
             ra(f"  [!] F29 scheduler KHONG bat duoc: {type(e).__name__}: {e}")
+        try:
+            from app.core.seasonal_dl_scheduler import start as start_seasonal_scheduler
+            start_seasonal_scheduler()
+            ra("  [OK] Seasonal DL scheduler: da kiem tra (in-process).")
+        except Exception as e:
+            ra(f"  [!] Seasonal DL scheduler KHONG bat duoc: {type(e).__name__}: {e}")
     else:
         ra("  [-] F29 scheduler: TAT trong tien trinh web (chay bang worker rieng).")
     ra("=" * 72)
