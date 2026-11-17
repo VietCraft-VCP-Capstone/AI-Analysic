@@ -68,9 +68,12 @@ def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: D
         gaps = [g for g in gaps if g["mine"] != g["theirs"]]          # làm tròn ra bằng nhau thì không đáng nêu
         if gaps:
             su.append({"kind": "nhom", "mine": ten[nhom["my_group"]], "best": ten[nhom["best_group"]], "gaps": gaps})
-    for s in (f32 or {}).get("direct_rival_shops") or []:
+    # Lấy trên mọi danh mục, không chỉ danh mục chính, để không bỏ sót đối thủ ở danh mục phụ.
+    ten_dm = (f32 or {}).get("category_names") or {}
+    for s in ((f32 or {}).get("rival_shops_by_category") or {}).get("all") or (f32 or {}).get("direct_rival_shops") or []:
         if s["shop_id"] not in theo_doi:
-            su.append({"kind": "theo_doi", "shop_id": s["shop_id"], "shop": s.get("shop_name"), "overlap": s["overlap"]})
+            su.append({"kind": "theo_doi", "shop_id": s["shop_id"], "shop": s.get("shop_name"), "overlap": s["overlap"],
+                       "categories": [ten_dm.get(c) or c for c in s.get("categories") or []]})
             break
     return su
 
@@ -119,7 +122,8 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                          "link": "/seller/insights/competitors#manh-yeu"})
         elif k == "theo_doi":
             viec.append({"action": f"Theo dõi {f['shop']}",
-                         "why": f"Shop này có hàng giống {f['overlap']} sản phẩm của bạn nhất.",
+                         "why": f"Shop này có hàng giống {f['overlap']} sản phẩm của bạn nhất"
+                                + (f" (ở {', '.join(f['categories'])})." if f.get("categories") else "."),
                          "link": f"/seller/competitors/{f['shop_id']}"})
         viec[-1]["priority"] = _muc(f)      # thứ tự xếp ở trên đã đi từ gấp tới nên làm
         if len(viec) == TOI_DA_VIEC:

@@ -9,7 +9,7 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 
 from app.api.v1._competitor_live import danh_muc_cua_toi, meta_doi_thu, mo_ta_live, nguon_doi_thu, ten_tag_live
-from app.api.v1._doi_thu_ai import may_giong, shop_canh_tranh_nhat
+from app.api.v1._doi_thu_ai import may_giong, shop_canh_tranh_nhat, shop_nen_theo_doi
 from app.api.v1._mart import tien
 from app.api.v1._template import CurrentShop, insufficient, invalid_param, ok
 
@@ -42,7 +42,7 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
 
     cua_toi, chinh, ten_dm = danh_muc_cua_toi(coll, shop_id)
     if not cua_toi:
-        return insufficient("Shop chưa có sản phẩm nào nên chưa so sánh được với ai")
+        return insufficient("Bạn chưa có sản phẩm đăng bán trong danh mục này.")  # MSG137
 
     cat = categoryId or chinh
     if cat not in cua_toi:
@@ -93,6 +93,9 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
             **({"direct_rivals": may.doi_thu_truc_tiep(r["listing_id"])} if may else {}),
         } for r in sorted(cua_minh, key=lambda r: r.get("rank_in_cat") or 10**9)],
         **({"direct_rival_shops": shop_canh_tranh_nhat(may, [r["listing_id"] for r in cua_minh])} if may else {}),
+        # Gợi ý theo dõi không bó trong danh mục đang xem: shop nhiều danh mục vẫn thấy đối thủ ở danh mục phụ.
+        **({"rival_shops_by_category": shop_nen_theo_doi(
+            may, {r["listing_id"]: r["category_id"] for r in coll.find({"shop_id": shop_id})})} if may else {}),
         "competitors": [{
             "rank": i,
             "listing_id": r["listing_id"],

@@ -496,8 +496,11 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 - F32 `my_listings[].direct_rivals`: `[{product_id, shop_id, shop_name, title, price_vnd, est_sales_90d,
   similarity (0–1), near_identical, reasons[]}]`, tối đa 5. Liệt kê từ độ giống 0,15; `near_identical` khi ≥ 0,35.
   Hai ngưỡng đo trên 17.000 tin Shopee Product Matching chưa dùng để chỉnh: ở 0,15 bắt được 79% hàng cùng sản phẩm
-  trong top 5; từ 0,35 thì 73% kết quả đúng là cùng sản phẩm. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity}]`,
-  tối đa 3 shop trùng nhiều sản phẩm của mình nhất.
+  trong top 5; từ 0,35 thì 73% kết quả đúng là cùng sản phẩm. `direct_rival_shops`: `[{shop_id, shop_name, overlap, best_similarity,
+  my_product_ids}]`, tối đa 3 shop trùng nhiều sản phẩm của mình nhất **trong danh mục đang xem**.
+  `rival_shops_by_category` (thêm 27/10): `{all: [...], by_category: {<danh mục>: [...]}}`, mỗi phần tử như trên kèm `categories`
+  (danh mục của mình có sản phẩm bị trùng), tối đa 10 shop mỗi danh sách. `all` tính trên mọi sản phẩm của shop, không phụ thuộc
+  `categoryId`, để gợi ý theo dõi không bỏ sót đối thủ ở danh mục phụ. FE bỏ shop đã theo dõi rồi hiện 3 shop đầu.
 - F35 (khi đã chọn `productId`) `ai_price`: `{suggested_vnd, low_vnd, high_vnd, confidence: high|medium|low,
   rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
   `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 8 sản phẩm giống nhất, pha với mặt
@@ -521,7 +524,7 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 
 BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_doi_thu_ke_hoach.py`
 gom các sự thật đã tính ở F32–F36 (đe doạ cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
-từ khoá ≥ 2 sản phẩm giống dùng, khoảng cách tới nhóm bán tốt, đối thủ trực tiếp chưa theo dõi) rồi lập tối đa 10 việc,
+từ khoá ≥ 2 sản phẩm giống dùng, khoảng cách tới nhóm bán tốt, đối thủ trực tiếp chưa theo dõi, lấy từ `rival_shops_by_category.all`) rồi lập tối đa 10 việc,
 mỗi loại tối đa 2 (FE chia 5 việc mỗi trang).
 
 `data`: `{source: rules|llm, provider (vd "anthropic/claude-sonnet-5-5") | null, actions[{action, why, link | null, priority}],

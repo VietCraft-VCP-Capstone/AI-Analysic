@@ -50,7 +50,7 @@ class LLMSeasonalService:
         prompt = (
             f"Bạn là chuyên gia phân tích thị hiếu và nguồn hàng TMĐT tại Việt Nam.\n"
             f"DỮ LIỆU KHAI PHÁ THỰC TẾ TỪ SÀN VIETCRAFT:\n"
-            f"- Mùa vụ / Dịp lễ: '{keyword}'\n"
+            f"- Dịp lễ / Cao điểm: '{keyword}'\n"
             f"- Nhóm hàng bứt phá nhu cầu: '{mined.get('cluster_name')}'\n"
             f"- Dải giá chốt đơn phổ biến trên sàn: {mined.get('market_price_range')}\n"
             f"NGUYÊN TẮC BẮT BUỘC:\n"
@@ -270,7 +270,7 @@ class LLMSeasonalService:
                     "design_hook": f"Khung cảnh lễ hội và niềm vui sum vầy phong cách tranh sơn dầu hiện đại.",
                     "color_palette": "Tông màu ấm, vàng kim, đỏ may mắn hoặc tông lạnh tuyết trắng",
                     "estimated_profit": "150.000đ - 280.000đ/bức",
-                    "target_audience": "Chủ căn hộ, quán cà phê và văn phòng cần trang trí mùa vụ"
+                    "target_audience": "Chủ căn hộ, quán cà phê và văn phòng cần trang trí dịp lễ"
                 }
             ]
         else:

@@ -16,6 +16,7 @@ from app.api.v1._template import CurrentShop, insufficient, ok
 router = APIRouter()
 
 TOI_THIEU_LISTING = 5       # BR-193
+MSG139 = f"Gian hàng cần tối thiểu {TOI_THIEU_LISTING} sản phẩm công khai để thực hiện so sánh."
 SO_DOI_THU = 5              # BR-191
 
 TRUC = ["listing_count", "avg_rating", "response_speed", "avg_price", "product_diversity"]
@@ -42,16 +43,14 @@ def shop_comparison(shop_id: str = CurrentShop):
                               "rating_shrunk": 1, "product_type_id": 1, "revenue_90d_vnd": 1,
                               "computed_at": 1, "model_version": 1}))
     if not cua_toi:
-        return insufficient("Shop chưa có sản phẩm nào nên chưa so sánh được")
+        return insufficient(MSG139)
 
     meta = meta_doi_thu(ng, cua_toi[0], scope="shop", scope_id=shop_id, sample_size=len(cua_toi))
 
     if len(cua_toi) < TOI_THIEU_LISTING:
         meta["unlock"] = {"requirement": "sản phẩm của shop", "unit": "sản phẩm",
                           "current": len(cua_toi), "target": TOI_THIEU_LISTING}
-        return insufficient(
-            f"Shop mới có {len(cua_toi)} sản phẩm, cần tối thiểu {TOI_THIEU_LISTING} "
-            f"mới so sánh được với shop khác", meta)
+        return insufficient(MSG139, meta)
 
     dem_cat = defaultdict(int)
     for r in cua_toi:

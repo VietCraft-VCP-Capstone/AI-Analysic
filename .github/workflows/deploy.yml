@@ -1,0 +1,38 @@
+name: Deploy AI Analytics to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH to VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script_stop: true
+          script: |
+            echo "🚀 Navigating to deploy directory: ${{ secrets.DEPLOY_PATH }}"
+            cd ${{ secrets.DEPLOY_PATH }}
+            
+            echo "📥 Fetching and syncing latest code for AI Analytics..."
+            cd ai-analysic
+            git fetch origin main
+            git reset --hard origin/main
+            cd ..
+            
+            echo "🔨 Rebuilding & restarting AI Analytics container..."
+            docker compose build ai-analytics
+            docker compose up -d --no-deps ai-analytics
+            
+            echo "🧹 Cleaning up old unused images..."
+            docker image prune -f
+            
+            echo "✅ AI Analytics successfully deployed!"
