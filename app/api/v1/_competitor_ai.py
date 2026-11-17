@@ -2,7 +2,7 @@ import math
 import re
 import time
 import unicodedata
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -13,11 +13,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
+from app.api.v1._materials import chuan_hoa, tap_chuan
+
 # Hai ngưỡng đo trên 17.000 tin Shopee chưa dùng để chỉnh (22/10/2026), đáp án là nhãn "cùng sản phẩm":
 NGUONG_GIONG = 0.15         # liệt kê đối thủ: bắt được 79% hàng cùng sản phẩm trong top 5
 NGUONG_GAN_NHU_Y_HET = 0.35 # từ mức này 73% đúng là cùng sản phẩm (ngưỡng F1 cao nhất)
 NGUONG_KHONG_LY_DO = 0.35   # không có từ hiếm nào chung thì phải giống tới mức này mới tính
 SO_DOI_THU = 5
+SO_SHOP_GOI_Y = 10           # đủ dư để FE bỏ shop đã theo dõi mà vẫn còn 3 shop
 K_GIA = 8
 TOI_THIEU_GIA = 3
 TRON_GIA = 10                # càng nhiều đối thủ trực tiếp thì càng tin giá của họ hơn mặt bằng cùng loại
@@ -66,9 +69,10 @@ def _gram(doc: str) -> List[str]:
 
 
 def truong(row: Dict[str, Any], ten_tag: Dict[str, str]) -> List[str]:
-    """Tên nhân đôi (quan trọng nhất), từng từ khoá (tên có dấu), loại hàng."""
+    """Tên nhân đôi (quan trọng nhất), từng từ khoá (tên có dấu), từng chất liệu (tên chuẩn nếu nhận ra), loại hàng."""
     tag = [ten_tag.get(t) or str(t).replace("-", " ") for t in row.get("tags") or []]
-    return [row.get("title") or ""] * 2 + tag + [row.get("product_type_name") or ""]
+    cl = [" ".join(chuan_hoa(m)) or str(m) for m in row.get("materials") or []]
+    return [row.get("title") or ""] * 2 + tag + cl + [row.get("product_type_name") or ""]
 
 
 def _tfidf(docs: List[str], **kw):
@@ -108,6 +112,11 @@ class MayGiong:
         for i, r in enumerate(self.dong):
             theo_loai.setdefault(r.get("product_type_id"), []).append(i)
         self.hiem = {l: np.asarray(co[idx].mean(axis=0)).ravel() < TAN_SUAT_LY_DO for l, idx in theo_loai.items()}
+        self.cl = [tap_chuan(r.get("materials")) for r in self.dong]
+
+    def khac_chat_lieu(self, i: int, j: int) -> bool:
+        """Cả hai có chất liệu nhận ra được mà không chung tên chuẩn nào; một bên chưa ghi hoặc không nhận ra thì không kết luận."""
+        return bool(self.cl[i]) and bool(self.cl[j]) and not (self.cl[i] & self.cl[j])
 
     def _ly_do(self, i: int, j: int, k: int = 3) -> List[str]:
         """Các từ hiếm hai sản phẩm cùng có; bỏ tên loại hàng vì cùng loại là điều kiện so, không phải lý do."""
@@ -129,7 +138,7 @@ class MayGiong:
         return ra
 
     def lang_gieng(self, listing_id: str, k: int, nguong: float = NGUONG_GIONG) -> List[Tuple[int, float]]:
-        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, đạt ngưỡng."""
+        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, không khác chất liệu, đạt ngưỡng."""
         i = self.vi_tri.get(listing_id)
         if i is None or self.x is None:
             return []
@@ -137,7 +146,8 @@ class MayGiong:
         sim = (self.x @ self.x[i].T).toarray().ravel()
         ung = sorted(((float(sim[j]), j) for j, r in enumerate(self.dong)
                       if j != i and r.get("product_type_id") == loai
-                      and r["shop_id"] != self.dong[i]["shop_id"] and sim[j] >= nguong), reverse=True)
+                      and r["shop_id"] != self.dong[i]["shop_id"] and sim[j] >= nguong
+                      and not self.khac_chat_lieu(i, j)), reverse=True)
         # Đối thủ trực tiếp phải có điểm chung có nghĩa, không chỉ giống nhau ở văn mẫu mô tả.
         return [(j, s) for s, j in ung if s >= NGUONG_KHONG_LY_DO or self._ly_do(i, j, 1)][:k]
 
@@ -164,6 +174,7 @@ class MayGiong:
             "similarity": round(s, 3),
             "near_identical": s >= NGUONG_GAN_NHU_Y_HET,
             "reasons": self._ly_do(i, j),
+            "materials": self.dong[j].get("materials") or [],
         } for j, s in self.lang_gieng(listing_id, k)]
 
 
@@ -225,8 +236,22 @@ def shop_canh_tranh_nhat(may: MayGiong, cua_toi: Sequence[str], k: int = 3) -> L
             g["_sp"].add(pid)
             g["best_similarity"] = max(g["best_similarity"], round(s, 3))
     for g in gom.values():
-        g["overlap"] = len(g.pop("_sp"))
+        g["my_product_ids"] = sorted(g.pop("_sp"))
+        g["overlap"] = len(g["my_product_ids"])
     return sorted(gom.values(), key=lambda g: (-g["overlap"], -g["best_similarity"]))[:k]
+
+
+def shop_nen_theo_doi(may: MayGiong, dm_cua_sp: Dict[str, str], k: int = SO_SHOP_GOI_Y) -> Dict[str, Any]:
+    """Shop nên theo dõi trên mọi sản phẩm của tôi ("all") và trong từng danh mục; mỗi shop ghi danh mục bị trùng."""
+    theo_dm: Dict[str, List[str]] = defaultdict(list)
+    for pid, dm in dm_cua_sp.items():
+        theo_dm[dm].append(pid)
+    ra = {"all": shop_canh_tranh_nhat(may, list(dm_cua_sp), k),
+          "by_category": {dm: shop_canh_tranh_nhat(may, ids, k) for dm, ids in theo_dm.items()}}
+    for ds in [ra["all"], *ra["by_category"].values()]:
+        for s in ds:
+            s["categories"] = sorted({dm_cua_sp[p] for p in s["my_product_ids"]})
+    return ra
 
 
 _CACHE: Dict[str, Any] = {"khoa": None, "luc": 0.0, "may": None}
@@ -235,7 +260,8 @@ _CACHE: Dict[str, Any] = {"khoa": None, "luc": 0.0, "may": None}
 def may_giong(dong: Sequence[Dict[str, Any]], doc_mo_ta, doc_ten_tag) -> MayGiong:
     """Dựng lại máy khi tập sản phẩm đổi hoặc quá CACHE_GIAY. doc_mo_ta(ids) -> {id: mô tả}, doc_ten_tag(slugs) -> {slug: tên}."""
     # shortcut: cache trong RAM của một tiến trình, nhiều worker thì mỗi worker tự dựng; sàn lớn thì chuyển sang Redis.
-    khoa = hash(tuple(sorted((r["listing_id"], r.get("title"), r.get("price_vnd"), r.get("est_sales_90d")) for r in dong)))
+    khoa = hash(tuple(sorted((r["listing_id"], r.get("title"), r.get("price_vnd"), r.get("est_sales_90d"),
+                              tuple(r.get("materials") or ())) for r in dong)))
     if _CACHE["khoa"] != khoa or time.time() - _CACHE["luc"] > CACHE_GIAY:
         _CACHE.update(khoa=khoa, luc=time.time(), may=MayGiong(
             dong, doc_mo_ta([r["listing_id"] for r in dong]), doc_ten_tag({t for r in dong for t in r.get("tags") or []})))
@@ -289,7 +315,9 @@ def tang_dot_bien(tuan: Dict[str, List[float]]) -> List[Dict[str, Any]]:
         z = (cuoi - giua) / do_lech
         if z >= Z_TANG_TOC and cuoi >= giua + 3:
             ra.append({"shop_id": sid, "last_week": int(cuoi), "baseline": round(giua, 1),
-                       "ratio": round(cuoi / giua, 1) if giua else None, "z": round(z, 1)})
+                       "ratio": round(cuoi / giua, 1) if giua else None, "z": round(z, 1),
+                       # Ngưỡng báo, để FE vẽ biểu đồ kiểm soát: vượt mức này mới gọi là bán vọt.
+                       "threshold": round(giua + Z_TANG_TOC * do_lech, 1)})
     return sorted(ra, key=lambda x: -x["z"])
 
 

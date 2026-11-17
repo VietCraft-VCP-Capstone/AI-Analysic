@@ -30,32 +30,6 @@ def _get_seed_db():
 # THÊM BẢNG MỚI: thêm một dòng ở đây TRƯỚC, rồi mới gọi save_model_output().
 # ---------------------------------------------------------------------------
 MART_SCHEMA: Dict[str, Dict[str, Any]] = {
-    "forecast_point": {
-        # Khoá KHÔNG có horizon_days (index tạo sẵn trên Mongo từ 01/09 là như vậy).
-        # Hệ quả: chỉ được lưu MỘT chuỗi dự báo cho mỗi (entity, ngày). Ghi thêm bản
-        # 30 và 60 ngày cho cùng ngày sẽ upsert đè lên nhau và mất dữ liệu trong
-        # im lặng — đã xảy ra 21/09, mất 7.200/14.400 dòng.
-        # Cách làm đúng: job ghi chuỗi 90 ngày, API cắt ra cửa sổ người dùng xin.
-        "key": ["entity_type", "entity_id", "forecast_date"],
-        "writes": "F37 · F38",
-        "reads": "F37 · F38 · F41",
-        "fields": {
-            "yhat": "float — giá trị dự báo",
-            "lo95": "float >= 0 — cận dưới 95%, KẸP Ở 0 (BR-207), không dự báo doanh thu âm",
-            "hi95": "float — cận trên 95%",
-            "model": "str — arima · lstm · seasonal_naive (BR-205)",
-            "horizon_days": "int — độ dài chuỗi đã dự báo (90); API cắt ra 30/60/90",
-            "horizon_index": "int — bước thứ mấy trong chuỗi, 1..90",
-            "mase": "float — sai số của mô hình đã chọn, đo trên phần giữ lại",
-            "mase_baseline": "float — sai số của seasonal_naive; mô hình phải thấp hơn số này",
-            # Bảng so sánh đầy đủ 3 mô hình nằm ở `model_run.parameters.model_comparison`,
-            # ghi MỘT LẦN cho mỗi shop thay vì lặp trên cả 14.400 dòng dự báo.
-            "validation": "dict|None — chỉ dùng cho bản ghi lẻ; job ghi vào model_run",
-        },
-        # BR-206: khoảng tin cậy LUÔN phải có. Thiếu lo95/hi95 thì FE không vẽ
-        # được vùng mờ, và một con số dự báo trần trụi đọc như lời hứa chắc chắn.
-        "fields_bat_buoc": ["yhat", "lo95", "hi95", "model", "horizon_days"],
-    },
     "anomaly_event": {
         "key": ["entity_type", "entity_id", "metric", "event_date"],
         "writes": "F30",
@@ -111,7 +85,7 @@ MART_SCHEMA: Dict[str, Dict[str, Any]] = {
     "niche_score": {
         "key": ["keyword", "date"],
         "writes": "F39",
-        "reads": "F39 · F40 · F41",
+        "reads": "F39",
         "fields": {
             "tag_id": "str",
             "demand_pct": "float 0-100",
@@ -215,46 +189,6 @@ MART_SCHEMA: Dict[str, Dict[str, Any]] = {
         },
         "fields_bat_buoc": ["shop_id", "category_id", "price_vnd", "est_sales_90d"],
     },
-    "mart_shop_hour": {
-        # Nhịp đặt hàng theo thứ/giờ. Bảng RIÊNG vì nó là thứ duy nhất cần nối
-        # orders -> order_items -> listings: `orders.shop_id` là float NaN ở cả
-        # 24.736 dòng nên không quy đơn về shop trực tiếp được. Nối lúc đọc thì
-        # mỗi request tốn một phép join 3 bảng — đẩy về job chạy đêm.
-        # Kích thước: 80 shop x 7 thứ x 24 giờ = tối đa 13.440 dòng, thực tế thưa hơn.
-        "key": ["shop_id", "dow", "hour"],
-        "writes": "Hiếu (F31)",
-        "reads": "F31",
-        "fields": {
-            "orders": "int — số đơn rơi vào khung thứ/giờ này",
-            "units": "int",
-            "revenue_vnd": "int — VND nguyên",
-            "share_pct": "float — % tổng đơn của shop rơi vào khung này",
-            "tz": "str — múi giờ đã quy đổi, luôn là Asia/Ho_Chi_Minh (BR-185)",
-        },
-        "fields_bat_buoc": ["orders", "tz"],
-    },
-    "mart_demand": {
-        "key": ["tag_id"],
-        "writes": "Hưng (Sprint 2 · DATA-05)",
-        "reads": "F38 · F39 · F40",
-        "fields": {
-            "week": "str — ISO tuần, ví dụ 2026-W38",
-            "demand_index": "float",
-            "searches_per_week": "int — dưới 100 thì loại khỏi bảng (BR-213)",
-            "growth_pct": "float",
-            "momentum": "float 0-1",
-            "supply_n_listings": "int",
-            "trend": "str — rising · flat · falling",
-            "name_vi": "str — tên tag hiển thị",
-            "n_keywords": "int — bao nhiêu từ khoá Trends gộp vào tag này",
-            "demand_scale_note": "str — nói rõ demand_index là thang gì",
-            "low_base": "bool — nền quá thấp nên growth_pct không đáng tin, đã để null",
-        },
-        # searches_per_week KHÔNG bắt buộc: Google Trends trả chỉ số 0-100, không
-        # phải số lượt tìm tuyệt đối. Quy đổi ra "lượt/tuần" là bịa số. BR-213 đặt
-        # ngưỡng 100 lượt/tuần nên chưa áp dụng được — đã ghi vào mục Hạn chế.
-        "fields_bat_buoc": ["demand_index"],
-    },
 }
 
 # Ba trường này writer TỰ gắn vào mọi bản ghi. Cổng ra kiểm đúng ba cái.
@@ -269,7 +203,7 @@ BLOCKED: Dict[str, str] = {
         "Đã thử 21/09: cụm Atlas M0 (512 MB, DÙNG CHUNG CẢ NHÓM) vọt lên 526/512 MB "
         "và CHẶN GHI VỚI TẤT CẢ MỌI NGƯỜI. Phải xoá bảng mới gỡ được.\n"
         "  → 4 cột khoá đã được điền THẲNG vào `listing_daily` bằng "
-        "script một lần backfill_listing_daily_ids.py (đã xoá 21/10, xem git history). F26/F27/F30/F31/F37 đọc trực tiếp "
+        "script một lần backfill_listing_daily_ids.py (đã xoá 21/10, xem git history). F26/F27/F30 đọc trực tiếp "
         "bảng đó, đã có index trên shop_id / category_id / product_type_id / date.\n"
         "  → Cần một bảng gộp thật thì gộp ở ĐỘ MỊN THÔ HƠN, ví dụ (shop_id, date): "
         "80 shop x ~550 ngày = ~44.000 dòng thay vì 796.025."
@@ -321,60 +255,6 @@ def finish_model_run(run_id: str, status: str = "COMPLETED", metrics: Optional[D
         db["model_run"].update_one({"run_id": run_id}, {"$set": update_data})
     except Exception as e:
         print(f"⚠ [Writer] Không thể cập nhật model_run: {e}")
-
-
-def save_forecast_points(run_id: str, model_version: str, points: List[Dict[str, Any]]) -> int:
-    """
-    Ghi kết quả dự báo vào collection forecast_point.
-    Mỗi point tối thiểu có: entity_type, entity_id, forecast_date, yhat, lo95, hi95.
-
-    TÊN CỘT DẢI TIN CẬY: `lo95` / `hi95`, theo docs/API_CONTRACT.md (BR-206).
-    Bản cũ của hàm này dùng `yhat_lower` / `yhat_upper` — hai tên cho cùng một thứ,
-    API đọc `lo95` sẽ không thấy gì. Tên cũ vẫn nhận được và tự đổi sang tên mới
-    kèm cảnh báo, để code đã viết không gãy.
-    """
-    if not points:
-        return 0
-
-    computed_at = datetime.now(timezone.utc).isoformat()
-    operations = []
-    da_canh_bao = False
-
-    for pt in points:
-        doc = dict(pt)
-        for cu, moi in (("yhat_lower", "lo95"), ("yhat_upper", "hi95")):
-            if cu in doc:
-                doc.setdefault(moi, doc.pop(cu))
-                if not da_canh_bao:
-                    print(f"⚠ [Writer] `{cu}` là tên cũ, đã đổi thành `{moi}` theo "
-                          f"API_CONTRACT.md (BR-206). Sửa chỗ gọi để khỏi phụ thuộc lớp đệm này.")
-                    da_canh_bao = True
-
-        # BR-207: cận dưới KẸP Ở 0 — không dự báo doanh thu âm.
-        if doc.get("lo95") is not None and doc["lo95"] < 0:
-            doc["lo95"] = 0
-
-        doc["run_id"] = run_id
-        doc["model_version"] = model_version
-        doc["computed_at"] = computed_at
-
-        # Khoá xác định bản ghi duy nhất
-        filter_key = {
-            "entity_type": doc["entity_type"],
-            "entity_id": str(doc["entity_id"]),
-            "forecast_date": str(doc["forecast_date"])
-        }
-        operations.append(UpdateOne(filter_key, {"$set": doc}, upsert=True))
-
-    try:
-        db = _get_seed_db()
-        res = db["forecast_point"].bulk_write(operations)
-        return res.upserted_count + res.modified_count
-    except Exception as e:
-        # Ghi hỏng thì PHẢI trả 0. Trả len(points) làm hàm gọi tưởng đã ghi
-        # thành công và pipeline chạy tiếp trên dữ liệu không tồn tại.
-        print(f"⚠ [Writer] Lỗi ghi forecast_point, đã ghi 0/{len(points)} điểm: {e}")
-        return 0
 
 
 def save_model_output(collection_name: str, run_id: str, model_version: str,
@@ -469,7 +349,7 @@ def save_model_output(collection_name: str, run_id: str, model_version: str,
         res = db[collection_name].bulk_write(operations)
         return res.upserted_count + res.modified_count
     except Exception as e:
-        # Xem chú thích ở save_forecast_points: thất bại không được báo thành công.
+        # Ghi hỏng thì PHẢI trả 0, để hàm gọi không chạy tiếp trên dữ liệu không tồn tại.
         print(f"⚠ [Writer] Lỗi ghi vào {collection_name}, đã ghi 0/{len(records)} bản ghi: {e}")
         return 0
 
@@ -479,19 +359,6 @@ if __name__ == "__main__":
     run_id = start_model_run("sample_test_model", "v1.0.0", {"sample_param": 123})
     print(f"✓ start_model_run sinh run_id mẫu: {run_id}")
     assert run_id.startswith("run_sample_test_model_")
-
-    sample_points = [
-        {
-            "entity_type": "keyword",
-            "entity_id": "áo tết",
-            "forecast_date": "2026-09-01",
-            "yhat": 45.2,
-            "yhat_lower": 40.0,
-            "yhat_upper": 50.4
-        }
-    ]
-    saved = save_forecast_points(run_id, "v1.0.0", sample_points)
-    print(f"✓ save_forecast_points ghi thành công dữ liệu mẫu: {saved} điểm")
 
     finish_model_run(run_id, "COMPLETED", {"mae": 2.1})
     print("✓ finish_model_run cập nhật trạng thái hoàn thành mẫu thành công")

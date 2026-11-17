@@ -87,6 +87,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         ra(f"  [!] F29 price model khong warm-up duoc: {type(e).__name__}: {e}")
 
+    try:
+        from app.services.f42.comparable_pricing import ComparableIndex
+        ComparableIndex.get()
+        ra("  [OK] F42 comparable index (TF-IDF): da fit san (warm-up), request dau khong con cham.")
+    except Exception as e:
+        ra(f"  [!] F42 comparable index khong warm-up duoc: {type(e).__name__}: {e}")
+
     if settings.ENABLE_INPROCESS_SCHEDULER:
         try:
             from app.core.f29_scheduler import start_scheduler
@@ -94,6 +101,12 @@ async def lifespan(app: FastAPI):
             ra("  [OK] F29 scheduler: da bat (in-process).")
         except Exception as e:
             ra(f"  [!] F29 scheduler KHONG bat duoc: {type(e).__name__}: {e}")
+        try:
+            from app.core.seasonal_dl_scheduler import start as start_seasonal_scheduler
+            start_seasonal_scheduler()
+            ra("  [OK] Seasonal DL scheduler: da kiem tra (in-process).")
+        except Exception as e:
+            ra(f"  [!] Seasonal DL scheduler KHONG bat duoc: {type(e).__name__}: {e}")
     else:
         ra("  [-] F29 scheduler: TAT trong tien trinh web (chay bang worker rieng).")
     ra("=" * 72)

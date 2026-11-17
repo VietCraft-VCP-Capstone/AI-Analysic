@@ -4,6 +4,7 @@ import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from statistics import median
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -13,7 +14,8 @@ if str(ROOT_DIR) not in sys.path:
 from bson import ObjectId
 
 from app.api.v1 import _live
-from app.api.v1._doi_thu_ai import diem_de_doa, may_giong, suc_manh_shop, tang_dot_bien
+from app.api.v1._materials import chuan_hoa, tap_chuan
+from app.api.v1._competitor_ai import diem_de_doa, may_giong, suc_manh_shop, tang_dot_bien
 from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, la_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import build_meta, mart_not_ready, meta_from_record, not_found, ok
@@ -29,6 +31,9 @@ DA_GIAO = "DELIVERED"
 DANG_BAN = {"status": "PUBLISHED", "is_hidden": {"$ne": True}}   # = PUBLIC_QUERY của BE
 SO_CANH_BAO_TOI_DA = 50
 GIO_VN = timedelta(hours=7)
+CUA_SO_CHAT_NGAY = 90
+TOI_THIEU_LUOT_HOI = 5                 # dưới 5 lượt khách hỏi thì chưa đủ để nói shop trả lời nhanh hay chậm
+CHO_QUA_HAN = timedelta(hours=24)      # khách hỏi chưa quá 24 giờ thì chưa tính là bị bỏ lỡ
 
 
 def db_live():
@@ -85,23 +90,76 @@ def _khoa_dm(dm: dict) -> str:
     return dm.get("slug") or _ma(dm["_id"])
 
 
+def _cl(m: Any) -> str:
+    """Chất liệu do người bán gõ tay: gọn khoảng trắng, chữ thường, tối đa 40 ký tự như BE."""
+    return " ".join(str(m or "").split()).lower()[:40]
+
+
+def tra_loi_chat(conversations: Iterable[dict], messages: Iterable[dict], shops: Iterable[dict],
+                 now: Any) -> Dict[str, Dict[str, Any]]:
+    """Mỗi shop: trung vị số giây từ lúc khách bắt đầu chờ tới tin trả lời đầu tiên của chủ shop, và % lượt hỏi
+    được trả lời. Chỉ tính tin 90 ngày gần nhất; shop dưới 5 lượt hỏi không có trong kết quả."""
+    now = _utc(now)
+    tu = now - timedelta(days=CUA_SO_CHAT_NGAY)
+    shops = list(shops)
+    theo_ma = {_ma(s["_id"]): s for s in shops}
+    theo_chu = {_ma(s.get("owner_id")): s for s in shops if s.get("owner_id") is not None}
+    shop_cua: Dict[Any, dict] = {}
+    for c in conversations:
+        # Hội thoại thuộc shop theo shop_id; bản ghi thiếu shop_id thì theo người tham gia là chủ shop.
+        s = theo_ma.get(_ma(c.get("shop_id"))) or next(
+            (theo_chu[_ma(p)] for p in c.get("participants") or [] if _ma(p) in theo_chu), None)
+        if s is not None:
+            shop_cua[c.get("conversation_id")] = s
+    tin: Dict[Any, List[Tuple[datetime, Optional[str]]]] = defaultdict(list)
+    for m in messages:
+        luc = _utc(m.get("created_at"))
+        if m.get("conversation_id") in shop_cua and luc is not None and tu <= luc <= now:
+            tin[m["conversation_id"]].append((luc, _ma(m.get("sender_id"))))
+    giay: Dict[str, List[float]] = defaultdict(list)
+    bo_lo: Counter = Counter()
+    for ma_ht, ds in tin.items():
+        s = shop_cua[ma_ht]
+        sid, chu, cho = _ma(s["_id"]), _ma(s.get("owner_id")), None
+        for luc, nguoi in sorted(ds, key=lambda x: x[0]):
+            if nguoi != chu and cho is None:
+                cho = luc
+            elif nguoi == chu and cho is not None:
+                giay[sid].append((luc - cho).total_seconds())
+                cho = None
+        if cho is not None and now - cho >= CHO_QUA_HAN:
+            bo_lo[sid] += 1
+    ra: Dict[str, Dict[str, Any]] = {}
+    for sid in set(giay) | set(bo_lo):
+        n = len(giay[sid]) + bo_lo[sid]
+        if n >= TOI_THIEU_LUOT_HOI:
+            ra[sid] = {"seconds": median(giay[sid]) if giay[sid] else None, "reply_rate": round(100 * len(giay[sid]) / n)}
+    return ra
+
+
 def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders: Iterable[dict],
                       reviews: Iterable[dict], wishlists: Iterable[dict], shops: Iterable[dict],
                       categories: Iterable[dict], tags: Iterable[dict],
-                      now: Any) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+                      now: Any, conversations: Iterable[dict] = (),
+                      messages: Iterable[dict] = ()) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
     """Mỗi sản phẩm đang bán một dòng, cùng cột với `mart_competitor`; thiếu giá hoặc danh mục thì bỏ."""
     now = _utc(now)
     tu = now - timedelta(days=CUA_SO_BAN_NGAY)
     bo_qua: Counter = Counter()
     products = list(products)
     shop_theo_ma = {_ma(s["_id"]): s for s in shops}
+    chat = tra_loi_chat(conversations, messages, shop_theo_ma.values(), now)
     chu_cua_sp = {_ma(p.get("_id")): _ma(shop_theo_ma.get(_ma(p.get("shop_id")), {}).get("owner_id")) for p in products}
 
     gia: Dict[str, float] = {}
+    gia_cl: Dict[str, Dict[str, float]] = {}      # sản phẩm -> chất liệu của biến thể -> giá rẻ nhất của chất liệu đó
     for v in variants:
         p, pid = _so(v.get("retail_price")), _ma(v.get("product_id"))
         if v.get("is_active") is not False and pid and p and p > 0:
             gia[pid] = min(p, gia.get(pid, p))
+            if _cl(v.get("material")):
+                g = gia_cl.setdefault(pid, {})
+                g[_cl(v["material"])] = min(p, g.get(_cl(v["material"]), p))
 
     so_cai: Counter = Counter()
     doanh_thu: Counter = Counter()
@@ -162,8 +220,16 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
         if not tag:
             tag = {lam_slug(t) for t in p.get("tags") or []} - {""}
 
+        cl_sp = {_cl(m) for m in p.get("materials") or []} - {""}
+        cl_bt = gia_cl.get(pid, {})
+        if cl_sp:
+            # Chất liệu người bán ghi khi đăng là chuẩn; biến thể chỉ giữ chất liệu khớp với nó để lấy giá riêng,
+            # tránh chất liệu mặc định của phôi (BE tự điền "Cotton" khi phôi không ghi) chen vào.
+            chuan_sp = tap_chuan(cl_sp)
+            cl_bt = {m: g for m, g in cl_bt.items() if set(chuan_hoa(m)) & chuan_sp}
+        cl = sorted(cl_sp | set(cl_bt))
         shop = shop_theo_ma.get(sid) or {}
-        phan_hoi = _so(shop.get("average_response_time_seconds"))
+        tl = chat.get(sid) or {}
         dong.append({
             "listing_id": pid,      # = product_id: FE mở thẳng trang sức khoẻ sản phẩm (F27–F29)
             "product_id": pid,
@@ -180,9 +246,14 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
             "revenue_90d_vnd": int(round(doanh_thu[pid])),
             "favorite_count": int(yeu_thich[pid]),
             "tags": sorted(tag),
+            # Chất liệu ghi ở sản phẩm và ở biến thể đang bán; trống là người bán chưa ghi.
+            "materials": cl,
+            # Biến thể có chất liệu thì lấy giá của chính biến thể đó; chất liệu chỉ ghi ở sản phẩm thì lấy giá sản phẩm.
+            "material_prices": [{"material": m, "price_vnd": int(round(cl_bt.get(m, gia[pid])))} for m in cl],
             "created_at": _iso(p.get("created_at")),
-            # 0 giây là mặc định của model Shop, tức CHƯA ĐO.
-            "shop_response_seconds": phan_hoi if phan_hoi and phan_hoi > 0 else None,
+            # Đo từ tin nhắn chat; average_response_time_seconds của shop là số tĩnh, BE không cập nhật nên không dùng.
+            "shop_response_seconds": tl.get("seconds"),
+            "shop_reply_rate": tl.get("reply_rate"),
             "computed_at": _iso(now),
             "model_version": MODEL,
         })
@@ -268,19 +339,24 @@ def tinh_canh_bao(dong: Iterable[dict], shops: Iterable[dict], followers: Iterab
 def _doc_nguon(live, now: datetime) -> Dict[str, List[dict]]:
     products = list(live["products"].find({**DANG_BAN, **LOC_SP_THAT}, {
         "shop_id": 1, "title": 1, "status": 1, "is_hidden": 1, "category_ids": 1, "categories": 1,
-        "tag_ids": 1, "tags": 1, "created_at": 1}))
+        "tag_ids": 1, "tags": 1, "materials": 1, "created_at": 1}))
     ma_sp = [p["_id"] for p in products]
     return {
         "products": products,
         "variants": list(live["product_variants"].find(
-            {"product_id": {"$in": ma_sp}}, {"product_id": 1, "retail_price": 1, "is_active": 1})),
+            {"product_id": {"$in": ma_sp}}, {"product_id": 1, "retail_price": 1, "is_active": 1, "material": 1})),
         "orders": list(live["orders"].find(
             {**LOC_DON_THAT, "order_status": DA_GIAO, "created_at": {"$gte": now - timedelta(days=CUA_SO_BAN_NGAY)}},
             {"order_status": 1, "is_simulated": 1, "created_at": 1, "buyer_id": 1,
              "items.product_id": 1, "items.quantity": 1, "items.retail_price": 1})),
         "reviews": list(live["reviews"].find({"product_id": {"$in": ma_sp}}, {"product_id": 1, "rating": 1})),
         "wishlists": list(live["wishlists"].find({}, {"product_ids": 1})),
-        "shops": list(live["shops"].find({}, {"shop_name": 1, "owner_id": 1, "average_response_time_seconds": 1})),
+        "shops": list(live["shops"].find({}, {"shop_name": 1, "owner_id": 1})),
+        # Chỉ đọc người gửi và thời điểm, không đọc nội dung tin nhắn.
+        "conversations": list(live["chat_conversations"].find({}, {"conversation_id": 1, "shop_id": 1, "participants": 1})),
+        "messages": list(live["chat_messages"].find(
+            {"created_at": {"$gte": now - timedelta(days=CUA_SO_CHAT_NGAY)}},
+            {"conversation_id": 1, "sender_id": 1, "created_at": 1})),
         "categories": list(live["categories"].find({}, {"name": 1, "slug": 1, "parent_id": 1})),
         "tags": list(live["tags"].find({}, {"name": 1, "slug": 1})),
     }
@@ -335,6 +411,15 @@ def danh_muc_cua_toi(coll, shop_id: str) -> Tuple[List[str], Optional[str], Dict
     return sorted(dem), (min(dem, key=lambda c: (-dem[c], c)) if dem else None), ten
 
 
+def loai_cua_toi(coll, shop_id: str) -> Dict[str, List[str]]:
+    """Danh mục -> loại hàng (danh mục lá) shop đang bán, nhiều sản phẩm trước; bỏ loại trùng với chính danh mục."""
+    dem: Dict[str, Counter] = defaultdict(Counter)
+    for r in coll.find({"shop_id": shop_id}, {"_id": 0, "category_id": 1, "product_type_id": 1, "product_type_name": 1}):
+        if r.get("product_type_name") and r.get("product_type_id") != r.get("category_id"):
+            dem[r["category_id"]][r["product_type_name"]] += 1
+    return {c: [t for t, _ in n.most_common()] for c, n in dem.items()}
+
+
 def meta_doi_thu(ng: Dict[str, Any], record: Dict[str, Any], *, scope: str, scope_id: str,
                  sample_size: int) -> Dict[str, Any]:
     return meta_from_record(record, scope=scope, scope_id=scope_id, collection=ng["collection"],
@@ -368,6 +453,29 @@ def tuan_ban_theo_shop(shop_ids: List[Any], now: datetime, so_tuan: int = 8) -> 
         k = so_tuan - 1 - (now - tao).days // 7 if tao else -1
         if 0 <= k < so_tuan and str(o.get("shop_id")) in tuan:
             tuan[str(o["shop_id"])][k] += sum(int(it.get("quantity") or 0) for it in o.get("items") or [])
+    return tuan
+
+
+def tuan_ban_trong_dm(dong_dm: List[dict], now: datetime, so_tuan: int = 8) -> Dict[str, List[int]]:
+    """Như tuan_ban_theo_shop nhưng chỉ đếm sản phẩm thuộc danh mục đang xem, để so thị phần trong danh mục."""
+    sp_shop = {r["listing_id"]: r["shop_id"] for r in dong_dm}
+    tuan = {sid: [0] * so_tuan for sid in set(sp_shop.values())}
+    ma_shop = [ObjectId(s) for s in tuan if ObjectId.is_valid(s)]
+    if not ma_shop:
+        return tuan
+    chu = {str(s["_id"]): _ma(s.get("owner_id")) for s in db_live()["shops"].find({"_id": {"$in": ma_shop}}, {"owner_id": 1})}
+    for o in db_live()["orders"].find(
+            {**LOC_DON_THAT, "shop_id": {"$in": ma_shop}, "order_status": DA_GIAO,
+             "created_at": {"$gte": now - timedelta(weeks=so_tuan)}},
+            {"buyer_id": 1, "created_at": 1, "items.product_id": 1, "items.quantity": 1}):
+        tao = _utc(o.get("created_at"))
+        k = so_tuan - 1 - (now - tao).days // 7 if tao else -1
+        if not 0 <= k < so_tuan:
+            continue
+        for it in o.get("items") or []:
+            sid = sp_shop.get(_ma(it.get("product_id")))
+            if sid and _ma(o.get("buyer_id")) != chu.get(sid):      # chủ shop tự mua không tính
+                tuan[sid][k] += int(it.get("quantity") or 0)
     return tuan
 
 
@@ -405,8 +513,27 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
         a["threat"] = diem_de_doa(may, a["listing_id"], shop_id, manh)
     canh_bao.sort(key=lambda a: a["listed_at"] or "", reverse=True)
     canh_bao.sort(key=lambda a: -((a["threat"] or {}).get("score") or 0))
-    tang_toc = [{**x, "shop_name": ten.get(x["shop_id"])}
-                for x in tang_dot_bien(tuan_ban_theo_shop([f["shop_id"] for f in followers], now))]
+    tuan = tuan_ban_theo_shop([f["shop_id"] for f in followers], now)
+    tang_toc = [{**x, "shop_name": ten.get(x["shop_id"]), "weeks": tuan.get(x["shop_id"])} for x in tang_dot_bien(tuan)]
+
+    # Dòng thời gian 8 tuần: mọi sản phẩm mới của shop đang theo dõi; hàng cùng ngách thì kèm mức cạnh tranh.
+    moc8 = now - timedelta(weeks=8)
+    ngach8 = {a["listing_id"] for a in tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now, cua_so_ngay=56)}
+    theo_ma = {r["listing_id"]: r for r in dong}
+
+    def ra_mat(m: str) -> List[Dict[str, Any]]:
+        out = []
+        for r in sp_theo_shop[m]:
+            luc = _utc(r.get("created_at"))
+            if luc is None or luc < moc8:
+                continue
+            th = diem_de_doa(may, r["listing_id"], shop_id, manh) if r["listing_id"] in ngach8 else None
+            khop = theo_ma.get((th or {}).get("matched_product_id"))
+            out.append({"listing_id": r["listing_id"], "title": r.get("title"), "listed_at": _iso(luc),
+                        "product_type_name": r.get("product_type_name"), "price_vnd": r["price_vnd"],
+                        "in_my_niche": r["listing_id"] in ngach8, "threat": th,
+                        "matched_price_vnd": khop["price_vnd"] if khop else None})
+        return sorted(out, key=lambda x: x["listed_at"])
 
     return ok({
         "tracked": [{
@@ -416,6 +543,8 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
             "listings_total": len(sp_theo_shop[m]),
             "category_name": _danh_muc_chinh(sp_theo_shop[m]),
             "last_new_listing_at": max((r["created_at"] for r in sp_theo_shop[m] if r.get("created_at")), default=None),
+            "weekly_sales": tuan.get(m) or [0] * 8,
+            "launches": ra_mat(m),
         } for m in ma],
         "slots_used": len(ma),
         "slots_limit": gioi_han,

@@ -168,6 +168,50 @@ def nightly_full_rescan() -> int:
         _release_lock("lock_f29_nightly_rescan")
 
 
+def market_price_crawl():
+    """F42: cào giá thị trường (Tiki) — 6:00 và 18:00 giờ VN. Khoá để nhiều tiến trình không cào trùng."""
+    if not _acquire_lock("lock_f42_market_crawl", ttl_seconds=3600):
+        print("[f42_crawl] Lock dang ban, bo qua luot nay.", flush=True)
+        return
+    try:
+        from app.services.f42.market_crawler import run_crawl
+        from app.services.f42.orchestrator import _get_data_db
+
+        db = _get_data_db()
+        if db is None:
+            print("[f42_crawl] Khong ket noi duoc MongoDB data, bo qua.", flush=True)
+            return
+        s = run_crawl(db)
+        print(f"[f42_crawl] {s['status']}: {s['keywords']} tu khoa, {s['items']} tin "
+              f"({s['valid_items']} hop le), luu {s['saved']}, loi {len(s['errors'])}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[f42_crawl] Loi: {type(e).__name__}: {e}", flush=True)
+    finally:
+        _release_lock("lock_f42_market_crawl")
+
+
+def etsy_market_crawl():
+    """F42: cào giá tham khảo Etsy (quy đổi VND) — cùng lịch 6:00/18:00 giờ VN với Tiki."""
+    if not _acquire_lock("lock_f42_etsy_crawl", ttl_seconds=3600):
+        print("[f42_etsy_crawl] Lock dang ban, bo qua luot nay.", flush=True)
+        return
+    try:
+        from app.services.f42.etsy_crawler import run_crawl_etsy
+        from app.services.f42.orchestrator import _get_data_db
+
+        db = _get_data_db()
+        if db is None:
+            print("[f42_etsy_crawl] Khong ket noi duoc MongoDB data, bo qua.", flush=True)
+            return
+        s = run_crawl_etsy(db)
+        print(f"[f42_etsy_crawl] {s['status']}: {s['keywords']} tu khoa, {s['items']} tin "
+              f"({s['valid_items']} hop le), luu {s['saved']}, loi {len(s['errors'])}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[f42_etsy_crawl] Loi: {type(e).__name__}: {e}", flush=True)
+    finally:
+        _release_lock("lock_f42_etsy_crawl")
+
+
 _scheduler = None
 
 
@@ -199,6 +243,22 @@ def start_scheduler():
         coalesce=True,
         misfire_grace_time=3600,
     )
+    scheduler.add_job(
+        market_price_crawl,
+        CronTrigger(hour="6,18", minute=0, timezone=VN_TZ),
+        id="f42_market_crawl",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.add_job(
+        etsy_market_crawl,
+        CronTrigger(hour="6,18", minute=10, timezone=VN_TZ),
+        id="f42_etsy_crawl",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
     try:
         if needs_full_rescan(db_live()):
             scheduler.add_job(
@@ -215,6 +275,18 @@ def start_scheduler():
         register(scheduler)
     except Exception as e:  # noqa: BLE001
         print(f"[f29_scheduler] Khong dang ky duoc job Listing Intel: {type(e).__name__}: {e}", flush=True)
+    try:
+        from app.collectors.collect_external_products import run_collection
+        scheduler.add_job(
+            run_collection,
+            CronTrigger(hour=3, minute=30, timezone=VN_TZ),
+            id="collect_external_products_nightly",
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=3600,
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[f29_scheduler] Khong dang ky duoc job collect external products: {type(e).__name__}: {e}", flush=True)
     scheduler.start()
     _scheduler = scheduler
     return scheduler

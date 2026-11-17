@@ -191,7 +191,7 @@ def _phan_vi_xep_hang(gia_tri: Dict[str, float]) -> Dict[str, float]:
 
 
 # ---------------------------------------------------------------------------
-# niche_score — ngách nhiều người tìm mà ít người bán. Nền của F39 · F41
+# niche_score — ngách nhiều người tìm mà ít người bán. Nền của F39
 # ---------------------------------------------------------------------------
 
 def build_niche_score(db) -> List[Dict[str, Any]]:
@@ -245,62 +245,6 @@ def build_niche_score(db) -> List[Dict[str, Any]]:
     ban_ghi.sort(key=lambda r: -r["gap_score"])
     for i, r in enumerate(ban_ghi, 1):
         r["rank"] = i
-    return ban_ghi
-
-
-# ---------------------------------------------------------------------------
-# mart_demand — nhu cầu tìm kiếm theo TAG. Nền của F40 (và F38/F39 tham chiếu)
-# ---------------------------------------------------------------------------
-
-def build_mart_demand(db) -> List[Dict[str, Any]]:
-    dbt = _db_trends()
-    chuoi = _chuoi_tuan(dbt)
-    tag_map = _tag_theo_keyword(db)
-    cung = _cung_theo_tag(db)
-    den = _hom_nay(db)
-    tuan_iso = datetime.strptime(den, "%Y-%m-%d").date().isocalendar()
-
-    gom = defaultdict(list)
-    for kw, diem in chuoi.items():
-        for t in tag_map.get(kw, []):
-            gom[t].append(diem)
-
-    ten_tag = {t["tag_id"]: t.get("name_vi") for t in db["tags"].find({}, {"tag_id": 1, "name_vi": 1})}
-
-    ban_ghi = []
-    for tag, cac_chuoi in gom.items():
-        gan, truoc = [], []
-        for diem in cac_chuoi:
-            if len(diem) < 16:
-                continue
-            gan += [v for _, v in diem[-4:]]
-            truoc += [v for _, v in diem[-8:-4]]
-        if not gan:
-            continue
-        tb_gan = sum(gan) / len(gan)
-        tb_truoc = sum(truoc) / len(truoc) if truoc else tb_gan
-
-        nen_du = max(tb_gan, tb_truoc) >= NEN_TOI_THIEU
-        tang = (round((tb_gan - tb_truoc) / tb_truoc * 100, 1)
-                if nen_du and tb_truoc else None)
-
-        ban_ghi.append({
-            "tag_id": tag,
-            "name_vi": ten_tag.get(tag, tag),
-            "week": f"{tuan_iso[0]}-W{tuan_iso[1]:02d}",
-            "demand_index": round(tb_gan, 2),
-            "searches_per_week": None,
-            "demand_scale_note": "chỉ số Google Trends 0-100, không phải số lượt tìm tuyệt đối",
-            "growth_pct": tang,
-            "momentum": round(max(0.0, min(1.0, tang / 100 + 0.5)), 3) if tang is not None else None,
-            "supply_n_listings": cung.get(tag, 0),
-            "trend": ("rising" if tang > 10 else "falling" if tang < -10 else "flat")
-                     if tang is not None else "unknown",
-            "low_base": not nen_du,
-            "n_keywords": len(cac_chuoi),
-        })
-    # Tag nền yếu xếp xuống dưới, không cho chen lên đầu bảng "nóng nhất".
-    ban_ghi.sort(key=lambda r: (r["low_base"], -(r["growth_pct"] or -999)))
     return ban_ghi
 
 
@@ -608,199 +552,12 @@ def _viec_can_lam(db, lid, truc, danh_muc_id, n_anh, con_hang_ty_le, tong_bien_t
     return sorted(viec, key=lambda v: v["priority"])
 
 
-# ---------------------------------------------------------------------------
-# mart_shop_hour — nhịp đặt hàng theo thứ/giờ. Nền của F31
-# ---------------------------------------------------------------------------
-
-def build_mart_shop_hour(db) -> List[Dict[str, Any]]:
-    """Nối orders -> order_items -> listings để quy đơn về shop.
-
-    Phải nối vòng vèo vì `orders.shop_id` là float NaN ở CẢ 24.736 dòng — không
-    phải chuỗi "nan", nên mọi phép đếm bằng chuỗi đều báo bảng sạch. Kiểm bằng:
-        db.orders.distinct("shop_id")  ->  [nan]
-
-    BR-185: thứ/giờ quy về giờ Việt Nam (GMT+7) NGAY Ở ĐÂY, FE không phải đổi nữa.
-    `ordered_at` trong dữ liệu mồi đã là giờ địa phương, nên không cộng trừ thêm.
-    """
-    shop_cua_listing = {l["listing_id"]: l.get("shop_id")
-                        for l in db["listings"].find({}, {"_id": 0, "listing_id": 1, "shop_id": 1})}
-
-    don_cua_shop = defaultdict(set)
-    sl_cua_don = defaultdict(float)
-    tien_cua_don = defaultdict(float)
-    for it in db["order_items"].find({}, {"_id": 0, "order_id": 1, "listing_id": 1,
-                                          "quantity": 1, "unit_price": 1}):
-        shop = shop_cua_listing.get(it.get("listing_id"))
-        if not shop:
-            continue
-        sl = float(it.get("quantity") or 0)
-        don_cua_shop[shop].add(it["order_id"])
-        sl_cua_don[(shop, it["order_id"])] += sl
-        tien_cua_don[(shop, it["order_id"])] += sl * float(it.get("unit_price") or 0)
-
-    luc_dat = {}
-    for o in db["orders"].find({}, {"_id": 0, "order_id": 1, "ordered_at": 1, "status": 1}):
-        luc_dat[o["order_id"]] = (str(o.get("ordered_at") or ""), o.get("status"))
-
-    gom = defaultdict(lambda: {"orders": 0, "units": 0.0, "revenue": 0.0})
-    tong_don = Counter()
-    for shop, cac_don in don_cua_shop.items():
-        for oid in cac_don:
-            khi, _ = luc_dat.get(oid, ("", None))
-            try:
-                t = datetime.strptime(khi[:19], "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                continue
-            k = (shop, t.isoweekday(), t.hour)        # isoweekday: 1=Thứ Hai ... 7=Chủ Nhật
-            g = gom[k]
-            g["orders"] += 1
-            g["units"] += sl_cua_don[(shop, oid)]
-            g["revenue"] += tien_cua_don[(shop, oid)]
-            tong_don[shop] += 1
-
-    return [{
-        "shop_id": shop, "dow": dow, "hour": gio,
-        "orders": v["orders"],
-        "units": int(round(v["units"])),
-        "revenue_vnd": int(round(v["revenue"])),
-        "share_pct": round(v["orders"] / tong_don[shop] * 100, 2) if tong_don[shop] else None,
-        "tz": "Asia/Ho_Chi_Minh",
-    } for (shop, dow, gio), v in sorted(gom.items())]
-
-
-# ---------------------------------------------------------------------------
-# forecast_point — dự báo doanh thu 30/60/90 ngày. Nền của F37
-#
-# Quyết định E20: dự báo ở CẤP SHOP, không cấp listing. Benchmark M5 của chính
-# nhóm đã đo: ARIMA cấp listing MASE 1,12 (THUA cách ngây thơ), cấp nhóm 0,89.
-# Chuỗi cấp listing trung vị 41 ngày, chỉ 3 ngày có bán — quá thưa để mô hình hoá.
-#
-# BR-205 ghi: ARIMA khi lịch sử < 90 ngày, LSTM khi >= 90. Chọn LSTM hay không là
-# việc của SPEC-03 (CHƯA LÀM) — job này chạy `seasonal_naive` và `arima`, ghi số
-# thật cho cả hai. Bảng so sánh thiếu LSTM là một dòng trong mục Hạn chế; bịa số
-# cho LSTM thì tệ hơn nhiều.
-# ---------------------------------------------------------------------------
-
-# Lưu MỘT chuỗi dài nhất, API cắt ra 30/60/90 lúc đọc.
-#
-# Không lưu ba bản riêng vì khoá của forecast_point là
-# (entity_type, entity_id, forecast_date) — KHÔNG có horizon_days. Ghi ba bản cho
-# cùng ngày thì chúng upsert đè lên nhau: đã mất 7.200/14.400 dòng trong im lặng
-# đúng như vậy. Và cắt ra là ĐÚNG về mặt mô hình: ARIMA dự báo 90 bước cho ra
-# đúng 30 giá trị đầu giống hệt khi dự báo 30 bước.
-HORIZON_MAX = 90
-CHU_KY = 7               # nhịp tuần
-TOI_THIEU_LICH_SU = 90   # ngày; dưới ngưỡng này không dự báo
-
-
-def _seasonal_naive(chuoi: List[float], h: int, period: int = CHU_KY) -> List[float]:
-    """Mốc so sánh: lặp lại đúng giá trị của chu kỳ trước. Mọi mô hình phải
-    thắng được cái này, nếu không thì báo cáo thẳng."""
-    return [chuoi[-period + (i % period)] for i in range(h)]
-
-
-def _arima(chuoi: List[float], h: int):
-    try:
-        import numpy as np
-        from statsmodels.tsa.statespace.sarimax import SARIMAX
-        m = SARIMAX(np.asarray(chuoi, dtype=float), order=(1, 1, 1),
-                    seasonal_order=(1, 0, 1, CHU_KY),
-                    enforce_stationarity=False, enforce_invertibility=False)
-        kq = m.fit(disp=False)
-        du = kq.get_forecast(steps=h)
-        tb = du.predicted_mean
-        ci = du.conf_int(alpha=0.05)
-        return ([float(x) for x in tb],
-                [float(x) for x in ci[:, 0]],
-                [float(x) for x in ci[:, 1]])
-    except Exception:
-        return None
-
-
-def du_bao_chuoi(ngay: List[str], y: List[float]):
-    """Dự báo 90 ngày cho một chuỗi doanh thu ngày; None khi lịch sử chưa đủ."""
-    import statistics
-    from app.core.metrics import mase
-
-    if len(y) < TOI_THIEU_LICH_SU:
-        return None
-    # Đo trên phần giữ lại, đo trên phần đã học thì mọi mô hình đều "đúng".
-    cat = max(TOI_THIEU_LICH_SU, len(y) - 30)
-    hoc, giu = y[:cat], y[cat:]
-    if len(giu) < 7:
-        return None
-
-    mase_sn = mase(giu, _seasonal_naive(hoc, len(giu)), hoc, period=CHU_KY)
-    ar_giu = _arima(hoc, len(giu))
-    mase_ar = mase(giu, ar_giu[0], hoc, period=CHU_KY) if ar_giu else None
-    dung_arima = mase_ar is not None and mase_ar < mase_sn
-    ten_mo_hinh = "arima" if dung_arima else "seasonal_naive"
-
-    du = _arima(y, HORIZON_MAX) if dung_arima else None
-    if du:
-        tb, lo, hi = du
-    else:
-        tb = _seasonal_naive(y, HORIZON_MAX)
-        sai = [y[i] - y[i - CHU_KY] for i in range(CHU_KY, len(y))]
-        sd = statistics.pstdev(sai) if len(sai) > 1 else 0.0
-        lo = [v - 1.96 * sd for v in tb]
-        hi = [v + 1.96 * sd for v in tb]
-
-    cuoi = datetime.strptime(ngay[-1], "%Y-%m-%d").date()
-    return {
-        "so_sanh": {
-            "chosen": ten_mo_hinh,
-            "holdout_days": len(giu),
-            "seasonal_naive_mase": round(mase_sn, 4),
-            "arima_mase": round(mase_ar, 4) if mase_ar is not None else None,
-            "lstm_mase": None,
-        },
-        "points": [{
-            "forecast_date": (cuoi + timedelta(days=i + 1)).isoformat(),
-            "yhat": max(0.0, round(tb[i], 2)),
-            "lo95": max(0.0, round(lo[i], 2)),
-            "hi95": round(hi[i], 2),
-            "model": ten_mo_hinh,
-            "horizon_days": HORIZON_MAX,
-            "horizon_index": i + 1,
-            "mase": round(mase_ar if dung_arima else mase_sn, 4),
-            "mase_baseline": round(mase_sn, 4),
-        } for i in range(HORIZON_MAX)],
-    }
-
-
-def build_forecast_point(db) -> List[Dict[str, Any]]:
-
-    chuoi_shop = defaultdict(list)
-    for r in db["listing_daily"].aggregate([
-        {"$group": {"_id": {"s": "$shop_id", "d": "$date"}, "rev": {"$sum": "$revenue_vnd"}}},
-        {"$sort": {"_id.d": 1}},
-    ]):
-        chuoi_shop[r["_id"]["s"]].append((r["_id"]["d"], float(r["rev"])))
-
-    ban_ghi, bo_qua, so_sanh = [], 0, {}
-    for shop, diem in chuoi_shop.items():
-        kq = du_bao_chuoi([d for d, _ in diem], [v for _, v in diem])
-        if kq is None:
-            bo_qua += 1
-            continue
-        so_sanh[shop] = kq["so_sanh"]
-        ban_ghi.extend({"entity_type": "shop", "entity_id": shop, **p} for p in kq["points"])
-
-    print(f"   [forecast] {len(chuoi_shop)} shop, bỏ qua {bo_qua} vì lịch sử < {TOI_THIEU_LICH_SU} ngày")
-    build_forecast_point.so_sanh = so_sanh      # main() ghi kèm vào model_run
-    return ban_ghi
-
-
 JOBS = {
     "mart_competitor": build_mart_competitor,
     "mart_listing_quality": build_mart_listing_quality,
     "listing_health": build_listing_health,
     "anomaly_event": build_anomaly_event,
-    "mart_shop_hour": build_mart_shop_hour,
-    "forecast_point": build_forecast_point,
     "niche_score": build_niche_score,
-    "mart_demand": build_mart_demand,
     "seasonal_profile": build_seasonal_profile,
 }
 
@@ -838,10 +595,7 @@ def main() -> int:
         if a.dry_run or not ban_ghi:
             continue
 
-        tham_so = {"rows": len(ban_ghi)}
-        if getattr(JOBS[t], "so_sanh", None):
-            tham_so["model_comparison"] = JOBS[t].so_sanh
-        run_id = start_model_run(t, VERSION, tham_so)
+        run_id = start_model_run(t, VERSION, {"rows": len(ban_ghi)})
         n = save_model_output(t, run_id, VERSION, ban_ghi)
         finish_model_run(run_id, "COMPLETED", {"rows_written": n})
         print(f"   ✓ đã ghi {n:,} dòng  (run_id {run_id})")
