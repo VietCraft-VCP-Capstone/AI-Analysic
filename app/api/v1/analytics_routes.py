@@ -26,7 +26,6 @@ ENDPOINTS: List[Dict[str, Any]] = [
     {"f": "F28", "method": "GET",    "path": "/api/analytics/listings/{id}/conversion",  "mart": "mart_listing_quality","owner": "Hạt",  "params": []},
     {"f": "F29", "method": "GET",    "path": "/api/analytics/listings/{id}/health",      "mart": "listing_health",      "owner": "Hạt",  "params": []},
     {"f": "F30", "method": "GET",    "path": "/api/notifications/alerts",                "mart": "anomaly_event",       "owner": "Hiếu", "params": ["period"]},
-    {"f": "F31", "method": "GET",    "path": "/api/analytics/shop/categories/revenue",   "mart": "listing_daily",       "owner": "Hiếu", "params": ["timeRange"]},
     {"f": "F32", "method": "GET",    "path": "/api/analytics/competitors",               "mart": "mart_competitor",     "owner": "Nhi",  "params": ["categoryId"]},
     {"f": "F33", "method": "GET",    "path": "/api/analytics/shop-comparison",           "mart": "mart_competitor",     "owner": "Nhi",  "params": []},
     {"f": "F34", "method": "GET",    "path": "/api/analytics/tag-gap",                   "mart": "mart_competitor",     "owner": "Đạt",  "params": ["categoryId"]},
@@ -34,11 +33,8 @@ ENDPOINTS: List[Dict[str, Any]] = [
     {"f": "F36", "method": "GET",    "path": "/api/analytics/competitor-tracking",       "mart": "mart_competitor",     "owner": "Đạt",  "params": []},
     {"f": "F36", "method": "POST",   "path": "/api/analytics/competitor-tracking",       "mart": "mart_competitor",     "owner": "Đạt",  "params": ["shopId"]},
     {"f": "F36", "method": "DELETE", "path": "/api/analytics/competitor-tracking",       "mart": "mart_competitor",     "owner": "Đạt",  "params": ["shopId"]},
-    {"f": "F37", "method": "GET",    "path": "/api/analytics/forecast/revenue",          "mart": "forecast_point",      "owner": "Đạt",  "params": ["targetId", "window"]},
     {"f": "F38", "method": "GET",    "path": "/api/analytics/forecast/seasonal",         "mart": "seasonal_profile",    "owner": "Hưng", "params": ["categoryId"]},
     {"f": "F39", "method": "GET",    "path": "/api/analytics/forecast/niches",           "mart": "niche_score",         "owner": "Hưng", "params": ["categoryId"]},
-    {"f": "F40", "method": "GET",    "path": "/api/analytics/forecast/radar",            "mart": "mart_demand",         "owner": "Hưng", "params": []},
-    {"f": "F41", "method": "GET",    "path": "/api/analytics/forecast/recommendations",  "mart": "niche_score",         "owner": "Đạt",  "params": []},
 ]
 
 # F nào đã có router thật — thêm dòng ở đây là khung tự nhường chỗ.
@@ -48,7 +44,6 @@ DA_LAM: Dict[str, str] = {
     "F29-LI": "app.api.v1.f29_intel",
     "F29": "app.api.v1.f29_health",
     "F30": "app.api.v1.f30_alerts",
-    "F31": "app.api.v1.f31_category_revenue",
     "F32": "app.api.v1.f32_competitors",
     "F32-brief": "app.api.v1.f32_competitor_brief",
     "F34": "app.api.v1.f34_tag_gap",
@@ -56,11 +51,8 @@ DA_LAM: Dict[str, str] = {
     "F33": "app.api.v1.f33_shop_comparison",
     "F35": "app.api.v1.f35_pricing",
     "F36": "app.api.v1.f36_competitor_tracking",
-    "F37": "app.api.v1.f37_forecast_revenue",
     "F38": "app.api.v1.f38_seasonal",
     "F39": "app.api.v1.f39_niches",
-    "F40": "app.api.v1.f40_radar",
-    "F41": "app.api.v1.f41_recommendations",
     "F43": "app.api.v1.f43_money",
 }
 
@@ -100,7 +92,7 @@ def _dang_ky(ep: Dict[str, Any]) -> None:
 
 
 def gan_vao(app) -> Dict[str, str]:
-    """Gắn 16 endpoint vào app. Router thật (DA_LAM) được ưu tiên, còn lại là khung.
+    """Gắn các endpoint vào app. Router thật (DA_LAM) được ưu tiên, còn lại là khung.
 
     Trả về bảng {F: "that" | "khung"} để `main.py` in ra lúc khởi động — nhìn log
     là biết hôm nay đã có mấy tính năng chạy thật.
@@ -126,9 +118,9 @@ if __name__ == "__main__":
     print("=== TỰ KIỂM TRA MODULE ANALYTICS_ROUTES.PY ===")
 
     ma_f = {e["f"] for e in ENDPOINTS}
-    mong_doi = {f"F{n}" for n in range(26, 42)}
+    mong_doi = {f"F{n}" for n in range(26, 42)} - {"F31", "F37", "F40", "F41"}
     assert ma_f == mong_doi, f"thiếu/thừa: {mong_doi ^ ma_f}"
-    print(f"✓ đủ 16 mã tính năng F26–F41 ({len(ENDPOINTS)} đường dẫn, F36 có 3 method)")
+    print(f"✓ đủ {len(mong_doi)} mã tính năng ({len(ENDPOINTS)} đường dẫn, F36 có 3 method)")
 
     assert "mart_listing_daily" not in {e["mart"] for e in ENDPOINTS}, \
         "mart_listing_daily BỊ CHẶN trong writer.py — xem ghi chú mâu thuẫn ở trên"
