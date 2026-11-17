@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from app.core import calendar_vn
-from app.core.listing_intel import trend_axis as ta
+from app.core.listing_intel import events, trend_axis as ta
 
 
 def _weekly(fn, start="2021-08-15", periods=262):
@@ -25,19 +25,19 @@ def test_mid_autumn_2026():
 
 
 def test_black_friday_2026():
-    ev = next(e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == "black_friday")
+    ev = next(e for e in events.all_events() if e["key"] == "black_friday")
     assert ev["date_fn"](2026) == date(2026, 11, 27)
     assert ev["date_fn"](2024) == date(2024, 11, 29)
 
 
 def test_upcoming_events_window():
-    keys = {e["key"] for e in calendar_vn.upcoming_events(date(2026, 10, 21), 6)}
+    keys = {e["key"] for e in events.upcoming_events(date(2026, 10, 21), 6)}
     assert {"20/11", "halloween"} <= keys
     assert "tet" not in keys
 
 
 def test_upcoming_events_sorted_with_prep_start():
-    evs = calendar_vn.upcoming_events(date(2026, 10, 21), 16)
+    evs = events.upcoming_events(date(2026, 10, 21), 16)
     assert [e["date"] for e in evs] == sorted(e["date"] for e in evs)
     assert all(e["prep_start"] < e["date"] for e in evs)
     assert "tet" in {e["key"] for e in evs}
@@ -110,12 +110,15 @@ def test_season_cache_is_capped(monkeypatch):
     assert len(ta._SEASON_CACHE) <= 4
 
 
-def test_upcoming_events_logs_missing_year_once(caplog):
-    calendar_vn._MISSING_LOGGED.clear()
-    with caplog.at_level("WARNING", logger="app.core.calendar_vn"):
-        calendar_vn.upcoming_events(date(2030, 12, 1), 16)
+def test_upcoming_events_logs_missing_year_once(caplog, monkeypatch):
+    def thieu(year):
+        raise KeyError(year)
+    monkeypatch.setattr(events, "EXTRA_EVENTS", [{"key": "thu", "name": "Thử", "groups": [], "date_fn": thieu}])
+    events._MISSING_LOGGED.clear()
+    with caplog.at_level("WARNING", logger="app.core.listing_intel.events"):
+        events.upcoming_events(date(2030, 12, 1), 16)
         first = len(caplog.records)
-        calendar_vn.upcoming_events(date(2030, 12, 1), 16)
+        events.upcoming_events(date(2030, 12, 1), 16)
     assert first >= 1 and len(caplog.records) == first
 
 
