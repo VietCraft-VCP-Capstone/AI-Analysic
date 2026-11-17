@@ -1,28 +1,46 @@
-import re
-import io
+"""
+OCR Căn cước công dân (CCCD) — trích xuất thông tin + kiểm tra định dạng / chất lượng ảnh.
+
+Hỗ trợ: CCCD mã vạch, CCCD gắn chip (2021) và thẻ Căn cước mẫu 2024.
+Kết quả chỉ để TỰ ĐIỀN form và hỗ trợ admin đối soát, không có giá trị xác minh danh tính.
+
+Thiết kế:
+- Nhãn trường được so khớp trên bản chữ HOA KHÔNG DẤU (EasyOCR hay mất dấu), giá trị
+  được cắt từ bản gốc theo cùng vị trí (bảng bỏ dấu 1-1 nên độ dài không đổi).
+- Giá trị một trường dừng tại nhãn của trường kế tiếp — không cắt theo nội dung
+  (bản cũ cắt tại chữ "Nam"/"Nữ" làm mất tên "NGUYỄN HOÀI NAM").
+- Đối chiếu chéo số CCCD (mã thế kỷ + giới tính + 2 số cuối năm sinh) với ngày sinh,
+  giới tính đọc được; đọc dải MRZ mặt sau thẻ chip và kiểm tra chữ số kiểm tra ICAO 9303.
+"""
+
 import logging
+import re
+import threading
+import unicodedata
+from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
-from pathlib import Path
 
 import numpy as np
 
 logger = logging.getLogger("cccd_ocr")
 
-# ── Lazy-load EasyOCR reader (tránh load model nặng khi import) ──────────
+# ── EasyOCR: nạp lười, an toàn khi nhiều request đến cùng lúc ───────────────
 _reader = None
+_reader_lock = threading.Lock()
 
 
 def _get_reader():
     global _reader
     if _reader is None:
-        import easyocr
-        _reader = easyocr.Reader(["vi", "en"], gpu=False)
-        logger.info("EasyOCR reader initialized (vi + en, CPU)")
+        with _reader_lock:
+            if _reader is None:
+                import easyocr
+                _reader = easyocr.Reader(["vi", "en"], gpu=False)
+                logger.info("EasyOCR reader initialized (vi + en, CPU)")
     return _reader
 
 
-# ── Mã tỉnh/thành phố hợp lệ theo cấu trúc số CCCD (12 số) ─────────────
-# 3 số đầu = mã tỉnh, theo Quyết định 2345/QĐ-BCA ngày 03/06/2021
+# ── Mã tỉnh/thành phố (3 số đầu CCCD) theo Thông tư 07/2016/TT-BCA ─────────
 VALID_PROVINCE_CODES = {
     "001", "002", "004", "006", "008", "010", "011", "012", "014", "015",
     "017", "019", "020", "022", "024", "025", "026", "027", "030", "031",
@@ -33,12 +51,105 @@ VALID_PROVINCE_CODES = {
     "094", "095", "096",
 }
 
+# Chữ số thứ 4: mã thế kỷ sinh + giới tính (chẵn = nam, lẻ = nữ)
+_CENTURY_BY_DIGIT = {0: 1900, 1: 1900, 2: 2000, 3: 2000, 4: 2100, 5: 2100, 6: 2200, 7: 2200, 8: 1800, 9: 1800}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 0. CHUẨN HÓA CHỮ
+# ═══════════════════════════════════════════════════════════════════════════
+_SRC = "ÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬĐÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ"
+_DST = "AAAAAAAAAAAAAAAAADEEEEEEEEEEEIIIIIOOOOOOOOOOOOOOOOOUUUUUUUUUUUYYYYY"
+_UNACCENT = str.maketrans(_SRC, _DST)
+
+
+def _nfc(text: str) -> str:
+    return unicodedata.normalize("NFC", text or "")
+
+
+def _norm(text: str) -> str:
+    """HOA + bỏ dấu, GIỮ NGUYÊN độ dài để vị trí khớp với chuỗi gốc."""
+    return _nfc(text).upper().translate(_UNACCENT)
+
+
+def _clean_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+_SEP = r"[\s/\-:|.,;]*"
+
+# Nhãn trường (trên bản HOA không dấu). Thứ tự không quan trọng.
+LABELS: Dict[str, str] = {
+    "name": r"HO,?\s*(?:VA|CHU\s*DEM\s*VA)\s*TEN(?:\s*KHAI\s*SINH)?|FULL\s*NAME|SURNAME[A-Z ,]*NAME",
+    "dob": r"NGAY,?\s*THANG,?\s*NAM\s*SINH|NGAY\s*SINH|DATE\s*OF\s*BIRTH",
+    "sex": r"GIOI\s*TINH|(?<![A-Z])SEX(?![A-Z])",
+    "nationality": r"QUOC\s*TICH|NATIONALITY",
+    "origin": r"QUE\s*QUAN|PLACE\s*OF\s*ORIGIN",
+    "residence": r"NOI\s*THUONG\s*TRU|NOI\s*CU\s*TRU|PLACE\s*OF\s*RESIDENCE",
+    "birth_reg": r"NOI\s*DANG\s*KY\s*KHAI\s*SINH|PLACE\s*OF\s*BIRTH",
+    "expiry": r"CO\s*GIA\s*TRI\s*DEN|NGAY,?\s*THANG,?\s*NAM\s*HET\s*HAN|DATE\s*OF\s*EXPIRY",
+    "issue": r"NGAY,?\s*THANG,?\s*NAM\s*CAP|DATE\s*OF\s*ISSUE",
+    "ident": r"DAC\s*DIEM\s*NHAN\s*DANG|PERSONAL\s*IDENTIFICATION(?!\s*NUMBER)",
+    "id_label": r"SO\s*DINH\s*DANH\s*CA\s*NHAN|PERSONAL\s*IDENTIFICATION\s*NUMBER|(?<![A-Z])(?:SO|NO)(?![A-Z])",
+}
+_LABEL_RE = {k: re.compile(v) for k, v in LABELS.items()}
+_ANY_LABEL = re.compile("|".join(f"(?:{v})" for v in LABELS.values()))
+# Nhãn dùng để dừng giá trị (không gồm "SO"/"NO" đứng riêng vì quá phổ biến trong địa chỉ)
+_STOP_LABEL = re.compile("|".join(f"(?:{v})" for k, v in LABELS.items() if k != "id_label")
+                         + r"|SO\s*DINH\s*DANH|PERSONAL\s*IDENTIFICATION\s*NUMBER")
+
+
+def _strip_leading_labels(original: str) -> str:
+    """Bỏ các nhãn phụ / ký tự phân cách ở đầu chuỗi ("/ Full name: ...")."""
+    s = original
+    while True:
+        s2 = re.sub(r"^" + _SEP, "", s)
+        m = _STOP_LABEL.match(_norm(s2))
+        if m and m.start() == 0 and m.end() > 0:
+            s2 = s2[m.end():]
+        if s2 == s:
+            return s.strip()
+        s = s2
+
+
+def _cut_at_next_label(original: str) -> str:
+    m = _STOP_LABEL.search(_norm(original))
+    return original[:m.start()] if m else original
+
+
+def _value_after(texts: List[str], key: str, max_next_blocks: int = 1) -> Optional[str]:
+    """Giá trị của trường `key`: phần sau nhãn trong cùng block, hoặc block kế tiếp."""
+    label = _LABEL_RE[key]
+    for i, text in enumerate(texts):
+        m = label.search(_norm(text))
+        if not m:
+            continue
+        rest = _clean_text(_cut_at_next_label(_strip_leading_labels(text[m.end():])))
+        rest = re.sub(r"^" + _SEP + "|" + _SEP + "$", "", rest)
+        if len(rest) > 1:
+            return rest
+        parts: List[str] = []
+        for nxt in texts[i + 1:i + 1 + max_next_blocks]:
+            n = _norm(nxt)
+            lead = _STOP_LABEL.search(n)
+            if lead and lead.start() <= 2:
+                break
+            parts.append(_cut_at_next_label(nxt))
+            if lead:
+                break
+        val = re.sub(r"^" + _SEP + "|" + _SEP + "$", "", _clean_text(" ".join(parts)))
+        if len(val) > 1:
+            return val
+        # Chưa có giá trị: EasyOCR hay tách "Giới tính" | "Sex: Nam" thành 2 block,
+        # nên tìm tiếp ở block nhãn kế tiếp thay vì bỏ cuộc.
+    return None
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. XÁC THỰC SỐ CCCD
 # ═══════════════════════════════════════════════════════════════════════════
 def validate_cccd_number(raw: str) -> Dict[str, Any]:
-    digits = re.sub(r"\D", "", raw)
+    digits = re.sub(r"\D", "", raw or "")
     result: Dict[str, Any] = {
         "is_valid": False,
         "cleaned": digits,
@@ -46,9 +157,9 @@ def validate_cccd_number(raw: str) -> Dict[str, Any]:
         "gender_digit": None,
         "gender": None,
         "birth_year_suffix": None,
+        "birth_year": None,
         "errors": [],
     }
-
     if len(digits) != 12:
         result["errors"].append(f"Số CCCD phải đúng 12 chữ số, hiện có {len(digits)} số.")
         return result
@@ -56,22 +167,18 @@ def validate_cccd_number(raw: str) -> Dict[str, Any]:
     province_code = digits[:3]
     gender_digit = int(digits[3])
     birth_year_suffix = digits[4:6]
-
-    result["province_code"] = province_code
-    result["gender_digit"] = gender_digit
-    result["birth_year_suffix"] = birth_year_suffix
-
+    result.update(
+        province_code=province_code,
+        gender_digit=gender_digit,
+        birth_year_suffix=birth_year_suffix,
+        gender="Nam" if gender_digit % 2 == 0 else "Nữ",
+        birth_year=_CENTURY_BY_DIGIT[gender_digit] + int(birth_year_suffix),
+    )
     if province_code not in VALID_PROVINCE_CODES:
         result["errors"].append(f"Mã tỉnh '{province_code}' không nằm trong danh sách hợp lệ.")
-
-    if gender_digit in (0, 2, 4, 6, 8):
-        result["gender"] = "Nam"
-    else:
-        result["gender"] = "Nữ"
-
-    if not result["errors"]:
-        result["is_valid"] = True
-
+    if result["birth_year"] > date.today().year or result["birth_year"] < 1900:
+        result["errors"].append("Mã thế kỷ / năm sinh trong số CCCD không hợp lệ.")
+    result["is_valid"] = not result["errors"]
     return result
 
 
@@ -93,20 +200,14 @@ def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
         "is_brightness_ok": True,
         "warnings": [],
     }
-
-    # Phát hiện mờ: dùng Laplacian variance
     gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY) if len(img_array.shape) == 3 else img_array
     blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-    result["blur_score"] = round(blur_score, 2)
-    result["is_blurry"] = blur_score < 50.0  # Ngưỡng: < 50 = mờ
-
+    result["blur_score"] = round(float(blur_score), 2)
+    result["is_blurry"] = blur_score < 50.0
     if result["is_blurry"]:
         result["warnings"].append("Ảnh bị mờ (blur). Vui lòng chụp lại rõ nét hơn.")
-
     if not result["is_resolution_ok"]:
         result["warnings"].append(f"Độ phân giải quá thấp ({w}×{h}). Cần tối thiểu 400×250 pixel.")
-
-    # Kiểm tra độ sáng trung bình
     brightness = float(np.mean(gray))
     result["brightness"] = round(brightness, 2)
     if brightness < 40:
@@ -115,348 +216,347 @@ def check_image_quality(img_array: np.ndarray) -> Dict[str, Any]:
     elif brightness > 230:
         result["is_brightness_ok"] = False
         result["warnings"].append("Ảnh bị lóa sáng (overexposed). Vui lòng chụp lại tránh ánh sáng trực tiếp.")
-
     return result
 
+
 def detect_screen_capture(img_array: np.ndarray) -> Dict[str, Any]:
+    """
+    Heuristic phổ tần cao (moiré). Ngưỡng chưa được hiệu chỉnh trên tập ảnh thật nên
+    CHỈ dùng để cảnh báo, không dùng để kết luận ảnh hợp lệ hay không.
+    """
     import cv2
 
     gray = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY) if len(img_array.shape) == 3 else img_array
-
-    # FFT để tìm moiré pattern (sọc màn hình)
-    f_transform = np.fft.fft2(gray.astype(float))
-    f_shift = np.fft.fftshift(f_transform)
+    f_shift = np.fft.fftshift(np.fft.fft2(gray.astype(float)))
     magnitude = np.log1p(np.abs(f_shift))
-
     h, w = magnitude.shape
     cy, cx = h // 2, w // 2
-
-    mask_radius = min(h, w) // 10
-    magnitude[cy - mask_radius:cy + mask_radius, cx - mask_radius:cx + mask_radius] = 0
-
+    r = min(h, w) // 10
+    magnitude[cy - r:cy + r, cx - r:cx + r] = 0
     high_freq_energy = float(np.mean(magnitude))
-
     is_screen_capture = high_freq_energy > 5.5
-
     return {
         "high_freq_energy": round(high_freq_energy, 3),
         "is_likely_screen_capture": is_screen_capture,
-        "warning": "Ảnh có dấu hiệu chụp lại từ màn hình (moiré). Vui lòng chụp trực tiếp từ thẻ CCCD gốc."
+        "warning": "Ảnh có thể được chụp lại từ màn hình (moiré). Nên chụp trực tiếp từ thẻ gốc."
         if is_screen_capture else None,
     }
 
-FRONT_KEYWORDS = [
-    "CĂN CƯỚC", "CÔNG DÂN", "CITIZEN", "CARD",
-    "Họ và tên", "Full name", "Sinh", "Date of birth",
-    "Giới tính", "Sex", "Quốc tịch", "Nationality",
-    "Quê quán", "Place of origin", "Nơi thường trú",
-    "Place of residence", "Có giá trị đến", "Date of expiry",
-    "Số", "No",
-    # CCCD gắn chip mới
-    "CĂN CƯỚC", "IDENTITY",
-]
 
-BACK_KEYWORDS = [
-    # Có dấu (chuẩn)
-    "Đặc điểm nhận dạng", "Personal identification",
-    "Ngày", "tháng", "năm",
-    "CỤC TRƯỞNG", "GIÁM ĐỐC",
-    "CỤC CẢNH SÁT", "CẢNH SÁT",
-    "QUẢN LÝ HÀNH CHÍNH", "TRẬT TỰ XÃ HỘI",
-    # Không dấu — EasyOCR thường trả về dạng này
-    "DAC DIEM NHAN DANG", "NHAN DANG",
-    "CUC TRUONG", "GIAM DOC",
-    "CUC CANH SAT", "CANH SAT",
-    "QUAN LY HANH CHINH", "TRAT TU XA HOI",
-    "CONG AN", "CÔNG AN",
-    # CCCD gắn chip mới — mặt sau
-    "CONG HOA XA HOI", "CỘNG HÒA XÃ HỘI",
-    "VIET NAM", "VIỆT NAM",
-]
+# ═══════════════════════════════════════════════════════════════════════════
+# 3. NHẬN DIỆN BỐ CỤC
+# ═══════════════════════════════════════════════════════════════════════════
+_FRONT_TITLE = re.compile(r"CAN\s*CUOC|IDENTITY\s*CARD|CITIZEN\s*IDENTITY")
+_FRONT_GROUPS = ["name", "dob", "sex", "nationality", "origin", "residence", "expiry"]
+_BACK_GROUPS = {
+    "ident": _LABEL_RE["ident"],
+    "issue": re.compile(LABELS["issue"] + r"|NGAY\s*\d{1,2}\s*THANG\s*\d{1,2}\s*NAM\s*\d{4}"),
+    "authority": re.compile(r"CUC\s*TRUONG|CUC\s*CANH\s*SAT|GIAM\s*DOC\s*CONG\s*AN|BO\s*CONG\s*AN"),
+    "residence": _LABEL_RE["residence"],
+    "birth_reg": _LABEL_RE["birth_reg"],
+    "mrz": re.compile(r"I[DO<]?VNM"),
+}
+
+# Giữ tên cũ cho tương thích (một số nơi có thể import)
+FRONT_KEYWORDS = _FRONT_GROUPS
+BACK_KEYWORDS = list(_BACK_GROUPS)
 
 
 def detect_cccd_layout(ocr_texts: List[str], side: str = "front") -> Dict[str, Any]:
-    """Kiểm tra xem ảnh có chứa bố cục CCCD hợp lệ không dựa trên keyword."""
-    keywords = FRONT_KEYWORDS if side == "front" else BACK_KEYWORDS
-    combined = " ".join(ocr_texts).upper()
-
-    matched = []
-    for kw in keywords:
-        if kw.upper() in combined:
-            matched.append(kw)
-
-    # Mặt sau có ít text hơn mặt trước → chỉ cần 2 keyword
-    min_matches = 2 if side == "back" else 3
-    is_valid = len(matched) >= min_matches
-
+    """
+    Mặt trước: có tiêu đề "CĂN CƯỚC..." và >= 2 nhãn trường, hoặc >= 4 nhãn trường.
+    Mặt sau: >= 2 nhóm đặc trưng (đặc điểm nhận dạng, ngày cấp, cơ quan cấp, nơi cư trú,
+    nơi đăng ký khai sinh, MRZ). Không còn dùng từ phổ biến như "Số", "No", "Ngày", "Việt Nam".
+    """
+    combined = _norm(" ".join(ocr_texts))
+    if side == "front":
+        matched = [g for g in _FRONT_GROUPS if _LABEL_RE[g].search(combined)]
+        has_title = bool(_FRONT_TITLE.search(combined))
+        if has_title:
+            matched = ["title"] + matched
+        is_valid = (has_title and len(matched) - 1 >= 2) or len([m for m in matched if m != "title"]) >= 4
+        need = "tiêu đề CĂN CƯỚC + ≥ 2 trường"
+    else:
+        matched = [g for g, rx in _BACK_GROUPS.items() if rx.search(combined.replace(" ", "") if g == "mrz" else combined)]
+        is_valid = len(matched) >= 2
+        need = "≥ 2 đặc trưng mặt sau"
     return {
         "side": side,
         "keywords_found": len(matched),
-        "keywords_matched": matched[:10],  # giới hạn output
+        "keywords_matched": matched,
         "is_layout_valid": is_valid,
-        "warning": f"Ảnh không giống CCCD {'mặt trước' if side == 'front' else 'mặt sau'}. "
-                   f"Chỉ phát hiện {len(matched)} từ khóa đặc trưng (cần ≥ {min_matches})."
-        if not is_valid else None,
+        "warning": None if is_valid else (
+            f"Ảnh không giống CCCD {'mặt trước' if side == 'front' else 'mặt sau'} "
+            f"(phát hiện {len(matched)} đặc trưng, cần {need})."
+        ),
     }
 
-def _clean_text(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. TRÍCH XUẤT TRƯỜNG
+# ═══════════════════════════════════════════════════════════════════════════
+_DATE_RE = re.compile(r"(\d{1,2})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(\d{2,4})")
+_ID_RE = re.compile(r"(?<!\d)\d(?:[ .]?\d){11}(?!\d)")
+_OCR_DIGIT_FIX = str.maketrans({"O": "0", "o": "0", "D": "0", "I": "1", "l": "1", "|": "1", "B": "8", "S": "5"})
 
 
-def _find_value_after(texts: List[str], label_patterns: List[str]) -> Optional[str]:
-    # ── Cách 1: Tìm theo dòng riêng lẻ (ưu tiên vì chính xác hơn) ──
+def _to_date(d: str, m: str, y: str) -> Optional[str]:
+    if len(y) == 2:
+        y = ("19" if int(y) > (date.today().year % 100) else "20") + y
+    try:
+        dt = date(int(y), int(m), int(d))
+    except ValueError:
+        return None
+    if not (1900 <= dt.year <= 2200):
+        return None
+    return dt.strftime("%d/%m/%Y")
+
+
+def _date_in(text: str) -> Optional[str]:
+    m = _DATE_RE.search(text or "")
+    return _to_date(*m.groups()) if m else None
+
+
+def _date_after(texts: List[str], key: str) -> Optional[str]:
+    label = _LABEL_RE[key]
     for i, text in enumerate(texts):
-        for pattern in label_patterns:
-            if re.search(pattern, text, re.IGNORECASE):
-                # Thử lấy value trên cùng dòng (sau label)
-                same_line_match = re.search(pattern + r"[:\s]*(.+)", text, re.IGNORECASE)
-                if same_line_match:
-                    value = _clean_text(same_line_match.group(1))
-                    # Lọc bỏ label phụ dính vào (ví dụ: "/ Full name")
-                    for remove_pat in label_patterns:
-                        value = re.sub(remove_pat, "", value, flags=re.IGNORECASE).strip()
-                    # Loại bỏ dấu phân cách thừa
-                    value = re.sub(r"^[/\-:|\s]+", "", value).strip()
-                    value = re.sub(r"[/\-:|\s]+$", "", value).strip()
-                    if value and len(value) > 1 and not re.match(r"^[\W\d]+$", value):
-                        return value
-
-                # Cách 2: Value nằm ở dòng kế tiếp (OCR tách block)
-                if i + 1 < len(texts):
-                    next_value = _clean_text(texts[i + 1])
-                    # Loại bỏ label phụ
-                    for remove_pat in label_patterns:
-                        next_value = re.sub(remove_pat, "", next_value, flags=re.IGNORECASE).strip()
-                    next_value = re.sub(r"^[/\-:|\s]+", "", next_value).strip()
-                    if next_value and len(next_value) > 1 and not re.match(r"^[\W\d]+$", next_value):
-                        return next_value
-
-    # ── Fallback: Tìm trên combined text (cách cũ) ──
-    combined = "\n".join(texts)
-    for pattern in label_patterns:
-        match = re.search(pattern + r"[:\s]*(.+)", combined, re.IGNORECASE)
-        if match:
-            value = _clean_text(match.group(1))
-            for remove_pat in label_patterns:
-                value = re.sub(remove_pat, "", value, flags=re.IGNORECASE).strip()
-            value = re.sub(r"^[/\-:|\s]+", "", value).strip()
-            if value and len(value) > 1 and not re.match(r"^[\W\d]+$", value):
-                return value
+        m = label.search(_norm(text))
+        if not m:
+            continue
+        found = _date_in(_cut_at_next_label(_strip_leading_labels(text[m.end():])))
+        if found:
+            return found
+        if i + 1 < len(texts):
+            nxt = texts[i + 1]
+            lead = _STOP_LABEL.search(_norm(nxt))
+            if not (lead and lead.start() <= 2):
+                found = _date_in(_cut_at_next_label(nxt))
+                if found:
+                    return found
     return None
 
 
-def _extract_12_digit_number(texts: List[str]) -> Optional[str]:
-    """Tìm chuỗi 12 chữ số liên tiếp (số CCCD)."""
-    combined = " ".join(texts)
-    match = re.search(r"\b(\d{12})\b", combined)
-    if match:
-        return match.group(1)
-    # Thử tìm chuỗi số dài nhất gần 12 ký tự
-    all_digits = re.findall(r"\d{9,14}", combined)
-    for d in all_digits:
-        cleaned = d[:12]
-        if len(cleaned) == 12:
-            return cleaned
+def _extract_id_number(texts: List[str]) -> Optional[str]:
+    """
+    Số CCCD 12 chữ số. Chấp nhận khoảng trắng / dấu chấm giữa các nhóm số do OCR tách.
+    Không bao giờ cắt chuỗi dài hơn 12 số (dãy 13 số bị loại chứ không lấy 12 số đầu).
+    Ưu tiên block có nhãn "Số / No / Số định danh cá nhân".
+    """
+    labelled, others = [], []
+    for text in texts:
+        m = _LABEL_RE["id_label"].search(_norm(text))
+        if m:
+            labelled.append(text[m.end():].translate(_OCR_DIGIT_FIX))
+        else:
+            others.append(text)
+    for chunk in labelled + others:
+        for cand in _ID_RE.findall(chunk):
+            digits = re.sub(r"\D", "", cand)
+            if len(digits) == 12:
+                return digits
     return None
 
 
-def _extract_date(texts: List[str], label_patterns: List[str]) -> Optional[str]:
-    """Tìm ngày tháng theo format DD/MM/YYYY hoặc DD-MM-YYYY sau label."""
-    combined = " ".join(texts)
-    for pattern in label_patterns:
-        match = re.search(pattern + r"[:\s]*(\d{1,2}[\s/\-\.]+\d{1,2}[\s/\-\.]+\d{2,4})",
-                          combined, re.IGNORECASE)
-        if match:
-            raw = match.group(1)
-            # Chuẩn hóa dấu phân cách
-            parts = re.split(r"[\s/\-\.]+", raw)
-            if len(parts) == 3:
-                d, m, y = parts
-                if len(y) == 2:
-                    y = "19" + y if int(y) > 30 else "20" + y
-                return f"{d.zfill(2)}/{m.zfill(2)}/{y}"
+_NAME_OK = re.compile(r"^[A-ZÀ-ỸĐ][A-ZÀ-ỸĐ' ]+$")
+
+
+def _extract_name(texts: List[str]) -> Optional[str]:
+    name_label = _LABEL_RE["name"]
+    for i, text in enumerate(texts):
+        m = name_label.search(_norm(text))
+        if not m:
+            continue
+        parts: List[str] = []
+        first = _clean_text(_cut_at_next_label(_strip_leading_labels(text[m.end():])))
+        if first:
+            parts.append(first)
+        if not parts:
+            # Tên nằm ở 1–2 block kế tiếp (tên dài có thể bị tách)
+            for nxt in texts[i + 1:i + 3]:
+                n = _norm(nxt)
+                lead = _STOP_LABEL.search(n)
+                if (lead and lead.start() <= 2) or _DATE_RE.search(nxt):
+                    break
+                parts.append(_clean_text(_cut_at_next_label(nxt)))
+                if lead:
+                    break
+        name = _clean_text(" ".join(parts)).upper()
+        name = re.sub(r"^" + _SEP + "|" + _SEP + "$", "", name)
+        if name and _NAME_OK.match(name) and 2 <= len(name.split()) <= 7:
+            return name
+        # "Họ và tên" | "Full name:" | tên — tìm tiếp ở block nhãn kế tiếp
+    return None
+
+
+def _extract_gender(texts: List[str]) -> Optional[str]:
+    val = _value_after(texts, "sex")
+    if not val:
+        return None
+    first = _norm(val).split()[0] if val.split() else ""
+    if first in ("NAM", "MALE", "M"):
+        return "Nam"
+    if first in ("NU", "FEMALE", "F"):
+        return "Nữ"
     return None
 
 
 def parse_front_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
-    texts = [item[1] for item in ocr_results]
-    full_text = "\n".join(texts)
-
+    texts = [_nfc(item[1]) for item in ocr_results]
     result: Dict[str, Any] = {
-        "id_number": None,
-        "full_name": None,
-        "date_of_birth": None,
-        "gender": None,
+        "id_number": _extract_id_number(texts),
+        "full_name": _extract_name(texts),
+        "date_of_birth": _date_after(texts, "dob"),
+        "gender": _extract_gender(texts),
         "nationality": None,
         "place_of_origin": None,
         "place_of_residence": None,
-        "date_of_expiry": None,
+        "date_of_expiry": _date_after(texts, "expiry"),
         "raw_texts": texts,
     }
-
-    # Số CCCD (12 số)
-    result["id_number"] = _extract_12_digit_number(texts)
-
-
-    STOP_LABELS = re.compile(
-        r"(Sinh|Date of birth|Gi[ớo]i t[ií]nh|Sex|Qu[ốo]c t[ịi]ch|Nationality|"
-        r"Qu[êe] qu[áa]n|Place of origin|N[ơo]i th[ưu][ờo]ng tr[úu]|Place of residence|"
-        r"C[óo] gi[áa] tr[ịi]|Date of expiry|\d{2}[/\-]\d{2}[/\-]\d{4})",
-        re.IGNORECASE
-    )
-    NAME_LABEL = re.compile(
-        r"(H[ọo] v[àa] t[êe]n|Ho va ten|Full name)",
-        re.IGNORECASE
-    )
-    name_parts: List[str] = []
-    found_name_label = False
-    for i, text in enumerate(texts):
-        if not found_name_label:
-            if NAME_LABEL.search(text):
-                found_name_label = True
-                # Kiểm tra nếu tên dính ngay trên cùng dòng (sau label)
-                after_label = NAME_LABEL.sub("", text)
-                after_label = re.sub(r"[/\-:|\.\s]+", " ", after_label).strip()
-                if after_label and len(after_label) > 1 and not re.match(r"^[\W\d]+$", after_label):
-                    name_parts.append(after_label)
-        else:
-            # Đã tìm thấy label → gom các block tiếp theo là tên
-            block = text.strip()
-            if STOP_LABELS.search(block):
-                break  # Gặp label khác → dừng
-            # Bỏ qua block chỉ có ký tự đặc biệt hoặc số thuần
-            cleaned_block = re.sub(r"[/\-:|\.\s]+", "", block)
-            if cleaned_block and not re.match(r"^\d+$", cleaned_block):
-                name_parts.append(block)
-
-    if name_parts:
-        full_name = " ".join(name_parts)
-        full_name = re.split(r"(?:Sinh|Date|Gi[ớo]i|Sex|Nam|N[ữu])", full_name, flags=re.IGNORECASE)[0]
-        result["full_name"] = _clean_text(full_name).upper()
-    else:
-        # Fallback: dùng _find_value_after cũ
-        name = _find_value_after(texts, [
-            r"Họ và tên", r"Ho và tên", r"Ho va ten", r"Full name", r"Họ\s*va\s*tên",
-        ])
-        if name:
-            name = re.split(r"(?:Sinh|Date|Gi[ớo]i|Sex|Nam|N[ữu])", name, flags=re.IGNORECASE)[0]
-            result["full_name"] = _clean_text(name).upper()
-
-    # Ngày sinh
-    result["date_of_birth"] = _extract_date(texts, [
-        r"Ngày[,\s]*tháng[,\s]*năm\s*sinh",
-        r"Sinh",
-        r"Date of birth",
-        r"Ngay sinh",
-    ])
-
-    # Giới tính
-    gender_text = _find_value_after(texts, [r"Giới tính", r"Sex", r"Gioi tinh"])
-    if gender_text:
-        upper = gender_text.upper()
-        if "NAM" in upper or "MALE" in upper:
-            result["gender"] = "Nam"
-        elif "NỮ" in upper or "NU" in upper or "FEMALE" in upper:
-            result["gender"] = "Nữ"
-
-    # Quốc tịch
-    nationality = _find_value_after(texts, [r"Quốc tịch", r"Nationality", r"Quoc tich"])
-    if nationality:
-        result["nationality"] = _clean_text(nationality)
-
-    # Quê quán
-    origin = _find_value_after(texts, [r"Quê quán", r"Place of origin", r"Que quan"])
+    nat = _value_after(texts, "nationality")
+    if nat:
+        result["nationality"] = nat
+    origin = _value_after(texts, "origin", max_next_blocks=2)
     if origin:
-        origin = re.split(r"(?:Nơi thường trú|Place of residence)", origin, flags=re.IGNORECASE)[0]
-        result["place_of_origin"] = _clean_text(origin)
-
-    # Nơi thường trú
-    residence = _find_value_after(texts, [
-        r"Nơi thường trú",
-        r"Place of residence",
-        r"Noi thuong tru",
-    ])
+        result["place_of_origin"] = origin
+    residence = _value_after(texts, "residence", max_next_blocks=2)
     if residence:
-        residence = re.split(r"(?:Có giá trị|Date of expiry)", residence, flags=re.IGNORECASE)[0]
-        result["place_of_residence"] = _clean_text(residence)
-
-    # Ngày hết hạn
-    result["date_of_expiry"] = _extract_date(texts, [
-        r"Có giá trị đến",
-        r"Date of expiry",
-        r"Co gia tri den",
-    ])
-
+        result["place_of_residence"] = residence
     return result
+
+
+# ── MRZ (ICAO 9303, TD1: 3 dòng × 30 ký tự) ─────────────────────────────────
+def _mrz_char_value(c: str) -> int:
+    if c.isdigit():
+        return int(c)
+    if "A" <= c <= "Z":
+        return ord(c) - 55
+    return 0  # '<'
+
+
+def mrz_check_digit(data: str) -> str:
+    weights = (7, 3, 1)
+    return str(sum(_mrz_char_value(c) * weights[i % 3] for i, c in enumerate(data)) % 10)
+
+
+def _mrz_lines(texts: List[str]) -> List[str]:
+    out = []
+    for t in texts:
+        s = _nfc(t).upper().replace(" ", "")
+        s = re.sub(r"[«‹≪〈<]", "<", s)
+        if 25 <= len(s) <= 32 and re.fullmatch(r"[A-Z0-9<]+", s):
+            out.append(s[:30].ljust(30, "<"))
+    return out
+
+
+def parse_mrz(texts: List[str]) -> Optional[Dict[str, Any]]:
+    """Đọc MRZ TD1 mặt sau thẻ chip. Trả None nếu không tìm thấy 2 dòng đầu hợp lệ."""
+    lines = _mrz_lines(texts)
+    for i, l1 in enumerate(lines):
+        if not re.match(r"I[A-Z<]VNM", l1) or i + 1 >= len(lines):
+            continue
+        l2 = lines[i + 1]
+        doc_number, doc_check = l1[5:14], l1[14]
+        optional = l1[15:30]
+        dob, dob_check, sex = l2[0:6], l2[6], l2[7]
+        expiry, expiry_check = l2[8:14], l2[14]
+        full_id_match = re.search(r"\d{12}", optional)
+        full_id = full_id_match.group(0) if full_id_match else None
+        name = None
+        if i + 2 < len(lines):
+            raw_name = lines[i + 2].strip("<")
+            surname, _, given = raw_name.partition("<<")
+            name = _clean_text(f"{surname.replace('<', ' ')} {given.replace('<', ' ')}") or None
+        result = {
+            "doc_number": doc_number,
+            "doc_number_valid": mrz_check_digit(doc_number) == doc_check,
+            "full_id": full_id,
+            "full_id_consistent": bool(full_id and full_id.endswith(doc_number)),
+            "dob_yymmdd": dob,
+            "dob_valid": dob.isdigit() and mrz_check_digit(dob) == dob_check,
+            "sex": {"M": "Nam", "F": "Nữ"}.get(sex),
+            "expiry_yymmdd": expiry,
+            "expiry_valid": expiry.isdigit() and mrz_check_digit(expiry) == expiry_check,
+            "name": name,
+        }
+        result["is_valid"] = result["doc_number_valid"] and result["dob_valid"] and result["expiry_valid"]
+        return result
+    return None
 
 
 def parse_back_cccd(ocr_results: List[Tuple]) -> Dict[str, Any]:
-    """Trích xuất thông tin từ kết quả OCR mặt sau CCCD.
-
-    Trả về: đặc điểm nhận dạng, ngày cấp, nơi cấp.
-    """
-    texts = [item[1] for item in ocr_results]
+    """Mặt sau: đặc điểm nhận dạng, ngày cấp, nơi cấp, (thẻ 2024) nơi cư trú, MRZ."""
+    texts = [_nfc(item[1]) for item in ocr_results]
     full_text = "\n".join(texts)
+    normalized = _norm(full_text)
 
     result: Dict[str, Any] = {
-        "personal_identification": None,
+        "personal_identification": _value_after(texts, "ident"),
         "issue_date": None,
         "issuing_authority": None,
+        "place_of_residence": _value_after(texts, "residence", max_next_blocks=2),
+        "place_of_birth_registration": _value_after(texts, "birth_reg", max_next_blocks=2),
+        "date_of_expiry": _date_after(texts, "expiry"),
+        "mrz": None,
         "raw_texts": texts,
     }
 
-    # Đặc điểm nhận dạng
-    ident = _find_value_after(texts, [
-        r"Đặc điểm nhận dạng",
-        r"Personal identification",
-        r"Dac diem nhan dang",
-    ])
-    if ident:
-        result["personal_identification"] = _clean_text(ident)
+    # Ngày cấp: nhãn "Ngày, tháng, năm cấp / Date of issue" → "Ngày DD tháng MM năm YYYY"
+    issue = _date_after(texts, "issue")
+    if not issue:
+        m = re.search(r"NGA?Y\s*(\d{1,2})\s*THA?NG\s*(\d{1,2})\s*NA?M\s*(\d{4})", normalized)
+        if m:
+            issue = _to_date(*m.groups())
+    if not issue:
+        # Ngày bất kỳ trên mặt sau, trừ ngày hết hạn
+        for m in _DATE_RE.finditer(full_text):
+            d = _to_date(*m.groups())
+            if d and d != result["date_of_expiry"]:
+                issue = d
+                break
+    result["issue_date"] = issue
 
-    # Ngày cấp: tìm pattern "Ngày DD tháng MM năm YYYY"
-    # EasyOCR thường mất dấu tiếng Việt → cần regex linh hoạt
-    date_patterns = [
-        # Có dấu: "Ngày 15 tháng 03 năm 2021"
-        r"[Nn]g[àa]y\s*(\d{1,2})\s*th[áa]ng\s*(\d{1,2})\s*n[ăa]m\s*(\d{4})",
-        # Không dấu: "Ngay 15 thang 03 nam 2021"
-        r"[Nn]ga?y\s*(\d{1,2})\s*tha?ng\s*(\d{1,2})\s*na?m\s*(\d{4})",
-        # Chỉ số: "15/03/2021" hoặc "15-03-2021" (tìm date format trên mặt sau)
-        r"(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})",
-    ]
-    for dp in date_patterns:
-        date_match = re.search(dp, full_text)
-        if date_match:
-            d, m, y = date_match.group(1), date_match.group(2), date_match.group(3)
-            result["issue_date"] = f"{d.zfill(2)}/{m.zfill(2)}/{y}"
-            break
-
-    # Nơi cấp — so sánh cả có dấu lẫn không dấu (EasyOCR hay mất dấu)
-    full_upper = full_text.upper()
-    # Chuẩn hóa bỏ dấu để so sánh
-    _DIACRITICS_MAP = str.maketrans(
-        "ÀÁẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬĐÈÉẺẼẸÊẾỀỂỄỆÌÍỈĨỊÒÓỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÙÚỦŨỤƯỨỪỬỮỰỲÝỶỸỴ",
-        "AAAAAAAAAAAAAAAAADEEEEEEEEEEEIIIIIOOOOOOOOOOOOOOOOOUUUUUUUUUUUYYYYY"
-    )
-    normalized = full_upper.translate(_DIACRITICS_MAP)
-
-    if "CUC TRUONG" in normalized or "CUC CANH SAT" in normalized:
+    if re.search(r"CUC\s*TRUONG|CUC\s*CANH\s*SAT", normalized):
         result["issuing_authority"] = "Cục Cảnh sát QLHC về TTXH"
+    elif re.search(r"BO\s*CONG\s*AN", normalized):
+        result["issuing_authority"] = "Bộ Công an"
     elif "GIAM DOC" in normalized:
-        # Tìm tên công an tỉnh
-        ca_match = re.search(r"C[OÔ]NG AN\s+(.+?)(?:\n|$)", full_text, re.IGNORECASE)
-        if not ca_match:
-            ca_match = re.search(r"CONG AN\s+(.+?)(?:\n|$)", full_text, re.IGNORECASE)
-        if ca_match:
-            result["issuing_authority"] = f"Công an {_clean_text(ca_match.group(1))}"
-        else:
-            result["issuing_authority"] = "Giám đốc Công an tỉnh/thành phố"
+        ca = re.search(r"C[OÔ]NG\s*AN\s+(.+?)(?:\n|$)", full_text, re.IGNORECASE)
+        result["issuing_authority"] = f"Công an {_clean_text(ca.group(1))}" if ca else "Giám đốc Công an tỉnh/thành phố"
 
+    result["mrz"] = parse_mrz(texts)
     return result
 
 
-def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. ĐỐI CHIẾU CHÉO
+# ═══════════════════════════════════════════════════════════════════════════
+def cross_check_front(ocr_data: Dict[str, Any], id_validation: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """So số CCCD (thế kỷ + giới tính + năm sinh) với ngày sinh và giới tính đọc được."""
+    out: Dict[str, Any] = {"id_matches_dob": None, "id_matches_gender": None, "warnings": []}
+    if not id_validation or id_validation.get("birth_year") is None:
+        return out
+    dob = ocr_data.get("date_of_birth")
+    if dob:
+        dob_year = int(dob[-4:])
+        out["id_matches_dob"] = dob_year == id_validation["birth_year"]
+        if not out["id_matches_dob"]:
+            out["warnings"].append(
+                f"Năm sinh trên thẻ ({dob_year}) không khớp năm sinh mã hóa trong số CCCD "
+                f"({id_validation['birth_year']}). Kiểm tra lại số CCCD hoặc ngày sinh."
+            )
+    if ocr_data.get("gender"):
+        out["id_matches_gender"] = ocr_data["gender"] == id_validation["gender"]
+        if not out["id_matches_gender"]:
+            out["warnings"].append("Giới tính trên thẻ không khớp giới tính mã hóa trong số CCCD.")
+    return out
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 6. QUÉT
+# ═══════════════════════════════════════════════════════════════════════════
+def _load_image(image_bytes: bytes):
+    """Trả (ảnh BGR, lỗi). Chặn decompression bomb trước khi giải mã."""
     import io
     import cv2
     from PIL import Image
@@ -466,124 +566,112 @@ def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
         with Image.open(io.BytesIO(image_bytes)) as pil_img:
             pw, ph = pil_img.size
             if (pw * ph > 16_000_000) or max(pw, ph) > 4096:
-                return {
-                    "success": False,
-                    "error": f"Kích thước ảnh quá lớn ({pw}x{ph} px, vượt giới hạn an toàn 16 Megapixels / 4096px). Vui lòng thu nhỏ ảnh trước khi tải lên.",
-                    "ocr_data": None,
-                    "verification": None,
-                }
+                return None, (f"Kích thước ảnh quá lớn ({pw}x{ph} px, vượt giới hạn an toàn 16 Megapixels / 4096px). "
+                              "Vui lòng thu nhỏ ảnh trước khi tải lên.")
     except Exception as img_err:
-        logger.warning(f"[CCCD OCR Security] Kiểm tra header ảnh thất bại hoặc nghi ngờ Decompression Bomb: {img_err}")
-        return {
-            "success": False,
-            "error": "Ảnh không hợp lệ, bị hỏng hoặc kích thước giải mã vượt giới hạn an toàn.",
-            "ocr_data": None,
-            "verification": None,
-        }
+        logger.warning("[CCCD OCR Security] Kiểm tra header ảnh thất bại: %s", type(img_err).__name__)
+        return None, "Ảnh không hợp lệ, bị hỏng hoặc kích thước giải mã vượt giới hạn an toàn."
 
-    # Decode ảnh an toàn bằng OpenCV
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
+    img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
     if img is None:
-        return {
-            "success": False,
-            "error": "Không thể đọc file ảnh. Vui lòng tải lên ảnh định dạng JPG, PNG hoặc WebP.",
-            "ocr_data": None,
-            "verification": None,
-        }
-
-    # Tự động co tỷ lệ nếu kích thước vượt 2048px để tối ưu FFT và EasyOCR
+        return None, "Không thể đọc file ảnh. Vui lòng tải lên ảnh định dạng JPG, PNG hoặc WebP."
     h, w = img.shape[:2]
     if max(h, w) > 2048:
         scale = 2048.0 / max(h, w)
-        new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
-        logger.info(f"[CCCD OCR] Ảnh độ phân giải cao ({w}x{h}), tự động resize về ({new_w}x{new_h}) để tối ưu CPU/RAM.")
-        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        img = cv2.resize(img, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=cv2.INTER_AREA)
+    return img, None
 
-    # ── Bước 1: Kiểm tra chất lượng ảnh ──────────────────────────────────
-    quality = check_image_quality(img)
 
-    # ── Bước 2: Phát hiện chụp lại từ màn hình ───────────────────────────
-    screen_check = detect_screen_capture(img)
-
-    # ── Bước 3: OCR bằng EasyOCR ─────────────────────────────────────────
-    reader = _get_reader()
-    ocr_results = reader.readtext(img)
-    texts = [item[1] for item in ocr_results]
-
-    # ── Bước 4: Phát hiện bố cục CCCD ────────────────────────────────────
-    layout = detect_cccd_layout(texts, side=side)
-
-    # ── Bước 5: Trích xuất thông tin ─────────────────────────────────────
-    if side == "front":
-        ocr_data = parse_front_cccd(ocr_results)
-    else:
-        ocr_data = parse_back_cccd(ocr_results)
-
-    # ── Bước 6: Xác thực số CCCD (nếu mặt trước) ────────────────────────
-    id_validation = None
-    if side == "front" and ocr_data.get("id_number"):
-        id_validation = validate_cccd_number(ocr_data["id_number"])
-
-    # ── Bước 7: Tổng hợp kết quả xác thực ────────────────────────────────
-    checks = {
-        "image_quality_ok": quality["is_resolution_ok"] and not quality["is_blurry"] and quality["is_brightness_ok"],
+def build_verification(
+    side: str,
+    ocr_data: Dict[str, Any],
+    quality: Dict[str, Any],
+    screen_check: Dict[str, Any],
+    layout: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Tổng hợp các kiểm tra. Hàm thuần — test được không cần ảnh / EasyOCR."""
+    image_quality_ok = quality["is_resolution_ok"] and not quality["is_blurry"] and quality["is_brightness_ok"]
+    checks: Dict[str, bool] = {
+        "image_quality_ok": image_quality_ok,
         "layout_detected": layout["is_layout_valid"],
-        "no_screen_capture": not screen_check["is_likely_screen_capture"],
+        "no_screen_capture": not screen_check["is_likely_screen_capture"],  # chỉ cảnh báo
     }
-
-    if side == "front":
-        checks["id_format_valid"] = id_validation["is_valid"] if id_validation else False
-        checks["has_name"] = bool(ocr_data.get("full_name"))
-        checks["has_dob"] = bool(ocr_data.get("date_of_birth"))
-
-    # Điểm tin cậy tổng hợp
-    total_checks = len(checks)
-    passed_checks = sum(1 for v in checks.values() if v)
-    confidence = round(passed_checks / total_checks, 2) if total_checks > 0 else 0
-
-    # Tổng hợp cảnh báo
-    warnings: List[str] = []
-    warnings.extend(quality.get("warnings", []))
+    warnings: List[str] = list(quality.get("warnings", []))
     if screen_check.get("warning"):
         warnings.append(screen_check["warning"])
     if layout.get("warning"):
         warnings.append(layout["warning"])
-    if id_validation and id_validation.get("errors"):
-        warnings.extend(id_validation["errors"])
 
-    is_valid_format_and_quality = confidence >= 0.6 and layout["is_layout_valid"]
+    cross: Dict[str, Any] = {}
+    if side == "front":
+        id_validation = validate_cccd_number(ocr_data["id_number"]) if ocr_data.get("id_number") else None
+        checks["id_format_valid"] = bool(id_validation and id_validation["is_valid"])
+        checks["has_name"] = bool(ocr_data.get("full_name"))
+        checks["has_dob"] = bool(ocr_data.get("date_of_birth"))
+        if id_validation:
+            warnings.extend(id_validation["errors"])
+        else:
+            warnings.append("Không đọc được số CCCD 12 chữ số. Vui lòng nhập tay và kiểm tra lại.")
+        cross = cross_check_front(ocr_data, id_validation)
+        for key in ("id_matches_dob", "id_matches_gender"):
+            if cross[key] is not None:
+                checks[key] = cross[key]
+        warnings.extend(cross["warnings"])
+        no_mismatch = cross["id_matches_dob"] is not False and cross["id_matches_gender"] is not False
+        is_valid = (layout["is_layout_valid"] and image_quality_ok and checks["id_format_valid"]
+                    and checks["has_name"] and no_mismatch)
+    else:
+        mrz = ocr_data.get("mrz")
+        checks["has_issue_date"] = bool(ocr_data.get("issue_date"))
+        if mrz:
+            checks["mrz_valid"] = bool(mrz["is_valid"])
+            if not mrz["is_valid"]:
+                warnings.append("Dải MRZ đọc được nhưng sai chữ số kiểm tra — có thể do OCR đọc nhầm.")
+        is_valid = layout["is_layout_valid"] and image_quality_ok and (checks["has_issue_date"] or checks.get("mrz_valid", False))
 
-    # Loại bỏ raw_texts khỏi response (quá dài)
-    ocr_data_clean = {k: v for k, v in ocr_data.items() if k != "raw_texts"}
+    passed = sum(1 for v in checks.values() if v)
+    ratio = round(passed / len(checks), 2) if checks else 0.0
+    return {
+        "is_valid_format_and_quality": is_valid,
+        "is_likely_authentic": is_valid,  # alias cũ — KHÔNG có nghĩa thẻ là thật
+        "confidence_score": int(round(ratio * 100)),
+        "confidence_ratio": ratio,
+        "disclaimer": "Kết quả OCR chỉ hỗ trợ trích xuất thông tin tự động và kiểm tra chất lượng ảnh. "
+                      "Không có giá trị pháp lý thay thế xác minh danh tính từ cơ quan Nhà nước.",
+        "checks": checks,
+        "warnings": warnings,
+        "details": {
+            "image_quality": {
+                "resolution": quality["resolution"],
+                "blur_score": quality["blur_score"],
+                "brightness": quality["brightness"],
+            },
+            "layout": {"keywords_found": layout["keywords_found"], "is_valid": layout["is_layout_valid"]},
+            "screen_capture": {
+                "high_freq_energy": screen_check["high_freq_energy"],
+                "is_screen": screen_check["is_likely_screen_capture"],
+                "is_heuristic": True,
+            },
+        },
+    }
+
+
+def scan_cccd(image_bytes: bytes, side: str = "front") -> Dict[str, Any]:
+    img, error = _load_image(image_bytes)
+    if error:
+        return {"success": False, "error": error, "ocr_data": None, "verification": None}
+
+    quality = check_image_quality(img)
+    screen_check = detect_screen_capture(img)
+    ocr_results = _get_reader().readtext(img)
+    texts = [item[1] for item in ocr_results]
+    layout = detect_cccd_layout(texts, side=side)
+    ocr_data = parse_front_cccd(ocr_results) if side == "front" else parse_back_cccd(ocr_results)
+    verification = build_verification(side, ocr_data, quality, screen_check, layout)
 
     return {
         "success": True,
         "side": side,
-        "ocr_data": ocr_data_clean,
-        "verification": {
-            "is_valid_format_and_quality": is_valid_format_and_quality,
-            "is_likely_authentic": is_valid_format_and_quality,  # Giữ alias để tương thích ngược
-            "confidence_score": int(round(confidence * 100)),
-            "confidence_ratio": confidence,
-            "disclaimer": "Kết quả OCR chỉ hỗ trợ trích xuất thông tin tự động và kiểm tra chất lượng ảnh. Không có giá trị pháp lý thay thế xác minh danh tính từ cơ quan Nhà nước.",
-            "checks": checks,
-            "warnings": warnings,
-            "details": {
-                "image_quality": {
-                    "resolution": quality["resolution"],
-                    "blur_score": quality["blur_score"],
-                    "brightness": quality["brightness"],
-                },
-                "layout": {
-                    "keywords_found": layout["keywords_found"],
-                    "is_valid": layout["is_layout_valid"],
-                },
-                "screen_capture": {
-                    "high_freq_energy": screen_check["high_freq_energy"],
-                    "is_screen": screen_check["is_likely_screen_capture"],
-                },
-            },
-        },
+        "ocr_data": {k: v for k, v in ocr_data.items() if k != "raw_texts"},  # không trả chữ OCR thô
+        "verification": verification,
     }
