@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Set
 from pymongo import MongoClient
 
 from app.config import settings
+from app.core.f29.material import material_price_factor
 from app.services.f42.context_resolver import ContextResolver
 from app.services.f42.content_generator import generate_content
 from app.services.f42.external_market import ExternalMarketProvider
@@ -169,7 +170,10 @@ class F42Orchestrator:
             if len(prices) < 5:
                 ml_band = ExternalMarketProvider.predict_price_band_ml(title_input, effective_category_name) if title_input else None
                 if ml_band and ml_band[1] > 0:
-                    p25, p50, p75 = ml_band
+                    mat_factor = material_price_factor([material_in]) if material_in else 1.0
+                    p25 = int(round(ml_band[0] * mat_factor / 1000) * 1000)
+                    p50 = int(round(ml_band[1] * mat_factor / 1000) * 1000)
+                    p75 = int(round(ml_band[2] * mat_factor / 1000) * 1000)
                     warnings_list = []
                     if blank_cost > 0:
                         min_safe = int(round(blank_cost * 1.30 / 1000) * 1000)
@@ -179,6 +183,7 @@ class F42Orchestrator:
                             p25 = max(p25, min_safe)
                             p75 = max(p75, p50)
                     from app.services.f42.schemas import PriceRange
+                    mat_str = f" với chất liệu {material_in}" if material_in else ""
                     pricing_res = PricingResult(
                         mode="market",
                         insufficient_market_data=False,
@@ -192,7 +197,7 @@ class F42Orchestrator:
                         confidence="high",
                         warnings=warnings_list,
                         explanation=(
-                            f"Dựa trên mô hình Machine Learning Quantile Regression (học từ 45.000+ sản phẩm TMĐT), "
+                            f"Dựa trên mô hình Machine Learning Quantile Regression (học từ 45.000+ sản phẩm TMĐT){mat_str}, "
                             f"khoảng giá niêm yết phù hợp cho mẫu sản phẩm này từ {p25:,.0f}đ đến {p75:,.0f}đ. "
                             f"Mức giá đề xuất cân bằng (P50): {p50:,.0f}đ."
                         ).replace(",", ".")
@@ -206,7 +211,8 @@ class F42Orchestrator:
                     pricing_res = compute_pricing(
                         prices=prices,
                         blank_cost=blank_cost,
-                        target_margin=target_margin
+                        target_margin=target_margin,
+                        materials=[material_in] if material_in else None,
                     )
                     if is_external_benchmark and pricing_res.mode in ("market", "market_low_confidence"):
                         pricing_res.explanation = (
@@ -218,7 +224,8 @@ class F42Orchestrator:
                 pricing_res = compute_pricing(
                     prices=prices,
                     blank_cost=blank_cost,
-                    target_margin=target_margin
+                    target_margin=target_margin,
+                    materials=[material_in] if material_in else None,
                 )
         except Exception:
             pricing_res = PricingResult(

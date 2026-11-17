@@ -2,6 +2,7 @@ import math
 from typing import Any, Dict, List, Optional
 from bson import ObjectId
 
+from app.core.f29.material import material_price_factor
 from app.services.f42 import config
 from app.services.f42.schemas import PriceRange, PricingResult
 
@@ -61,13 +62,15 @@ def compute_pricing(
     prices: List[float],
     blank_cost: float = 0.0,
     target_margin: Optional[float] = None,
-    cfg=config
+    cfg=config,
+    materials: Optional[List[str]] = None,
 ) -> PricingResult:
     clean_prices = [float(p) for p in prices if p is not None and isinstance(p, (int, float)) and p > 0]
     sample_size = len(clean_prices)
     filtered_prices = filter_outliers(clean_prices, method=cfg.OUTLIER_METHOD, k=cfg.IQR_K)
     sample_filtered = len(filtered_prices)
     warnings: List[str] = []
+    mat_factor = material_price_factor(materials) if materials else 1.0
 
     if sample_filtered >= cfg.MIN_SAMPLE_LOW:
         sorted_p = sorted(filtered_prices)
@@ -75,9 +78,9 @@ def compute_pricing(
         raw_p50 = _percentile(sorted_p, 0.50)
         raw_p75 = _percentile(sorted_p, 0.75)
 
-        p25 = round_price(raw_p25, cfg.PRICE_ROUND_STEP)
-        p50 = round_price(raw_p50, cfg.PRICE_ROUND_STEP)
-        p75 = round_price(raw_p75, cfg.PRICE_ROUND_STEP)
+        p25 = round_price(raw_p25 * mat_factor, cfg.PRICE_ROUND_STEP)
+        p50 = round_price(raw_p50 * mat_factor, cfg.PRICE_ROUND_STEP)
+        p75 = round_price(raw_p75 * mat_factor, cfg.PRICE_ROUND_STEP)
 
         mode = "market" if sample_filtered >= cfg.MIN_SAMPLE_HIGH else "market_low_confidence"
         confidence = "high" if sample_filtered >= cfg.MIN_SAMPLE_HIGH else "low"
@@ -102,8 +105,9 @@ def compute_pricing(
             if blank_cost > p75:
                 warnings.append("Giá vốn của bạn cao hơn 75% giá thị trường, sản phẩm có thể gặp khó khăn khi cạnh tranh giá.")
 
+        mat_note = f" (đã điều chỉnh x{mat_factor:.2f} theo chất liệu)" if mat_factor != 1.0 else ""
         explanation = (
-            f"Dựa trên phân tích {sample_filtered} sản phẩm cùng ngành (sau khi lọc ngoại lai), "
+            f"Dựa trên phân tích {sample_filtered} sản phẩm cùng ngành (sau khi lọc ngoại lai){mat_note}, "
             f"khoảng giá giao dịch phổ biến từ {suggested_low:,.0f}đ đến {suggested_high:,.0f}đ. "
             f"Mức giá đề xuất cân bằng: {suggested_price:,.0f}đ."
         ).replace(",", ".")

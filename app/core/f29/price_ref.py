@@ -143,7 +143,8 @@ class PriceRef:
                 return {**_from_pool([it[2] for it in pool], source, k, shared), "same_n": len(same)}
         base = {"n": 0, "kind": k, "comparable": False, "materials": [], "same_n": len(same),
                 "prices": _sample([it[2] for it in cat_pool])}
-        model = suggest(product.get("title") or "", group)
+        model = suggest(product.get("title") or "", group, mats)
         if model is not None:
-            return {"price": model["mid"], "source": "model", "low": model["low"], "high": model["high"], **base}
+            return {"price": model["mid"], "source": "model", "low": model["low"], "high": model["high"],
+                    "material_factor": model.get("material_factor", 1.0), **base}
         return {"price": TIKI_MEDIAN[group or "all"], "source": "tiki", "low": None, "high": None, **base}

@@ -36,3 +36,15 @@ def test_text_without_group_has_no_leading_space(monkeypatch):
     monkeypatch.setattr(price_suggest, "_load", lambda path: (model, -0.2, 0.2))
     price_suggest.suggest("  Móc khóa ", None)
     assert model.seen == [["Móc khóa"]]
+
+
+def test_suggest_with_fashion_material(fake_price_model):
+    cotton = price_suggest.suggest("Áo thời trang", "fashion", "cotton")
+    silk = price_suggest.suggest("Áo thời trang", "fashion", "lụa")
+    leather = price_suggest.suggest("Áo khoác", "fashion", "da thật")
+    pu = price_suggest.suggest("Áo khoác", "fashion", "da pu")
+    assert silk["mid"] > cotton["mid"]
+    assert leather["mid"] > pu["mid"]
+    assert silk["material_factor"] == 1.8
+    assert leather["material_factor"] == 2.2
+
