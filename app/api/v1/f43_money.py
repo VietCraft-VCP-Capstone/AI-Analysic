@@ -2,7 +2,7 @@ import sys
 import time
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
@@ -63,9 +63,9 @@ def _thi_truong(shop_id: str):
 KHONG_GOI_Y = {"source": "none", "provider": None, "tips": {}}
 
 
-def _bao_cao(shop_id: str, timeRange: str):
+def _bao_cao(shop_id: str, timeRange: str, tu: Optional[str] = None, den: Optional[str] = None):
     """Trả (báo cáo, số đơn) hoặc (phản hồi insufficient, None)."""
-    ngay, nhan = doc_khoang_tien(timeRange)
+    ngay, nhan = doc_khoang_tien(timeRange, tu=tu, den=den)
     het = bat_dau((date.fromisoformat(ngay[-1]) + timedelta(days=1)).isoformat())
     if not la_shop_live(shop_id):
         return insufficient("Trang này chỉ tính cho gian hàng thật trên sàn.", _meta(shop_id, 0)), None
@@ -90,16 +90,18 @@ def _bao_cao(shop_id: str, timeRange: str):
 
 # Số liệu trả ngay; gợi ý AI (gọi LLM, 1–7s) để FE tải riêng ở /advice.
 @router.get("/api/analytics/shop/money", tags=["F43 · Hưng"])
-def money(shop_id: str = CurrentShop, timeRange: str = "30d"):
-    bc, n = _bao_cao(shop_id, timeRange)
+def money(shop_id: str = CurrentShop, timeRange: str = "30d",
+          from_date: Optional[str] = None, to_date: Optional[str] = None):
+    bc, n = _bao_cao(shop_id, timeRange, from_date, to_date)
     if n is None:
         return bc
     return ok({**bc, "advice": KHONG_GOI_Y}, _meta(shop_id, n))
 
 
 @router.get("/api/analytics/shop/money/advice", tags=["F43 · Hưng"])
-def money_advice(shop_id: str = CurrentShop, timeRange: str = "30d"):
-    bc, n = _bao_cao(shop_id, timeRange)
+def money_advice(shop_id: str = CurrentShop, timeRange: str = "30d",
+                 from_date: Optional[str] = None, to_date: Optional[str] = None):
+    bc, n = _bao_cao(shop_id, timeRange, from_date, to_date)
     if n is None:
         return bc
     kq = goi_y(shop_id, bc)
