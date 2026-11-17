@@ -71,11 +71,11 @@ def _bao_cao(shop_id: str, timeRange: str):
         return insufficient("Trang này chỉ tính cho gian hàng thật trên sàn.", _meta(shop_id, 0)), None
 
     don = list(db_live()["orders"].find(
-        {**DON_HOP_LE, "shop_id": oid(shop_id), "created_at": {"$gte": bat_dau(ngay[0]), "$lt": het},
+        {**DON_HOP_LE, "order_status": "DELIVERED", "shop_id": oid(shop_id), "created_at": {"$gte": bat_dau(ngay[0]), "$lt": het},
          "payment_status": {"$in": ["PAID", "REFUNDED"]}, "order_code": {"$not": {"$regex": "^REPLACE-"}}},
         {"items": 1, "created_at": 1, "financial_breakdown": 1, "coupon_code": 1, "is_pod": 1}))
     if not don:
-        return insufficient(f"Shop chưa có đơn đã thanh toán trong {nhan}.", _meta(shop_id, 0)), None
+        return insufficient(f"Shop chưa có đơn đã giao xong trong {nhan}.", _meta(shop_id, 0)), None
 
     ten = {c["code"]: c.get("title") or "" for c in db_live()["coupons"].find(
         {"shop_id": oid(shop_id)}, {"code": 1, "title": 1})}
