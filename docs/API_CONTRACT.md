@@ -537,7 +537,8 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   trên số bán theo tuần của người bán Olist năm 2017 (báo nhầm ≤ 2%); chấm trên 2018: báo nhầm 1,2%, 55% cảnh báo là tăng tốc thật.
   Thêm 11/11 cho dòng thời gian: `tracked[].weekly_sales[8]` (số bán theo tuần trong danh mục, đơn đã giao, bỏ đơn chủ shop tự
   mua) và `tracked[].launches[]` = sản phẩm đăng trong 8 tuần `{listing_id, title, listed_at, product_type_name, price_vnd,
-  in_my_niche, threat (như `alerts[].threat`, chỉ khi cùng loại hàng với mình), matched_price_vnd}`.
+  in_my_niche, threat (như `alerts[].threat`, chỉ khi cùng loại hàng với mình), matched_tags[] (từ khoá của shop mình mà
+  sản phẩm trùng), matched_price_vnd}`.
 - F34 `per_product`: `[{product_id, title, suggestions[{tag_id, score, used_by, better_sellers, popular_in_type}]}]`.
   Gợi ý lai: 0,7 theo sản phẩm giống (độ giống × độ bán chạy) + 0,3 theo độ phổ biến cùng loại.
 - F33 `strategic_groups`: `{k, silhouette, clear (≥ 0,25), features[], axes{x, y}, groups[{id, label, size,

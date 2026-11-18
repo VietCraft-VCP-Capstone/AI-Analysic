@@ -521,7 +521,7 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
 
     # Dòng thời gian 8 tuần: mọi sản phẩm mới của shop đang theo dõi; hàng cùng ngách thì kèm mức cạnh tranh.
     moc8 = now - timedelta(weeks=8)
-    ngach8 = {a["listing_id"] for a in tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now, cua_so_ngay=56)}
+    ngach8 = {a["listing_id"]: a for a in tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now, cua_so_ngay=56)}
     theo_ma = {r["listing_id"]: r for r in dong}
 
     def ra_mat(m: str) -> List[Dict[str, Any]]:
@@ -535,6 +535,8 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
             out.append({"listing_id": r["listing_id"], "title": r.get("title"), "listed_at": _iso(luc),
                         "product_type_name": r.get("product_type_name"), "price_vnd": r["price_vnd"],
                         "in_my_niche": r["listing_id"] in ngach8, "threat": th,
+                        # Từ khoá của shop mình mà sản phẩm này trùng: nói được vì sao nó thuộc ngách khi mình chưa bán loại đó.
+                        "matched_tags": ngach8[r["listing_id"]]["matched_tags"] if r["listing_id"] in ngach8 else [],
                         "matched_price_vnd": khop["price_vnd"] if khop else None})
         return sorted(out, key=lambda x: x["listed_at"])
 
