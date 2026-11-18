@@ -1,9 +1,11 @@
+import logging
 import sys
 import re
 import math
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 if str(ROOT_DIR) not in sys.path:
@@ -25,6 +27,8 @@ from app.core.seasonal_intel import (
 from app.core.redis_cache import cache_get_json, cache_set_json
 
 router = APIRouter()
+log = logging.getLogger("f38_seasonal")
+TZ_VN = ZoneInfo("Asia/Ho_Chi_Minh")
 
 MART = "seasonal_profile"
 CAT_LABELS = {
@@ -531,7 +535,7 @@ def _tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str
             "prep_title": "Chuẩn bị set quà tặng phái đẹp 8/3",
             "prep_advice": f"Thiết kế set quà tri ân \"{kw}\", đóng gói sẵn hộp quà đẹp mắt trước ngày ({trac_str}).",
             "traction_title": f"Đón sóng quà tặng doanh nghiệp & cá nhân 8/3",
-            "traction_advice": f"Bật khuyến mãi mua 2 giảm 10% và gắn tag ngách \"{kw}\" để kéo khách vào shop.",
+            "traction_advice": f"Tạo gói combo quà tặng kèm ưu đãi mua nhiều món và gắn tag ngách \"{kw}\" để kéo khách vào shop.",
         },
         "20/10": {
             "prep_title": "Chuẩn bị quà tặng 20/10",
@@ -1223,6 +1227,152 @@ def _tinh_campaign_funnel_va_kenh(
     }
 
 
+def _detect_shop_category(shop_id: str, explicit_slug: Optional[str]) -> str:
+    """Suy đoán ngành hàng từ sản phẩm của shop bằng word-boundary regex; mặc định 'tong-hop' nếu không rõ."""
+    if explicit_slug and explicit_slug != "tong-hop":
+        return explicit_slug
+    if not la_shop_live(shop_id):
+        return explicit_slug or "tong-hop"
+    live_prods_cat = san_pham_live(shop_id) or []
+    if not live_prods_cat:
+        return explicit_slug or "tong-hop"
+    cat_text = " ".join(
+        f"{p.get('title', '')} {' '.join(p.get('categories') or [])} {' '.join(p.get('tags') or [])}".lower()
+        for p in live_prods_cat
+    )
+    cat_rules = [
+        ("phu-kien", ("phụ kiện", "túi xách", "ví", "thắt lưng", "kính mát", "mắt kính", "nón", "mũ", "trang sức", "khăn")),
+        ("nha-cua", ("gia dụng", "nhà cửa", "bếp", "cốc", "ly sứ", "ly thủy tinh", "bình giữ nhiệt", "móc treo", "đèn")),
+        ("thu-cong-qua-tang", ("trang trí", "decor", "tranh", "khung ảnh", "tượng", "nến", "hoa giả", "quà tặng", "thủ công")),
+        ("thoi-trang", ("thời trang", "áo", "váy", "đầm", "quần", "hoodie", "khoác", "set đồ")),
+    ]
+    best_cat, best_hits = "tong-hop", 0
+    for c_slug, c_words in cat_rules:
+        hits = sum(
+            len(re.findall(rf"(?<!\w){re.escape(w)}(?!\w)", cat_text))
+            for w in c_words
+        )
+        if hits > best_hits:
+            best_cat, best_hits = c_slug, hits
+    return best_cat
+
+
+def _compute_platform_order_rates(shop_id: str, cat_slug: Optional[str], camp_id: str) -> Dict[str, Any]:
+    """Đo tỷ lệ mua combo và dùng voucher từ đơn hàng hoàn tất thật (không nhân hệ số giả lập)."""
+    cache_key = f"seasonal:orders_rates:{shop_id}:{cat_slug or 'all'}:{camp_id}:v2"
+    cached = cache_get_json(cache_key)
+    if isinstance(cached, dict):
+        return cached
+
+    query: Dict[str, Any] = {"order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]}}
+    if la_shop_live(shop_id):
+        query["shop_id"] = shop_id
+    try:
+        live_orders = list(
+            db_live()["orders"]
+            .find(query, {"items": 1, "coupon_code": 1, "discount_amount": 1})
+            .sort("created_at", -1)
+            .limit(500)
+        )
+    except Exception as exc:
+        log.warning("orders query failed for seasonal rates: %s", exc)
+        return {"raw_combo_rate": None, "raw_voucher_rate": None, "sample_n": 0}
+
+    n = len(live_orders)
+    if n < 10:
+        # Không đủ mẫu để kết luận -> trả None thay vì bịa số
+        return {"raw_combo_rate": None, "raw_voucher_rate": None, "sample_n": n}
+
+    orders_with_multi_items = sum(1 for o in live_orders if len(o.get("items") or []) >= 2)
+    orders_with_voucher = sum(
+        1 for o in live_orders if o.get("coupon_code") or float(o.get("discount_amount") or 0) > 0
+    )
+    rates = {
+        "raw_combo_rate": round((orders_with_multi_items / n) * 100.0, 1),
+        "raw_voucher_rate": round((orders_with_voucher / n) * 100.0, 1),
+        "sample_n": n,
+    }
+    cache_set_json(cache_key, rates, ttl_seconds=1800)
+    return rates
+
+
+def _build_scorecard_metrics(method_meta: Dict[str, Any], hom_nay: date) -> List[Dict[str, Any]]:
+    """Chấm điểm độ tin cậy mô hình dự báo từ số liệu backtest thật (không dùng số giả)."""
+    emp_cov = method_meta.get("avg_coverage_raw")
+    cov_val = round(float(emp_cov) * 100, 1) if emp_cov is not None else None
+    imp_raw = method_meta.get("improvement_vs_naive_pct")
+    imp_val = round(float(imp_raw), 1) if imp_raw is not None else None
+    data_meta = method_meta.get("data") or {}
+    n_series = data_meta.get("n_series")
+    period_start = data_meta.get("first_week")
+    period_end = data_meta.get("last_week")
+    is_deep_validated = bool(method_meta.get("validated_deep_model", False))
+    n_label = f"{n_series} chuỗi" if n_series is not None else "các chuỗi"
+
+    if cov_val is None:
+        cov_text = "Chưa có dữ liệu backtest conformal."
+        cov_conf = "preliminary"
+    elif cov_val >= 80.0:
+        cov_text = f"Hiệu chuẩn Split-Conformal đạt {cov_val}% độ phủ trên {n_label} ngành TMĐT."
+        cov_conf = "high"
+    else:
+        cov_text = f"Độ phủ thực nghiệm đạt {cov_val}% (dưới mục tiêu 80.0%) trên {n_label} ngành TMĐT."
+        cov_conf = "fair" if cov_val >= 70.0 else "preliminary"
+
+    if imp_val is None:
+        imp_text = "Chưa có dữ liệu so sánh với baseline Seasonal-Naive."
+        imp_conf = "preliminary"
+    elif is_deep_validated:
+        imp_text = f"Mô hình Deep Learning Temporal Fusion + Lunar-Attention vượt qua kiểm định trên mọi fold với mức cải thiện {imp_val}% sMAE so với baseline cùng kỳ."
+        imp_conf = "high"
+    else:
+        imp_text = f"Mô hình Deep Learning đạt cải thiện {imp_val}% sMAE nhưng chưa qua đủ ngưỡng kiểm định từng fold. Hệ thống chuyển sang Seasonal-Naive Conformal."
+        imp_conf = "fair"
+
+    return [
+        {
+            "title": "Tỷ lệ số quan sát nằm trong khoảng tin cậy conformal (P10 - P90)",
+            "actualRatePct": cov_val,
+            "targetRatePct": 80.0,
+            "comparedWithBaselineText": cov_text,
+            "totalEvaluatedCases": n_series,
+            "evidence": {
+                "id": "ev_scorecard_coverage",
+                "definition": "Độ phủ thực nghiệm (Empirical Coverage) của khoảng dự báo P10-P90 qua quy trình Split-Conformal Calibration.",
+                "sources": ["Báo cáo Backtest mô hình trên dữ liệu Google Trends"],
+                "howObtained": f"Rolling-origin backtest 2-fold trên {n_label} ngành hàng TMĐT Google Trends.",
+                "period": [period_start, period_end] if period_start and period_end else [],
+                "n": n_series,
+                "formula": f"Độ phủ thực tế đạt {cov_val}%. Mục tiêu >= 80%." if cov_val is not None else "Chưa có số liệu backtest.",
+                "confidence": cov_conf,
+                "confidenceReason": "Hiệu chuẩn conformal phi tham số, bảo đảm khoảng tin cậy trung thực không giả định phân phối chuẩn.",
+                "mayBeWrongBecause": ["Biến động thị trường hoặc xu hướng bộc phát bất ngờ có thể làm lệch độ phủ."],
+                "updatedAt": hom_nay.strftime("%Y-%m-%d"),
+            },
+        },
+        {
+            "title": "Mô hình dự báo & Kiểm định vượt trội so với Baseline cùng kỳ",
+            "actualRatePct": imp_val,
+            "targetRatePct": 3.0,
+            "comparedWithBaselineText": imp_text,
+            "totalEvaluatedCases": n_series,
+            "evidence": {
+                "id": "ev_scorecard_vs_baseline",
+                "definition": "Mức cải thiện sai số tuyệt đối chuẩn hóa (sMAE) của mô hình so với Seasonal-Naive.",
+                "sources": ["Báo cáo Backtest mô hình trên dữ liệu Google Trends"],
+                "howObtained": f"So sánh sMAE trên {n_label} qua 2 fold rolling-origin.",
+                "period": [period_start, period_end] if period_start and period_end else [],
+                "n": n_series,
+                "formula": f"Cải thiện sMAE = {imp_val}% (ngưỡng kiểm định >= 3.0% và coverage >= 70% mỗi fold)." if imp_val is not None else "Chưa có số liệu.",
+                "confidence": imp_conf,
+                "confidenceReason": imp_text,
+                "mayBeWrongBecause": ["Độ phủ trên một fold có thể dưới ngưỡng 70% khi xu hướng thay đổi đột ngột."],
+                "updatedAt": hom_nay.strftime("%Y-%m-%d"),
+            },
+        },
+    ]
+
+
 @router.get("/api/analytics/forecast/seasonal", tags=["F38 · Kế hoạch cao điểm & Lịch ra hàng"])
 def seasonal(
     shop_id: str = CurrentShop,
@@ -1232,35 +1382,15 @@ def seasonal(
     campaignId: Optional[str] = None,
     keyword: Optional[str] = None,
 ):
-    # Xác định ngày hôm nay từ dữ liệu
-    if la_shop_live(shop_id):
-        hom_nay = date.today()
-    else:
+    # Luôn dùng ngày thật theo múi giờ Việt Nam cho lịch mùa vụ (tránh lệch ngày khi shop chưa live)
+    hom_nay = datetime.now(TZ_VN).date()
+    if not la_shop_live(shop_id):
         ld = db()["listing_daily"].find_one({}, {"date": 1}, sort=[("date", -1)])
-        hom_nay = datetime.strptime(ld["date"], "%Y-%m-%d").date() if ld else date.today()
+        data_as_of = ld["date"] if ld else hom_nay.isoformat()
+    else:
+        data_as_of = hom_nay.isoformat()
 
-    cat_slug = category_slug or categoryId
-    if not cat_slug or cat_slug == "tong-hop":
-        cat_slug = "thoi-trang"
-        if la_shop_live(shop_id):
-            live_prods_cat = san_pham_live(shop_id) or []
-            if live_prods_cat:
-                cat_text = " ".join(
-                    f"{p.get('title', '')} {' '.join(p.get('categories') or [])} {' '.join(p.get('tags') or [])}".lower()
-                    for p in live_prods_cat
-                )
-                cat_rules = [
-                    ("phu-kien", ("phụ kiện", "túi xách", "ví", "thắt lưng", "kính", "nón", "mũ", "trang sức", "khăn")),
-                    ("gia-dung", ("gia dụng", "nhà cửa", "bếp", "cốc", "ly", "bình", "móc treo", "đèn")),
-                    ("trang-tri", ("trang trí", "decor", "tranh", "khung ảnh", "tượng", "nến", "hoa giả")),
-                    ("thoi-trang", ("thời trang", "áo", "váy", "đầm", "quần", "hoodie", "khoác", "set đồ")),
-                ]
-                best_cat, best_hits = "thoi-trang", 0
-                for c_slug, c_words in cat_rules:
-                    hits = sum(cat_text.count(w) for w in c_words)
-                    if hits > best_hits:
-                        best_cat, best_hits = c_slug, hits
-                cat_slug = best_cat
+    cat_slug = _detect_shop_category(shop_id, category_slug or categoryId)
     target_camp_id = campaign_id or campaignId
 
     # Lấy thông tin sản phẩm và đối thủ trên sàn
@@ -1881,8 +2011,8 @@ def seasonal(
     early_order_days = max(5, min(45, round(lead_time_days * 0.42)))
 
     # 4. Đơn rơi vào 3 ngày cao điểm (%): đo trực tiếp độ tập trung quanh ngày sự kiện từ chuỗi Google Trends nhiều năm
-    peak_clump_pct = None
-    if target_s is not None and "event_dates_by_year" in locals() and event_dates_by_year:
+    peak_clump_pct: Optional[float] = None
+    if target_s is not None and event_dates_by_year:
         try:
             ratios = []
             for _yr, _evd in event_dates_by_year.items():
@@ -1894,237 +2024,142 @@ def seasonal(
                 if len(win_vals) >= 4 and sum(win_vals) > 0:
                     ratios.append(max(win_vals) / sum(win_vals))
             if ratios:
-                # 1 tuần đỉnh chiếm ~7 ngày; quy đổi độ nhọn 3 ngày cao điểm tỷ lệ thuận với độ tập trung tuần đỉnh
                 avg_wk_share = sum(ratios) / len(ratios)
                 peak_clump_pct = max(24, min(68, round(avg_wk_share * 115)))
-        except Exception:
+        except Exception as exc:
+            log.warning("peak_clump_pct calculation failed: %s", exc)
             peak_clump_pct = None
-    if peak_clump_pct is None:
-        if stl.get("seasonal"):
-            min_s = min(stl["seasonal"])
-            shifted = [v - min_s + 1.0 for v in stl["seasonal"]]
-            sorted_weeks = sorted(shifted, reverse=True)
-            clump_ratio = (sum(sorted_weeks[:3]) / max(1.0, sum(shifted))) * (52 / 3)
-            peak_clump_pct = max(25, min(65, round(clump_ratio * 18)))
-        else:
-            peak_clump_pct = 36
+    if peak_clump_pct is None and stl.get("seasonal"):
+        min_s = min(stl["seasonal"])
+        shifted = [v - min_s + 1.0 for v in stl["seasonal"]]
+        sorted_weeks = sorted(shifted, reverse=True)
+        clump_ratio = (sum(sorted_weeks[:3]) / max(1.0, sum(shifted))) * (52 / 3)
+        peak_clump_pct = max(25, min(65, round(clump_ratio * 18)))
 
-    # 5 & 6. Mua theo combo và dùng voucher: truy vấn trực tiếp từ bảng orders thật
-    order_rates = cache_get_json("seasonal:plat_orders_combo_voucher:v1")
-    if not isinstance(order_rates, dict):
-        try:
-            live_orders = list(db_live()["orders"].find({}, {"items": 1, "coupon_code": 1, "order_status": 1}).limit(500))
-        except Exception:
-            live_orders = []
-        if live_orders:
-            orders_with_multi_items = sum(1 for o in live_orders if len(o.get("items") or []) >= 2)
-            orders_with_voucher = sum(1 for o in live_orders if o.get("coupon_code"))
-            order_rates = {
-                "raw_combo_rate": (orders_with_multi_items / len(live_orders)) * 100,
-                "raw_voucher_rate": (orders_with_voucher / len(live_orders)) * 100,
-            }
-            cache_set_json("seasonal:plat_orders_combo_voucher:v1", order_rates, ttl_seconds=1800)
-        else:
-            order_rates = {}
-
-    if order_rates:
-        raw_combo_rate = float(order_rates.get("raw_combo_rate") or 30.0)
-        raw_voucher_rate = float(order_rates.get("raw_voucher_rate") or 40.0)
-        occasion_boost = 1.6 if any(k in active_camp["id"] for k in ("tet", "noel", "8/3", "valentine", "20/10", "20/11")) else 1.2
-        voucher_boost = 1.5 if any(k in active_camp["id"] for k in ("11.11", "12.12", "black_friday", "tet")) else 1.1
-        combo_pct = round(max(20, min(80, raw_combo_rate * occasion_boost)))
-        voucher_pct = round(max(25, min(85, raw_voucher_rate * voucher_boost)))
-    else:
-        combo_pct = 48 if any(k in active_camp["id"] for k in ("tet", "valentine", "8/3", "20/10", "noel", "20/11")) else 25
-        voucher_pct = 62 if any(k in active_camp["id"] for k in ("11.11", "12.12", "black_friday", "tet", "noel")) else 32
-
-    # Tính percentile ranks động dựa trên số liệu thực
-    orders_pctile = max(40, min(95, round(orders_growth_pct * 1.8)))
-    spending_pctile = max(40, min(95, round(spending_growth_pct * 2.2)))
-    early_pctile = max(40, min(95, round(early_order_days * 3.5)))
-    clump_pctile = max(40, min(95, round(peak_clump_pct * 1.7)))
-    combo_pctile = max(40, min(95, round(combo_pct * 1.4)))
-    voucher_pctile = max(40, min(95, round(voucher_pct * 1.2)))
+    # 5 & 6. Mua theo combo và dùng voucher: đo trực tiếp từ đơn hàng hoàn tất thật (không nhân hệ số giả)
+    order_rates = _compute_platform_order_rates(shop_id, cat_slug, active_camp["id"])
+    combo_pct: Optional[float] = order_rates.get("raw_combo_rate")
+    voucher_pct: Optional[float] = order_rates.get("raw_voucher_rate")
 
     occasion_traits = [
         {
             "key": "ordersGrowth",
             "name": "Đơn hàng mỗi ngày cao điểm",
             "question": "Số đơn mỗi ngày cao điểm tăng bao nhiêu so với ngày thường?",
-            "baselineValue": 18,
-            "occasionValue": int(18 * (1 + orders_growth_pct / 100)),
-            "diffText": f"+{orders_growth_pct}%",
+            "baselineValue": None,
+            "occasionValue": None,
+            "diffText": "Chưa đủ dữ liệu",
             "unit": "%",
-            "percentileRank": orders_pctile,
-            "confidence": "fair",
-            "actionableAdvice": f"Lượng đơn mỗi ngày trong dịp tăng mạnh (+{orders_growth_pct}%). Cần chủ động tăng tồn kho sản phẩm chủ lực và bố trí người đóng gói để tránh trễ hạn giao.",
+            "percentileRank": None,
+            "confidence": "preliminary",
+            "actionableAdvice": "Chưa đủ dữ liệu đơn hàng lịch sử để kết luận mức tăng trưởng.",
             "evidence": {
                 "id": "ev_orders_growth",
                 "definition": "Tỷ lệ tăng trưởng số đơn hàng trung bình mỗi ngày trong dịp so với 8 tuần ngày thường trước đó.",
-                "sources": ["Đơn hàng hoàn tất trên VietCraft", "Thống kê danh mục mart_competitor"],
-                "howObtained": f"Tổng hợp ẩn danh từ {measured_sample_size:,} đơn hàng thực tế của các shop trong cùng ngành hàng.",
-                "excluded": "Đã loại trừ đơn hàng bị hủy, trả hàng, giao không thành công và những ngày shop hết hàng.",
-                "period": [(hom_nay - timedelta(days=90)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
-                "n": measured_sample_size,
-                "formula": f"Đơn mỗi ngày trong dịp ÷ Đơn mỗi ngày ở tuần thường − 1. Ví dụ: (25 đơn/ngày ÷ 18 đơn/ngày) − 1 = +{orders_growth_pct}%.",
-                "interval": {"low": 28, "high": 48, "coverage": 0.8},
-                "confidence": "fair",
-                "confidenceReason": f"Đã quan sát qua {measured_cycles} kỳ liên tiếp với số lượng đơn trên 1.000 đơn.",
-                "comparison": "So với tuần thường để so sánh (8 tuần ngay trước dịp, không có sự kiện).",
+                "excluded": "Đã loại trừ đơn hàng bị hủy, trả hàng, giao không thành công.",
+                "period": [(hom_nay - timedelta(days=365)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
                 "mayBeWrongBecause": [
                     "Nhu cầu thị trường chung có thể sụt giảm do yếu tố vĩ mô bất ngờ.",
-                    "Sản phẩm mới đăng chưa kịp tích lũy đánh giá và thứ hạng tìm kiếm trên sàn."
+                    "Sản phẩm mới đăng chưa kịp tích lũy đánh giá và thứ hạng tìm kiếm trên sàn.",
                 ],
-                "updatedAt": hom_nay.isoformat(),
-                "modelVersion": "statistical-baseline-v2.1",
-                "rawDataUrl": ""
-            }
+                "rawDataUrl": "",
+            },
         },
         {
             "key": "higherSpending",
             "name": "Giá trị mỗi đơn",
             "question": "Giá trị trung bình mỗi đơn tăng bao nhiêu so với ngày thường?",
-            "baselineValue": baseline_spending,
-            "occasionValue": occasion_spending,
-            "diffText": f"+{spending_growth_pct}%",
+            "baselineValue": None,
+            "occasionValue": None,
+            "diffText": "Chưa đủ dữ liệu",
             "unit": "%",
-            "percentileRank": spending_pctile,
-            "confidence": "fair",
-            "actionableAdvice": f"Giá trị trung bình mỗi đơn tăng (+{spending_growth_pct}%). Hãy tạo combo đóng gói đẹp mắt hoặc bán kèm phụ kiện để tối ưu giỏ hàng.",
+            "percentileRank": None,
+            "confidence": "preliminary",
+            "actionableAdvice": "Chưa đủ dữ liệu hóa đơn để so sánh giá trị đơn hàng.",
             "evidence": {
                 "id": "ev_higher_spending",
                 "definition": "Mức chênh lệch giá trị đơn hàng trung bình (AOV) sau giảm giá trong dịp so với ngày thường.",
-                "sources": ["Chi tiết hóa đơn bán lẻ", "Hệ thống thanh toán"],
-                "howObtained": "Tính trung bình giá trị thực thu của toàn bộ đơn hàng trong đợt cao điểm.",
                 "excluded": "Bỏ các đơn hàng quà tặng nội bộ sàn hoặc đơn thử nghiệm.",
-                "period": [(hom_nay - timedelta(days=90)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
-                "n": measured_sample_size,
-                "formula": f"Giá trị đơn trung bình trong dịp ÷ Giá trị đơn trung bình ở tuần thường − 1. +{spending_growth_pct}%.",
-                "interval": {"low": 18, "high": 35, "coverage": 0.8},
-                "confidence": "fair",
-                "confidenceReason": "Dữ liệu hóa đơn có thật, khách hàng có xu hướng mua combo hoặc set đóng hộp quà tặng.",
-                "comparison": f"So với giá trị đơn trung bình ngày thường ({baseline_spending:,}đ/đơn).",
+                "period": [(hom_nay - timedelta(days=365)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
                 "mayBeWrongBecause": ["Seller áp dụng giảm giá quá sâu làm giảm giá trị đơn trung bình."],
-                "updatedAt": hom_nay.isoformat(),
-                "modelVersion": "aov-tracker-v1.0"
-            }
+            },
         },
         {
             "key": "earlyOrder",
             "name": "Khách đặt trước sự kiện",
             "question": "Khách thường đặt trước ngày sự kiện bao nhiêu ngày?",
-            "baselineValue": 4,
-            "occasionValue": early_order_days,
-            "diffText": f"Trước {early_order_days} ngày",
+            "baselineValue": None,
+            "occasionValue": None,
+            "diffText": "Chưa đủ dữ liệu",
             "unit": "ngày",
-            "percentileRank": early_pctile,
-            "confidence": "fair",
-            "actionableAdvice": f"Khách có thói quen mua sớm trước ngày dịp {early_order_days} ngày. Cần đăng bài, chụp ảnh và thu thập 3-5 đánh giá đầu tiên từ trước ngày lễ 3-4 tuần.",
+            "percentileRank": None,
+            "confidence": "preliminary",
+            "actionableAdvice": "Chưa đủ dữ liệu đơn hàng cùng kỳ để đo số ngày đặt sớm.",
             "evidence": {
                 "id": "ev_early_order",
                 "definition": "Số ngày phổ biến từ lúc khách đặt mua đến ngày diễn ra dịp lễ (trung vị thời gian đặt hàng).",
-                "sources": ["Thời điểm khách chốt đơn so với ngày lễ ghi trên lịch calendar_vn"],
-                "howObtained": f"Tính trung vị khoảng cách ngày của {measured_sample_size:,} đơn hàng dịp trước.",
                 "excluded": "Bỏ đơn đặt sau ngày lễ kết thúc.",
                 "period": [(hom_nay - timedelta(days=365)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
-                "n": measured_sample_size,
-                "formula": f"Trung vị của số ngày từ lúc đặt đến ngày dịp. 50% khách đặt sớm hơn {early_order_days} ngày.",
-                "interval": {"low": 12, "high": 21, "coverage": 0.8},
-                "confidence": "fair",
-                "confidenceReason": "Khoảng dao động hẹp, thói quen đặt quà tặng của khách lặp lại ổn định qua các năm.",
-                "comparison": "Khách thường đặt trước 4 ngày đối với ngày thường.",
-                "mayBeWrongBecause": ["Đơn vị vận chuyển có chương trình siêu tốc giao trong 24h làm khách chủ quan đặt trễ hơn."],
-                "updatedAt": hom_nay.isoformat(),
-                "modelVersion": "lead-time-median-v2"
-            }
+                "mayBeWrongBecause": ["Đơn vị vận chuyển có chương trình siêu tốc giao trong 24h làm thay đổi thói quen đặt sớm."],
+            },
         },
         {
             "key": "peakClustering",
             "name": "Đơn rơi vào 3 ngày cao điểm",
             "question": "Tỷ lệ đơn tập trung vào 3 ngày cao điểm nhất?",
-            "baselineValue": 15,
-            "occasionValue": peak_clump_pct,
-            "diffText": f"{peak_clump_pct}% tổng đơn",
+            "baselineValue": None,
+            "occasionValue": None,
+            "diffText": "Chưa đủ dữ liệu",
             "unit": "%",
-            "percentileRank": clump_pctile,
-            "confidence": "high",
-            "actionableAdvice": f"Đơn hàng tập trung dồn vào 3 ngày cao điểm nhất ({peak_clump_pct}% đơn). Cần in sẵn tem vận chuyển và chuẩn bị sẵn thùng hộp trước để tránh nghẽn giao hàng.",
+            "percentileRank": None,
+            "confidence": "preliminary",
+            "actionableAdvice": "Chưa đủ dữ liệu đơn hàng cùng kỳ để đo độ tập trung 3 ngày đỉnh.",
             "evidence": {
                 "id": "ev_peak_clustering",
                 "definition": "Mức độ tập trung đơn hàng: Tỷ lệ tổng số đơn hàng rơi vào 3 ngày cao điểm nhất của dịp.",
-                "sources": ["Báo cáo số đơn theo từng ngày của các kỳ trước"],
-                "howObtained": "Lọc 3 ngày có số đơn cao nhất chia cho tổng số đơn toàn bộ chiến dịch.",
                 "excluded": "Không.",
                 "period": [(hom_nay - timedelta(days=365)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
-                "n": measured_sample_size,
-                "formula": f"Đơn của 3 ngày cao nhất ÷ Tổng đơn của dịp. Mẫu {measured_sample_size:,} đơn = {peak_clump_pct}%.",
-                "interval": {"low": 32, "high": 45, "coverage": 0.8},
-                "confidence": "high",
-                "confidenceReason": "Hiệu ứng dồn đơn vào các ngày sale lớn và ngày chốt đơn giao kịp lễ.",
-                "comparison": "Ngày thường 3 ngày chỉ chiếm khoảng 15% tổng đơn tháng.",
                 "mayBeWrongBecause": ["Shop bị nghẽn vận hành hoặc hết bao bì đóng gói vào ngày đỉnh."],
-                "updatedAt": hom_nay.isoformat(),
-                "modelVersion": "peak-clustering-v1"
-            }
+            },
         },
         {
             "key": "comboPurchase",
             "name": "Đơn mua theo bộ (combo)",
             "question": "Tỷ lệ đơn mua từ 2 món trở lên hoặc theo set?",
-            "baselineValue": 14,
-            "occasionValue": combo_pct,
-            "diffText": f"{combo_pct}% đơn mua nhiều món",
+            "baselineValue": None,
+            "occasionValue": None,
+            "diffText": "Chưa đủ dữ liệu",
             "unit": "%",
-            "percentileRank": combo_pctile,
-            "confidence": "high",
-            "actionableAdvice": f"Khách mua nhiều món trong một đơn tăng vọt ({combo_pct}% đơn). Nên kích hoạt tính năng 'Mua kèm deal sốc' hoặc combo giảm 5-10% để chốt đơn.",
+            "percentileRank": None,
+            "confidence": "preliminary",
+            "actionableAdvice": "Chưa đủ dữ liệu giỏ hàng để đo tỷ lệ mua combo.",
             "evidence": {
                 "id": "ev_combo_purchase",
                 "definition": "Tỷ lệ đơn hàng có từ 2 sản phẩm trở lên hoặc khách mua theo set/combo trong cùng một lần thanh toán.",
-                "sources": ["Chi tiết sản phẩm trong đơn hàng (trường items.length >= 2) trên VietCraft"],
-                "howObtained": "Đếm số đơn hàng có số lượng món >= 2 hoặc có sku dạng combo chia cho tổng số đơn hoàn tất.",
                 "excluded": "Bỏ các đơn hủy trước khi giao.",
                 "period": [(hom_nay - timedelta(days=365)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
-                "n": measured_sample_size,
-                "formula": "Đơn có >= 2 sản phẩm ÷ Tổng đơn hoàn tất. Đo lường trực tiếp từ giỏ hàng thực tế.",
-                "interval": {"low": 40, "high": 56, "coverage": 0.8},
-                "confidence": "high",
-                "confidenceReason": "Dịp lễ khách mua theo bộ hoặc mua cho cả gia đình/bạn bè nên tỷ lệ mua combo tăng 3.4 lần.",
-                "comparison": "Ngày thường tỷ lệ khách mua từ 2 món trở lên chỉ khoảng 14%.",
                 "mayBeWrongBecause": ["Shop chỉ bán một sản phẩm đơn lẻ không có lựa chọn mua kèm combo."],
-                "updatedAt": hom_nay.isoformat(),
-                "modelVersion": "basket-analyzer-v1"
-            }
+            },
         },
         {
             "key": "voucherSensitivity",
             "name": "Đơn có dùng mã giảm giá",
             "question": "Tỷ lệ đơn có áp dụng mã giảm giá?",
-            "baselineValue": 22,
-            "occasionValue": voucher_pct,
-            "diffText": f"{voucher_pct}% đơn có mã",
+            "baselineValue": None,
+            "occasionValue": None,
+            "diffText": "Chưa đủ dữ liệu",
             "unit": "%",
-            "percentileRank": voucher_pctile,
-            "confidence": "high",
-            "actionableAdvice": f"Khách hàng chủ động săn mã giảm giá trước khi mua ({voucher_pct}% đơn). Hãy thiết lập voucher riêng của shop (5k - 20k) để tăng tỷ lệ chuyển đổi.",
+            "percentileRank": None,
+            "confidence": "preliminary",
+            "actionableAdvice": "Chưa đủ dữ liệu đơn hàng để đo tỷ lệ dùng mã giảm giá.",
             "evidence": {
                 "id": "ev_voucher_sensitivity",
                 "definition": "Tỷ lệ đơn hàng người mua áp dụng voucher sàn hoặc voucher giảm giá riêng của shop.",
-                "sources": ["Trường voucher_code và discount_amount trong bảng đơn hàng"],
-                "howObtained": "Đếm số đơn có discount_amount > 0 hoặc có voucher_code hợp lệ chia cho tổng đơn.",
                 "excluded": "Đơn không áp mã giảm giá.",
                 "period": [(hom_nay - timedelta(days=365)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
-                "n": measured_sample_size,
-                "formula": "Đơn có voucher ÷ Tổng đơn hoàn tất. Phản ánh mức độ nhạy cảm về giá của khách trong dịp này.",
-                "interval": {"low": 58, "high": 72, "coverage": 0.8},
-                "confidence": "high",
-                "confidenceReason": "Các ngày cao điểm khách săn mã giảm giá rất mạnh để tối ưu chi phí.",
-                "comparison": "Ngày thường chỉ khoảng 22% khách chờ mã giảm giá mới mua.",
                 "mayBeWrongBecause": ["Shop không tạo mã giảm giá khiến khách rời đi mua của đối thủ."],
-                "updatedAt": hom_nay.isoformat(),
-                "modelVersion": "voucher-tracker-v1"
-            }
-        }
+            },
+        },
     ]
 
     # Ghi đè 6 trục bằng số đo thật: shop so với toàn ngành (dùng bản tổng hợp đã cache Redis)
@@ -2231,14 +2266,22 @@ def seasonal(
         spending_growth_pct = round((float(ind_scale["occAovPremium"]) + float(spending_growth_pct)) / 2.0)
         occasion_spending = int(baseline_spending * (1 + spending_growth_pct / 100))
 
-    ind_combo_blend = round((float(ind_scale.get("extComboPct") or combo_pct) * 0.65 + float(combo_pct) * 0.35), 1) if ind_scale.get("productsCount") else float(combo_pct)
-    ind_voucher_blend = round((float(ind_scale.get("extDiscPct") or voucher_pct) * 0.45 + float(voucher_pct) * 0.55), 1) if ind_scale.get("productsCount") else float(voucher_pct)
+    ind_combo_blend: Optional[float] = (
+        round((float(ind_scale["extComboPct"]) * 0.65 + float(combo_pct) * 0.35), 1)
+        if ind_scale.get("productsCount") and ind_scale.get("extComboPct") is not None and combo_pct is not None
+        else (float(ind_scale["extComboPct"]) if ind_scale.get("productsCount") and ind_scale.get("extComboPct") is not None else combo_pct)
+    )
+    ind_voucher_blend: Optional[float] = (
+        round((float(ind_scale["extDiscPct"]) * 0.45 + float(voucher_pct) * 0.55), 1)
+        if ind_scale.get("productsCount") and ind_scale.get("extDiscPct") is not None and voucher_pct is not None
+        else (float(ind_scale["extDiscPct"]) if ind_scale.get("productsCount") and ind_scale.get("extDiscPct") is not None else voucher_pct)
+    )
 
     plat_fallback_map: Dict[str, Optional[float]] = {
-        "ordersGrowth": float(orders_growth_pct),
-        "higherSpending": float(spending_growth_pct),
-        "earlyOrder": float(early_order_days),
-        "peakClustering": float(peak_clump_pct),
+        "ordersGrowth": float(orders_growth_pct) if uplift_res else None,
+        "higherSpending": float(spending_growth_pct) if uplift_res else None,
+        "earlyOrder": None,
+        "peakClustering": float(peak_clump_pct) if peak_clump_pct is not None else None,
         "comboPurchase": ind_combo_blend,
         "voucherSensitivity": ind_voucher_blend,
     }
@@ -2844,58 +2887,7 @@ def seasonal(
         })
 
     # Khối H: Chấm điểm độ tin cậy mô hình dự báo theo chuẩn Amazon Forecast / Uber Orbit
-    emp_cov = method_meta.get("avg_coverage_raw")
-    cov_val = round(float(emp_cov) * 100, 1) if emp_cov else 82.5
-    imp_val = round(float(method_meta.get("improvement_vs_naive_pct") or 0.2), 1)
-    is_deep_validated = bool(method_meta.get("validated_deep_model", False))
-    active_method_code = method_meta.get("method", "seasonal_naive_conformal")
-
-    scorecard_metrics = [
-        {
-            "title": "Tỷ lệ số quan sát nằm trong khoảng tin cậy conformal (P10 - P90)",
-            "actualRatePct": cov_val,
-            "targetRatePct": 80.0,
-            "comparedWithBaselineText": f"Hiệu chuẩn Split-Conformal đạt {cov_val}% độ phủ trên 45 chuỗi ngành TMĐT.",
-            "totalEvaluatedCases": 45,
-            "evidence": {
-                "id": "ev_scorecard_coverage",
-                "definition": "Độ phủ thực nghiệm (Empirical Coverage) của khoảng dự báo P10-P90 qua quy trình Split-Conformal Calibration.",
-                "sources": ["Báo cáo Backtest mô hình theo chuẩn Amazon Forecast / Uber Orbit"],
-                "howObtained": "Rolling-origin backtest 2-fold trên 45 chuỗi ngành hàng TMĐT Google Trends.",
-                "period": ["2021-08-16", "2026-08-16"],
-                "n": 45,
-                "formula": f"Độ phủ thực tế đạt {cov_val}%. Mục tiêu cam kết >= 80%.",
-                "confidence": "high",
-                "confidenceReason": "Hiệu chuẩn conformal phi tham số, bảo đảm khoảng tin cậy trung thực không giả định phân phối chuẩn.",
-                "mayBeWrongBecause": ["Biến động thị trường hoặc xu hướng bộc phát bất ngờ có thể làm lệch độ phủ."],
-                "updatedAt": hom_nay.strftime("%Y-%m-%d")
-            }
-        },
-        {
-            "title": "Mô hình dự báo & Kiểm định vượt trội so với Baseline cùng kỳ",
-            "actualRatePct": imp_val,
-            "targetRatePct": 3.0,
-            "comparedWithBaselineText": (
-                f"Mô hình Deep Learning Temporal Fusion + Lunar-Attention đạt cải thiện {imp_val}% (< ngưỡng 3%). Hệ thống trung thực chuyển sang Seasonal-Naive Conformal để bảo đảm độ chính xác."
-                if not is_deep_validated
-                else f"Mô hình Deep Learning Temporal Fusion + Lunar-Attention (5-Seed Ensemble) vượt qua kiểm định trên mọi fold với mức cải thiện {imp_val}% sMAE so với baseline cùng kỳ."
-            ),
-            "totalEvaluatedCases": 45,
-            "evidence": {
-                "id": "ev_scorecard_vs_baseline",
-                "definition": "Tỷ lệ cải thiện sai số sMAE của mô hình Deep Learning so với Seasonal-Naive (cùng kỳ năm trước).",
-                "sources": ["Gate kiểm định mô hình trước khi cho phép suy luận (Validation Gate)"],
-                "howObtained": "So sánh sMAE fold 1 và fold 2. Nếu không thắng tối thiểu 3%, tự động fallback về Seasonal-Naive kèm khoảng tin cậy conformal.",
-                "period": ["2021-08-16", "2026-08-16"],
-                "n": 45,
-                "formula": f"Cải thiện sMAE = {imp_val}%. Gate yêu cầu >= 3.0%. Kích hoạt phương pháp: {active_method_code}.",
-                "confidence": "high",
-                "confidenceReason": "Quy tắc sản xuất khắt khe: Không bao giờ gán nhãn AI cho mô hình chưa vượt qua baseline.",
-                "mayBeWrongBecause": ["Chuỗi dữ liệu mới thu thập thêm trong tương lai có thể giúp mạng nơ-ron học tốt hơn."],
-                "updatedAt": hom_nay.strftime("%Y-%m-%d")
-            }
-        }
-    ]
+    scorecard_metrics = _build_scorecard_metrics(method_meta, hom_nay)
 
     # Ma trận từ khóa cơ hội theo chuẩn eRank / SaleSamurai
     opportunity_keywords = _tinh_opportunity_keywords(
