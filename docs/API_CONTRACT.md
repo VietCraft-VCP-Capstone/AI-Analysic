@@ -338,7 +338,8 @@ dưới 5 sản phẩm để so thì `null`.
 ```
 `BR-190` phân khúc xác định **tự động** = danh mục chiếm tỉ trọng lớn nhất.
 `BR-191` 5 shop = top 5 theo doanh thu ước tính; hoà thì theo số đánh giá, `ranked_by = "reviews"` khi doanh thu đều 0.
-`BR-192` chuẩn hoá min–max về 0–100 trên **đúng shop mình và 5 đối thủ**. Trục giá trung tính (`neutral_axes`):
+`BR-192` chuẩn hoá min–max về 0–100 trên **đúng shop mình và 5 đối thủ**, riêng trục `avg_rating` theo thang cố định
+1–5 sao ((sao − 1)/4 × 100) để chênh vài phần trăm sao không bị kéo thành cả trục. Trục giá trung tính (`neutral_axes`):
 100 là đắt nhất, không phải tốt hơn. Không trả doanh thu của từng đối thủ.
 `BR-193` cần shop có **≥ 5 listing đã đăng**, không thì `insufficient_data`.
 
@@ -506,13 +507,16 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   `categoryId`, để gợi ý theo dõi không bỏ sót đối thủ ở danh mục phụ. FE bỏ shop đã theo dõi rồi hiện 3 shop đầu.
 - F32 toàn cảnh danh mục (thêm 11/11, chỉ shop thật, `_competitor_landscape.py`, thống kê chứ không phải AI):
   `shops[]` mỗi shop trong danh mục `{shop_id, shop_name, is_me, n_listings, types[{name, count}], materials[] (3 chất liệu
-  nhiều nhất, tên chuẩn), new_30d, price_vnd{p25, median, p75}, units_90d, share_pct, rating (rating_shrunk gộp theo số lượt),
-  n_reviews, favorites, response_minutes, weekly_units[8] (số bán theo tuần trong danh mục), trend, similar_listings, rivalry,
-  shared_types[], is_peer}`, xếp theo `units_90d` giảm dần.
+  nhiều nhất, tên chuẩn), new_8w, price_vnd{p25, median, p75}, units_90d, share_pct, rating (rating_shrunk gộp theo số lượt,
+  dùng để xếp hạng), rating_real (sao thật: tổng sao / số lượt, để hiện), n_reviews, favorites, response_minutes,
+  weekly_units[8] (số bán theo tuần trong danh mục), trend, similar_listings, rivalry, shared_types[], is_peer,
+  response_better ("them" | "me" | null: Mann–Whitney trên thời gian từng lượt hỏi, p < 0,05), more_new (đối thủ đăng
+  nhiều sản phẩm mới hơn mình trong 8 tuần, kiểm định Poisson so hai số đếm, p < 0,05)}`, xếp theo `units_90d` giảm dần.
   `rivalry` 0–100 = Σ theo loại hàng của mình (tỉ trọng loại đó trong hàng của mình × shop kia có bán loại đó × min/max hai giá
   trung vị) × 100; `null` ở dòng của mình. `trend.kind`: `surge` (z bền của F36, kèm `last_week`, `baseline`) hoặc
   `up`/`down`/`stable` theo kiểm định hai tỉ lệ thị phần 4 tuần gần nhất so với 4 tuần trước (|z| ≥ 1,96, kèm
-  `share_before_pct`, `share_after_pct`, `z`); dưới 10 sản phẩm bán trong 8 tuần thì `null`. `is_peer`: shop bán nhiều nhất
+  `share_before_pct`, `share_after_pct`, `z`); `null` khi chưa đạt điều kiện của OpenIntro: mỗi nửa 4 tuần cần ≥ 10 lần
+  "của shop" và ≥ 10 lần "của shop khác" theo tỉ lệ gộp. `is_peer`: shop bán nhiều nhất
   trong các shop có giá trung vị lệch ≤ 10% so với mình và bán gấp ≥ 2 lần. `concentration_top3_pct`: thị phần cộng của 3 shop
   đầu (CR3). `price_points[]`: mỗi sản phẩm một điểm `{listing_id, title, shop_name, is_mine, product_type_id,
   product_type_name, price_vnd, units_90d, materials[] (tên chuẩn), materials_unknown[] (cách gõ chưa có trong từ điển),
@@ -520,12 +524,13 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   = khoảng 25–75% theo trọng số lượng bán, cần ≥ 3 sản phẩm có đơn.
 - F35 (khi đã chọn `productId`) `ai_price`: `{suggested_vnd, low_vnd, high_vnd, confidence: high|medium|low,
   rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
-  `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 8 sản phẩm giống nhất, pha với mặt
-  bằng cùng loại theo `rival_weight`.
-- F36 `alerts[].threat`: `{score 0–100, level high|medium|low, similarity, matched_product_id, matched_title,
-  price_gap_pct (> 0 là đối thủ rẻ hơn), shop_strength, near_identical}`. Điểm = độ giống với sản phẩm khớp nhất của mình (đủ 0,35,
-  tức gần như cùng sản phẩm, là tối đa) × sức mạnh shop đối thủ (doanh số 90 ngày so với shop lớn nhất) × áp lực giá (rẻ hơn, tối đa +50%).
-  Cảnh báo xếp theo `threat.score` giảm dần. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z, threshold,
+  `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 12 sản phẩm giống nhất (cùng loại, khác
+  shop, không lọc chất liệu), pha với mặt bằng cùng loại theo `rival_weight` = n/(n+2) × min(1, độ giống TB/0,3).
+  Hệ số chọn trên Amazon Handmade 2023: sai số trung vị 17,8%; theo `confidence`: high 6,8%, medium 18,7%, low 32,1%.
+- F36 `alerts[].threat`: `{level high|medium|low, similarity, matched_product_id, matched_title,
+  price_gap_pct (> 0 là đối thủ rẻ hơn, % làm tròn), near_identical}`. Mức từ hai sự thật, không có điểm tự đặt:
+  `high` = gần như trùng (độ giống ≥ 0,35, đo trên Shopee) và rẻ hơn; `medium` = gần như trùng, hoặc tương tự (≥ 0,15) và
+  rẻ hơn; còn lại `low`. Cảnh báo xếp theo mức, cùng mức thì giống hơn trước, rồi rẻ hơn nhiều hơn trước. `surging`: `[{shop_id, shop_name, last_week, baseline, ratio, z, threshold,
   weeks[8]}]` (`threshold` = mức nền + 3,5 × độ lệch bền, vạch trên biểu đồ kiểm soát) —
   shop đang theo dõi có tuần gần nhất bán vượt z-score bền ≥ 3,5 so với 7 tuần trước (cần ≥ 4 tuần có đơn). Ngưỡng 3,5 chọn
   trên số bán theo tuần của người bán Olist năm 2017 (báo nhầm ≤ 2%); chấm trên 2018: báo nhầm 1,2%, 55% cảnh báo là tăng tốc thật.
@@ -545,8 +550,8 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
 
 BE: `/seller/analytics/competitor-brief` (GET). Shop mẫu nhận `insufficient_data`. Bộ máy `_competitor_plan.py`
 gom các sự thật đã tính ở F32–F36 (cạnh tranh cao/vừa, giá lệch cả khoảng đề xuất lẫn khoảng giá đối thủ, shop tăng tốc,
-từ khoá ≥ 2 sản phẩm giống dùng, mẫu gần như trùng hàng của mình, giá ngoài vùng bán chạy, shop cùng phân khúc bán gấp đôi,
-đánh giá dồn về top 5, thời gian phản hồi, đối thủ trực tiếp chưa theo dõi, lấy từ `rival_shops_by_category.all`) rồi lập tối đa 10 việc,
+từ khoá ≥ 2 sản phẩm tương tự dùng, mẫu gần như trùng hàng của mình, giá ngoài vùng bán chạy, shop cùng phân khúc bán gấp đôi,
+tổng đánh giá của mình dưới mốc 5 trong khi đối thủ đã có, thời gian phản hồi, đối thủ trực tiếp chưa theo dõi, lấy từ `rival_shops_by_category.all`) rồi lập tối đa 10 việc,
 mỗi loại tối đa 2 (FE chia 5 việc mỗi trang).
 
 `data`: `{actions[{action, why, link | null, priority}], facts_count, generated_at}`. Kế hoạch lập hoàn toàn theo luật
