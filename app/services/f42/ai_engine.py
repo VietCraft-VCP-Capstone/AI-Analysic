@@ -8,8 +8,7 @@ Khả năng:
    - Phân biệt rõ ràng giữa Thiết bị / Sản phẩm chính và Phụ kiện / Vật tư tiêu hao
      (ngăn chặn triệt để lỗi so sánh Điện thoại với Túi đựng, hay Nồi chiên với Giấy nến).
 2. Định giá thị trường TMĐT Việt Nam (Market Valuation):
-   - Khi có GEMINI_API_KEY: Gọi Google Gemini 1.5/2.0 Flash để định giá thị trường thực tế
-     tại Việt Nam (P25 giá sale, P50 giá chuẩn trung vị, P75 giá chính hãng Mall).
+   - Giá do dữ liệu thật quyết định (sản phẩm tương đồng, giá danh mục, giá vốn); LLM (OpenAI hoặc Gemini, qua app.services.llm) chỉ viết nội dung.
    - Khi offline / chưa có key: Dùng NLP Semantic Parser + Multi-Category Knowledge Base
      kết hợp dữ liệu đối chuẩn thực tế có chọn lọc.
 3. Sinh nội dung chuẩn SEO TMĐT:
@@ -19,14 +18,13 @@ Khả năng:
 """
 
 import logging
-import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from dotenv import load_dotenv
 
 from app.services.f42 import config
-from app.services.f42.gemini_client import generate_json
+from app.services import llm
 from app.services.f42.vi_text import clean_tokens, normalize_nfc, strip_accents
 from app.services.f42.schemas import (
     ComparableItem,
@@ -66,17 +64,9 @@ class MarketAIAdvisor:
     """Bộ não AI cho Sàn Thương Mại Điện Tử."""
 
     @classmethod
-    def get_api_key(cls) -> Optional[str]:
-        return (
-            os.getenv("GEMINI_API_KEY")
-            or os.getenv("GOOGLE_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
-        )
-
-    @classmethod
     def is_gemini_available(cls) -> bool:
-        key = cls.get_api_key()
-        return bool(key and len(key) > 15)
+        """Tên cũ giữ nguyên cho test/nơi gọi: nghĩa là có ít nhất một LLM (OpenAI hoặc Gemini)."""
+        return llm.available()
 
     # ------------------------------------------------------------------
     # 1. PHÂN TÍCH THỰC THỂ SẢN PHẨM (Semantic Product Understanding)
@@ -145,8 +135,7 @@ class MarketAIAdvisor:
         - Mô tả bán hàng chuyên nghiệp
         - Tags xu hướng
         """
-        api_key = cls.get_api_key()
-        if not api_key:
+        if not llm.available():
             return None
 
         def _safe(v: str) -> str:
@@ -198,9 +187,8 @@ Trả về DUY NHẤT một JSON hợp lệ (không markdown):
   "warnings": ["..."]
 }}"""
 
-        models = [config.LLM_MODEL, *config.LLM_FALLBACK_MODELS]
-        return generate_json(
-            [{"text": prompt}], api_key, models, timeout_s=config.LLM_TIMEOUT_S,
+        return llm.generate_json(
+            [{"text": prompt}], timeout_s=config.LLM_TIMEOUT_S,
             temperature=config.LLM_TEMPERATURE, max_output_tokens=max(config.LLM_MAX_OUTPUT_TOKENS, 4096),
             accept=lambda d: bool(d.get("titles")),
         )
@@ -218,114 +206,14 @@ Trả về DUY NHẤT một JSON hợp lệ (không markdown):
         extra_attributes: str = ""
     ) -> Dict[str, Any]:
         """
-        Bộ phân tích ngữ nghĩa TMĐT nâng cao khi chưa kết nối Gemini API.
-        Phân biệt rõ ràng mọi ngành hàng (Điện tử, Gia dụng, Thời trang, Làm đẹp, Đồng hồ...).
-        Không nhầm lẫn phụ kiện với thiết bị chính, đưa ra khoảng giá hợp lý chuẩn thị trường.
+        Dự phòng khi Gemini lỗi/chưa có key: chỉ dùng đúng những gì seller đã khai (tên, danh mục,
+        chất liệu, hãng), không tự suy ra thông số hay cam kết. Không ước lượng giá.
         """
         raw = normalize_nfc(title or "").strip()
-        low = raw.lower()
         entities = cls.parse_product_entities(raw)
         brand = entities.get("detected_brand")
-        is_acc = entities.get("is_accessory", False)
-
-        # 1. Nhận diện các ngành hàng và archetype sản phẩm TMĐT
-        # Thiết bị điện tử - Điện thoại
-        if any(w in low for w in ["điện thoại", "smartphone", "iphone", "galaxy a", "galaxy s", "galaxy z", "redmi", "realme"]) and not is_acc:
-            product_type = "Điện thoại thông minh"
-            cat = "Điện Thoại & Phụ Kiện"
-            if "iphone" in low or "pro max" in low or "galaxy s" in low or "galaxy z" in low:
-                pass
-            elif any(w in low for w in ["galaxy a", "redmi note", "realme", "a15", "a25", "a35", "a55"]):
-                pass
-            specs = [
-                {"label": "Thương hiệu", "value": brand or "Chính hãng"},
-                {"label": "Dòng sản phẩm", "value": product_type},
-                {"label": "Màn hình", "value": "Độ phân giải cao, tần số quét mượt mà"},
-                {"label": "Camera & Pin", "value": "Camera sắc nét, dung lượng pin bền bỉ"}
-            ]
-
-        # Đồ gia dụng - Nồi chiên / Nồi cơm / Máy hút bụi
-        elif any(w in low for w in ["nồi chiên không dầu", "nồi chiên", "nồi cơm điện", "máy hút bụi", "máy xay sinh tố", "bếp từ", "quạt điện", "máy ép chậm"]) and not is_acc:
-            if "nồi chiên" in low:
-                product_type = "Nồi chiên không dầu"
-                cat = "Thiết Bị Gia Dụng"
-            elif "máy hút bụi" in low:
-                product_type = "Máy hút bụi"
-                cat = "Thiết Bị Gia Dụng"
-            elif "nồi cơm" in low:
-                product_type = "Nồi cơm điện"
-                cat = "Thiết Bị Gia Dụng"
-            else:
-                product_type = "Thiết bị điện gia dụng"
-                cat = "Thiết Bị Gia Dụng"
-            specs = [
-                {"label": "Thương hiệu", "value": brand or "Chính hãng"},
-                {"label": "Công nghệ", "value": "Hiện đại, tiết kiệm điện năng"},
-                {"label": "Chất liệu lòng nồi/vỏ", "value": material or "Hợp kim chống dính / Nhựa cao cấp"},
-                {"label": "Bảo hành", "value": "12 tháng chính hãng"}
-            ]
-
-        # Đồng hồ đeo tay
-        elif any(w in low for w in ["đồng hồ nam", "đồng hồ nữ", "đồng hồ đeo tay", "đồng hồ cơ", "smartwatch", "casio", "seiko"]) and not is_acc:
-            product_type = "Đồng hồ đeo tay"
-            cat = "Đồng Hồ & Trang Sức"
-            specs = [
-                {"label": "Thương hiệu", "value": brand or "Casio / Chính hãng"},
-                {"label": "Chất liệu dây", "value": material or "Thép không gỉ / Da cao cấp"},
-                {"label": "Chống nước", "value": "Chuẩn chống nước sinh hoạt"},
-                {"label": "Bộ máy", "value": "Quartz / Automatic độ chính xác cao"}
-            ]
-
-        # Máy tính, phụ kiện công nghệ
-        elif any(w in low for w in ["bàn phím cơ", "chuột máy tính", "tai nghe", "laptop", "macbook"]) and not is_acc:
-            if "laptop" in low or "macbook" in low:
-                product_type = "Laptop / Máy tính xách tay"
-                cat = "Máy Tính & Laptop"
-            elif "bàn phím" in low:
-                product_type = "Bàn phím cơ"
-                cat = "Phụ Kiện Máy Tính"
-            elif "tai nghe" in low:
-                product_type = "Tai nghe"
-                cat = "Thiết Bị Âm Thanh"
-            else:
-                product_type = "Phụ kiện công nghệ"
-                cat = "Phụ Kiện Máy Tính"
-            specs = [
-                {"label": "Thương hiệu", "value": brand or "Chính hãng"},
-                {"label": "Kết nối", "value": "Không dây Bluetooth / Type-C"},
-                {"label": "Tương thích", "value": "Windows, macOS, Android, iOS"}
-            ]
-
-        # Mỹ phẩm, chăm sóc cá nhân
-        elif any(w in low for w in ["son môi", "son dưỡng", "kem chống nắng", "sữa rửa mặt", "serum", "nước hoa"]):
-            product_type = "Mỹ phẩm & Chăm sóc sắc đẹp"
-            cat = "Sắc Đẹp & Sức Khỏe"
-            specs = [
-                {"label": "Thương hiệu", "value": brand or "Chính hãng"},
-                {"label": "Loại da phù hợp", "value": "Mọi loại da, kể cả da nhạy cảm"},
-                {"label": "Hạn sử dụng", "value": "3 năm kể từ ngày sản xuất"}
-            ]
-
-        # Phụ kiện (nếu là phụ kiện, ốp lưng, túi đựng, khay lót)
-        elif is_acc:
-            product_type = "Phụ kiện / Vật tư tiêu hao"
-            cat = "Phụ Kiện"
-            specs = [
-                {"label": "Phân loại", "value": "Phụ kiện bảo vệ / Thay thế"},
-                {"label": "Chất liệu", "value": material or "Silicone / Nhựa dẻo / Vải chống sốc"}
-            ]
-
-        # Thời trang, Đời sống hoặc nhóm chung
-        else:
-            product_type = raw.split()[0].title() if raw else None
-            cat = category_name or None
-            specs = [
-                {"label": "Danh mục", "value": cat or "Chưa phân loại"},
-            ]
-            if brand:
-                specs.append({"label": "Thương hiệu", "value": brand})
-            if material:
-                specs.append({"label": "Chất liệu", "value": material})
+        product_type = raw.split()[0].title() if raw else None
+        cat = category_name or None
 
         specs = []
         if cat:

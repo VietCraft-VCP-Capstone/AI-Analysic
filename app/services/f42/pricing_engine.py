@@ -338,7 +338,7 @@ def compute_pricing(
         explanation = (
             f"Chưa đủ dữ liệu sản phẩm tương tự. "
             f"Giá được tính theo phương pháp định giá trên chi phí (Cost-Plus) "
-            f"với biên lợi nhuận kỳ vọng {int(margin * 100)}% từ giá vốn {format_vnd(blank_cost)}."
+            f"bằng cách cộng thêm {int(margin * 100)}% trên giá vốn {format_vnd(blank_cost)}."
         )
 
         return PricingResult(

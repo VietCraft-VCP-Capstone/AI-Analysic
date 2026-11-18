@@ -96,7 +96,8 @@ def _lay_don_hang_lich_su(shop_id: str, include_industry: bool = True):
         if la_shop_live(shop_id):
             from bson import ObjectId
             shop_o = list(col.find({**flt, "shop_id": ObjectId(shop_id)}, proj))
-    except Exception:
+    except Exception as exc:
+        log.warning("seasonal: %s: %s", type(exc).__name__, exc)
         pass
     return shop_o, ind_o
 
@@ -108,7 +109,8 @@ def _tinh_stl_that(series_points: List[tuple], chu_ky: int = 52) -> Dict[str, An
             res = real_stl(series_points, chu_ky)
             if res.get("trend"):
                 return res
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             pass
     return _tinh_stl_don_gian(series_points, chu_ky)
 
@@ -252,7 +254,7 @@ def analyze_product_seasonal_readiness(
             "action_title": f"Bổ sung ảnh concept dịp {camp_name}",
             "action_detail": f"Tải thêm ít nhất 2 ảnh chụp sản phẩm với bối cảnh hoặc hộp quà theo chủ đề dịp {camp_name}.",
             "seller_tip": "Chụp 1 ảnh sản phẩm đặt cạnh hộp quà hoặc bối cảnh ngày lễ để thu hút khách bấm vào xem.",
-            "market_data": "Sản phẩm có ảnh chụp bối cảnh hoặc hộp quà dịp cao điểm đạt tỷ lệ nhấp chuột (CTR) cao hơn 58% so với ảnh chụp nền trắng."
+            "market_data": "Ảnh chụp bối cảnh hoặc hộp quà theo chủ đề dịp giúp khách thấy ngay sản phẩm hợp để mua làm quà."
         },
         {
             "id": "keywords",
@@ -261,7 +263,7 @@ def analyze_product_seasonal_readiness(
             "action_title": "Gắn từ khoá ngách đón tìm kiếm sớm",
             "action_detail": f"Bổ sung các từ khóa tìm kiếm theo dịp vào thẻ tag hoặc danh mục (gợi ý: {sample_keywords}).",
             "seller_tip": f"Thêm các tag: #{camp_name.lower().replace(' ', '')}, #{best_keyword.replace(' ', '')} vào phần mô tả sản phẩm.",
-            "market_data": "Hệ thống tìm kiếm sàn cần từ 5 đến 7 ngày để lập chỉ mục từ khóa. Cập nhật sớm giúp sản phẩm đón đúng thời điểm khách tìm kiếm."
+            "market_data": "Cập nhật từ khóa sớm giúp sản phẩm xuất hiện đúng lúc khách bắt đầu tìm kiếm theo dịp."
         },
         {
             "id": "combo",
@@ -270,7 +272,7 @@ def analyze_product_seasonal_readiness(
             "action_title": "Tạo combo set quà tặng",
             "action_detail": f"Tạo thêm phân loại {combo_tip} (gợi ý: \"{sample_combo}\").",
             "seller_tip": seller_action_tip,
-            "market_data": f"Giá trị đơn hàng (AOV) dịp này tăng +{spending_growth_pct}% do khách mua làm quà; sản phẩm có đóng gói quà tặng tăng tỷ lệ chốt đơn gấp 2.4 lần."
+            "market_data": f"Giá trị đơn hàng (AOV) dịp này tăng +{spending_growth_pct}% do khách mua làm quà."
         },
         {
             "id": "seo",
@@ -279,7 +281,7 @@ def analyze_product_seasonal_readiness(
             "action_title": f"Kéo dài tiêu đề chuẩn SEO (hiện {title_len}/30+ ký tự)",
             "action_detail": f"Tiêu đề quá ngắn khiến sàn khó phân bổ tìm kiếm. Gợi ý đổi thành: \"{suggested_seo_title}\".",
             "seller_tip": "Chèn tên dịp lễ và từ khóa chính vào 30 ký tự đầu tiên của tiêu đề để tối ưu công cụ tìm kiếm sàn.",
-            "market_data": "68% khách gõ từ khóa kèm tên dịp lễ. Tiêu đề chuẩn từ 30 ký tự trở lên có chứa tên dịp giúp tăng 45% lượt hiển thị tự nhiên."
+            "market_data": "Tiêu đề có tên dịp và từ khóa chính ở phần đầu giúp khách tìm theo dịp dễ thấy sản phẩm hơn."
         }
     ]
 
@@ -798,7 +800,8 @@ def _tinh_opportunity_keywords(
                 .limit(120)
             )
             cache_set_json(ext_cache_key, ext_docs, ttl_seconds=1800)
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             ext_docs = []
 
     for doc in ext_docs:
@@ -845,7 +848,8 @@ def _tinh_opportunity_keywords(
                 if ckw:
                     comp_map[ckw] = comp_map.get(ckw, 0) + int(comp.get("listing_count") or comp.get("competitor_count") or 1)
             cache_set_json(comp_cache_key, comp_map, ttl_seconds=1800)
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             pass
 
     platform_prods = cache_get_json("seasonal:plat_prods:v1")
@@ -858,7 +862,8 @@ def _tinh_opportunity_keywords(
                 .limit(1500)
             )
             cache_set_json("seasonal:plat_prods:v1", platform_prods, ttl_seconds=1800)
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             platform_prods = []
 
     # 2. Ưu tiên từ khóa khớp ĐÚNG DỊP + NGÀNH HÀNG trước, sau đó mới bổ sung từ khóa bán chạy của ngành
@@ -1797,7 +1802,8 @@ def seasonal(
                     "why_it_sells": idea.get("why_it_sells") or "",
                     "upsell_bundle_tip": idea.get("upsell_bundle_tip") or "",
                 })
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             pass
 
     # Fallback an toàn nếu DB và Hybrid Mining chưa có dữ liệu
@@ -1866,7 +1872,8 @@ def seasonal(
                 try:
                     up_bp = event_demand_uplift(series=s_kw, event_dates=event_dates_by_year, event_date=target_ev_d,
                                                 window_days=30, today=hom_nay)
-                except Exception:
+                except Exception as exc:
+                    log.warning("seasonal: %s: %s", type(exc).__name__, exc)
                     up_bp = None
             stl_bp = real_stl(kw_trend) if len(kw_trend) >= 104 else None
             cache_set_json(r_key, {"up": up_bp, "stl": stl_bp}, ttl_seconds=1800)
@@ -1976,9 +1983,11 @@ def seasonal(
                         shop_vals = [float(shop_wk_map[k]) for k in sorted_wks]
                         trend_tail = [float(v) for v in target_s.values[-len(shop_vals):]]
                         uplift_res = calibrate_shop_uplift(uplift_res, shop_vals, trend_tail)
-                except Exception:
+                except Exception as exc:
+                    log.warning("seasonal: %s: %s", type(exc).__name__, exc)
                     pass
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             uplift_res = None
 
     if uplift_res and uplift_res.get("uplift_p50"):
@@ -2259,7 +2268,8 @@ def seasonal(
                 "occAovPremium": occ_aov_premium,
             }
             cache_set_json(ind_scale_key, ind_scale, ttl_seconds=1800)
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             ind_scale = {"productsCount": 0, "sellersCount": 0, "totalSold": 0, "platforms": ["Tiki", "Printify", "VietCraft"]}
 
     if ind_scale.get("occAovPremium") is not None:
@@ -2496,9 +2506,9 @@ def seasonal(
                 "period": [(hom_nay - timedelta(days=30)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
                 "n": prov_cnt,
                 "formula": f"Giá phôi cơ sở {b_cost:,}đ, giá bán lẻ đề xuất {b_price:,}đ (biên lãi {pod_item['expected_profit_margin']}).",
-                "confidence": "high",
+                "confidence": "fair" if prov_cnt else "preliminary",
                 "confidenceReason": "Phôi thật từ catalog Printify, sản xuất theo đơn không rủi ro tồn kho.",
-                "mayBeWrongBecause": ["Thời gian in có thể kéo dài thêm 1-2 ngày vào tuần sát lễ."],
+                "mayBeWrongBecause": ["Thời gian in và giao phụ thuộc nhà in, có thể chậm hơn vào tuần sát lễ."],
                 "updatedAt": hom_nay.isoformat(),
                 "rawDataUrl": pod_item["product_url"],
             },
@@ -2555,12 +2565,14 @@ def seasonal(
             seed_prods = []
             try:
                 seed_prods = list(db_live()["products"].find({}, {"title": 1, "tags": 1, "images": 1, "categories": 1, "price": 1, "retail_price": 1, "stock": 1, "sold_count": 1, "thumbnail": 1, "image_url": 1}).limit(20))
-            except Exception:
+            except Exception as exc:
+                log.warning("seasonal: %s: %s", type(exc).__name__, exc)
                 pass
             if not seed_prods:
                 try:
                     seed_prods = list(db()["products"].find({}, {"title": 1, "tags": 1, "images": 1, "categories": 1, "price": 1, "retail_price": 1, "stock": 1, "sold_count": 1, "thumbnail": 1, "image_url": 1}).limit(20))
-                except Exception:
+                except Exception as exc:
+                    log.warning("seasonal: %s: %s", type(exc).__name__, exc)
                     pass
 
             for p in seed_prods:
@@ -2586,7 +2598,8 @@ def seasonal(
                     "orders": int(p.get("sold_count") or 0),
                     "revenue_vnd": int(p.get("sold_count") or 0) * int(p.get("price") or 150000),
                 })
-    except Exception:
+    except Exception as exc:
+        log.warning("seasonal: %s: %s", type(exc).__name__, exc)
         shop_products = []
 
     search_terms = [k.lower() for k in active_camp.get("search_keywords", [])] + [active_camp.get("name", "").lower(), active_camp.get("id", "").lower()]
@@ -2651,7 +2664,8 @@ def seasonal(
                     _o10 = max(1, round(shop_rate_90 * _win_d * float(_up_c["uplift_p10"])))
                     _o90 = max(_o10, round(shop_rate_90 * _win_d * float(_up_c["uplift_p90"])))
                     _camp["expected_orders"] = f"{_o10}" if _o10 == _o90 else f"{_o10}–{_o90}"
-            except Exception:
+            except Exception as exc:
+                log.warning("seasonal: %s: %s", type(exc).__name__, exc)
                 continue
     apply_playbooks = [
         {**build_playbook(i, cut_off_d, target_ev_d, hom_nay, uplift_res, impact.get("baseline_orders_per_day"), 4),
@@ -2830,7 +2844,8 @@ def seasonal(
                 elif delivered_at and created_at and hasattr(delivered_at, "__sub__") and (delivered_at - created_at).days > 4:
                     bucket["delayed"] += 1
             cache_set_json("seasonal:route_buckets:v1", route_buckets, ttl_seconds=1800)
-        except Exception:
+        except Exception as exc:
+            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             pass
 
     is_peak_season = active_camp["id"] in ("tet", "noel", "12/12") or target_ev_d.month in (10, 11, 12, 1)
@@ -2921,7 +2936,8 @@ def seasonal(
                     "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
                     "created_at": {"$gte": d_start, "$lte": d_end}
                 })
-    except Exception:
+    except Exception as exc:
+        log.warning("seasonal: %s: %s", type(exc).__name__, exc)
         shop_base_orders = 0
         actual_camp_orders = 0
 

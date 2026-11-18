@@ -17,6 +17,9 @@ class SuggestionRequest(BaseModel):
     # Biên lợi nhuận dạng tỉ lệ (0.3 = 30%). Chặn 30 (tưởng là %) → giá gấp 31 lần giá vốn.
     target_margin: Optional[float] = Field(default=None, ge=0, le=3)
     targetMargin: Optional[float] = Field(default=None, ge=0, le=3)
+    # % hoa hồng sàn seller bị trừ trên giá niêm yết; có thì giá sàn "không bán lỗ" và tiền lời tính sau phí
+    commission_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    commissionPercent: Optional[float] = Field(default=None, ge=0, le=100)
     extra_attributes: Optional[str] = None
     product_type: Optional[str] = None
     productType: Optional[str] = None
@@ -35,6 +38,10 @@ class SuggestionRequest(BaseModel):
 
     def get_blank_cost(self) -> float:
         val = self.blank_cost if self.blank_cost is not None else self.blankCost
+        return float(val) if val is not None and val > 0 else 0.0
+
+    def get_commission_percent(self) -> float:
+        val = self.commission_percent if self.commission_percent is not None else self.commissionPercent
         return float(val) if val is not None and val > 0 else 0.0
 
     def get_target_margin(self) -> Optional[float]:
