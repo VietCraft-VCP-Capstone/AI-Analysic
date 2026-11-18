@@ -88,7 +88,7 @@ class LLMSeasonalService:
             f"Mỗi danh sách trả về 3-4 mục cụ thể, giàu tính thực chiến và thuyết phục."
         )
 
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
@@ -100,7 +100,7 @@ class LLMSeasonalService:
 
         # Ưu tiên gemini-3.1-flash-lite cực nhanh (~2-3s), kế tiếp gemini-2.5-flash và gemini-flash-latest
         for model in ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
                 req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
                 with urllib.request.urlopen(req, timeout=12) as response:

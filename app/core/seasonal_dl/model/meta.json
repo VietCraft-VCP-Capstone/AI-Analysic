@@ -86,8 +86,8 @@
   "avg_wmape_naive": 0.3671,
   "avg_coverage_p10_p90": 0.7404,
   "improvement_vs_naive_scaled_mae_pct": 9.0,
-  "validated": true,
-  "validation_rule": "thắng seasonal-naive Ở MỌI FOLD trên cả sMAE và wMAPE với biên >=3%, và coverage P10-P90 thô trong [0.70,0.90]",
+  "validated": false,
+  "validation_rule": "thắng seasonal-naive Ở MỌI FOLD trên cả sMAE và wMAPE với biên >=3%, và coverage P10-P90 thô Ở MỌI FOLD lẫn trung bình trong [0.70,0.90]",
   "conformal_residual_quantiles": {
     "naive": {
       "1-4w": [
