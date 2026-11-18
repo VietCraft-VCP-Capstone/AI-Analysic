@@ -3057,11 +3057,12 @@ def seasonal(
             "method": method_meta.get("method", "seasonal_naive_conformal"),
             "method_display_name": "Seasonal-Naive Conformal (Hiệu chuẩn lỗi thực nghiệm)" if method_meta.get("method") == "seasonal_naive_conformal" else "Deep Learning TFT + Lunar-Attention (5-Seed Ensemble)",
             "validated_deep_model": method_meta.get("validated_deep_model", False),
-            "empirical_coverage_pct": cov_val,
-            "improvement_pct": imp_val,
-            "uplift_p10": uplift_res.get("uplift_p10") if uplift_res else round(1.0 + orders_growth_pct * 0.007, 2),
-            "uplift_p50": uplift_res.get("uplift_p50") if uplift_res else round(1.0 + orders_growth_pct / 100.0, 2),
-            "uplift_p90": uplift_res.get("uplift_p90") if uplift_res else round(1.0 + orders_growth_pct * 0.013, 2),
+            "empirical_coverage_pct": scorecard_metrics[0]["actualRatePct"],
+            "improvement_pct": scorecard_metrics[1]["actualRatePct"],
+            # Không có mô hình uplift thật thì trả None, không suy ra từ hệ số nhân
+            "uplift_p10": uplift_res.get("uplift_p10") if uplift_res else None,
+            "uplift_p50": uplift_res.get("uplift_p50") if uplift_res else None,
+            "uplift_p90": uplift_res.get("uplift_p90") if uplift_res else None,
         },
         "method": f"Thống kê mô tả từ {measured_sample_size:,} đơn hàng thật + Lịch quốc gia calendar_vn + Kiểm chứng 5 lớp",
         "limitation": "Không có dữ liệu nào đảm bảo chắc chắn sản phẩm sẽ bán chạy. Seller cần tự kiểm tra bằng chứng và bắt đầu từ bước Thử nhỏ."
