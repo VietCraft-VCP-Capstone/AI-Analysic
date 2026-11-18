@@ -15,7 +15,7 @@ from statistics import median
 from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
-from scipy.stats import binomtest, mannwhitneyu
+from scipy.stats import binomtest, false_discovery_control, mannwhitneyu
 
 from app.api.v1._materials import chuan_hoa
 from app.api.v1._competitor_ai import tang_dot_bien
@@ -27,6 +27,7 @@ TOI_THIEU_XU_HUONG = 10    # OpenIntro: mỗi nửa 4 tuần cần ≥ 10 lần 
 CUNG_PHAN_KHUC = 0.10      # định nghĩa "cùng tầm giá"; Olist: mọi mức 5–30% đều cho ≥ 80% shop chọn ra vẫn bán hơn
 GAP_THAM_KHAO = 2.0        # Olist 2018: 85,4% shop được chọn vẫn bán hơn bạn sau 90 ngày (RESULT_OLIST_REFERENCE_SHOP)
 TOI_THIEU_VUNG_GIA = 3     # dưới 3 sản phẩm có đơn thì chưa nói được vùng giá bán chạy
+IT_DU_LIEU_VUNG = 10       # Olist: khoảng từ 3–9 sản phẩm chỉ chứa 36,9% lượng bán, từ 10–29 sản phẩm 52,3% (lý thuyết 50%)
 MUC_Y_NGHIA = 0.05         # bảng so sánh chỉ tô màu khi khác biệt có ý nghĩa thống kê 5%, cùng mức với xu hướng
 
 
@@ -119,16 +120,23 @@ def tong_hop_shop(rows: List[dict], toi: str, tuan: Dict[str, List[int]], trung:
         shops.append(d)
 
     me = next((d for d in shops if d["is_me"]), None)
+    kiem = []      # (shop, ô, p, giá trị khi có ý nghĩa)
     for d in shops:
         if me is None or d["is_me"]:
             continue
         # Thời gian trả lời từng lượt hỏi: Mann–Whitney (1947), không cần giả định phân phối chuẩn.
         a, b = mau_tl[d["shop_id"]], mau_tl[me["shop_id"]]
-        if a and b and mannwhitneyu(a, b, alternative="two-sided").pvalue < MUC_Y_NGHIA and median(a) != median(b):
-            d["response_better"] = "them" if median(a) < median(b) else "me"
+        if a and b and median(a) != median(b):
+            kiem.append((d, "response_better", mannwhitneyu(a, b, alternative="two-sided").pvalue,
+                         "them" if median(a) < median(b) else "me"))
         # Số sản phẩm mới trong cùng 8 tuần: so hai số đếm Poisson (Przyborowski & Wilenski 1940) = kiểm định nhị thức p = 0,5.
-        k, n = d["new_8w"], d["new_8w"] + me["new_8w"]
-        d["more_new"] = bool(k > me["new_8w"] and binomtest(k, n, 0.5).pvalue < MUC_Y_NGHIA)
+        if d["new_8w"] > me["new_8w"]:
+            kiem.append((d, "more_new", binomtest(d["new_8w"], d["new_8w"] + me["new_8w"], 0.5).pvalue, True))
+    # Nhiều ô kiểm cùng lúc: hiệu chỉnh Benjamini–Hochberg (1995), trong các ô được tô trung bình ≤ 5% là tô nhầm.
+    if kiem:
+        for (d, o, _, v), q in zip(kiem, false_discovery_control([x[2] for x in kiem], method="bh")):
+            if q < MUC_Y_NGHIA:
+                d[o] = v
     if me and me["price_vnd"]["median"]:
         m = me["price_vnd"]["median"]
         ung = [d for d in shops if not d["is_me"] and abs(d["price_vnd"]["median"] - m) / m <= CUNG_PHAN_KHUC

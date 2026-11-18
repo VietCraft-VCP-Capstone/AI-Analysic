@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 from app.api.v1._competitor_ai import thu_tu_de_doa
-from app.api.v1._competitor_landscape import vung_ban_chay
+from app.api.v1._competitor_landscape import IT_DU_LIEU_VUNG, vung_ban_chay
 
 TOI_DA_VIEC = 10      # trang chia 5 việc mỗi trang, trang đầu vẫn là 5 việc gấp nhất
 MOI_LOAI = 2          # mỗi loại việc tối đa 2 dòng để kế hoạch không toàn một việc
@@ -78,7 +78,7 @@ def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: D
         # Không thêm biên: Olist 2017, biên 0% đã tách được hàng bán kém (RESULT_OLIST_PRICE_BAND_MARGIN).
         if vung and lo > vung["p75"]:
             su.append({"kind": "vung_gia", "type": loai, "n_mine": len(toi), "my_min": lo, "my_max": hi,
-                       "low": vung["p25"], "high": vung["p75"], "materials": sorted(cl),
+                       "low": vung["p25"], "high": vung["p75"], "n": vung["n"], "materials": sorted(cl),
                        "rival_max": max(d["price_vnd"] for d in doi)})
     ten_tag = (f34 or {}).get("tag_names") or {}
     for p in ((f34 or {}).get("per_product") or [])[:3]:
@@ -159,8 +159,9 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     else f"{_tien(f['my_min'] - f['high'])} – {_tien(f['my_max'] - f['high'])}")
             cl = f" {', '.join(f['materials'])}" if f["materials"] else ""
             # Vùng p25–p75 theo lượng bán chứa ít nhất một nửa lượng bán (giá rời rạc thì nhiều hơn), nên không ghi "50%".
+            it = f" (mới tính từ {f['n']} sản phẩm, ít dữ liệu)" if f["n"] < IT_DU_LIEU_VUNG else ""
             viec.append({"action": f"Rà soát giá {f['n_mine']} mẫu {f['type'].lower()}: cao hơn giá bán chạy {vuot}",
-                         "why": f"Bạn {gia_toi}. Giá bán chạy của {f['type'].lower()}{cl} {_tien(f['low'])} – {_tien(f['high'])}; "
+                         "why": f"Bạn {gia_toi}. Giá bán chạy của {f['type'].lower()}{cl} {_tien(f['low'])} – {_tien(f['high'])}{it}; "
                                 f"mẫu đắt nhất của đối thủ {_tien(f['rival_max'])}.",
                          "link": f"/seller/insights/competitors?loai={quote(f['type'])}#gia"})
         elif k == "tang_toc":
@@ -174,7 +175,8 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                          "link": f"/seller/competitors/{f['shop_id']}"})
         elif k == "tu_khoa":
             them = f", {f['better_sellers']} trong đó bán chạy hơn" if f["better_sellers"] else ""
-            viec.append({"action": f"Thêm từ khoá \"{f['tag']}\" cho {f['title']}",
+            # Chỉ nêu sự thật đếm được: chưa có dữ liệu chứng minh thêm từ khoá thì bán tốt hơn.
+            viec.append({"action": f"Cân nhắc từ khoá \"{f['tag']}\" cho {f['title']}",
                          "why": f"{f['used_by']} mẫu tương tự đang dùng từ khoá này{them}.",
                          "link": f"/seller/products?edit={f['product_id']}"})
         elif k == "theo_doi":

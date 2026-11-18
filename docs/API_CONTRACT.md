@@ -510,8 +510,9 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   nhiều nhất, tên chuẩn), new_8w, price_vnd{p25, median, p75}, units_90d, share_pct, rating (rating_shrunk gộp theo số lượt,
   dùng để xếp hạng), rating_real (sao thật: tổng sao / số lượt, để hiện), n_reviews, favorites, response_minutes,
   weekly_units[8] (số bán theo tuần trong danh mục), trend, similar_listings, rivalry, shared_types[], is_peer,
-  response_better ("them" | "me" | null: Mann–Whitney trên thời gian từng lượt hỏi, p < 0,05), more_new (đối thủ đăng
-  nhiều sản phẩm mới hơn mình trong 8 tuần, kiểm định Poisson so hai số đếm, p < 0,05)}`, xếp theo `units_90d` giảm dần.
+  response_better ("them" | "me" | null: Mann–Whitney trên thời gian từng lượt hỏi), more_new (đối thủ đăng nhiều sản
+  phẩm mới hơn mình trong 8 tuần, kiểm định Poisson so hai số đếm); hai cờ chỉ bật khi p đã hiệu chỉnh Benjamini–Hochberg
+  trên mọi phép kiểm của danh mục < 0,05}`, xếp theo `units_90d` giảm dần.
   `rivalry` 0–100 = Σ theo loại hàng của mình (tỉ trọng loại đó trong hàng của mình × shop kia có bán loại đó × min/max hai giá
   trung vị) × 100; `null` ở dòng của mình. `trend.kind`: `surge` (z bền của F36, kèm `last_week`, `baseline`) hoặc
   `up`/`down`/`stable` theo kiểm định hai tỉ lệ thị phần 4 tuần gần nhất so với 4 tuần trước (|z| ≥ 1,96, kèm
