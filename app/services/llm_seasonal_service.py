@@ -1,10 +1,8 @@
-import json
-import os
-import re
-import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
+
+from app.services import llm
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 if ENV_FILE.exists():
@@ -22,22 +20,11 @@ class LLMSeasonalService:
         mined: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Tạo gợi ý sản phẩm kết hợp giữa LLM và số liệu sàn thật."""
-        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if not gemini_key and ENV_FILE.exists():
-            load_dotenv(ENV_FILE, override=True)
-            gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        openai_key = os.getenv("OPENAI_API_KEY")
-
-        # 1. Thử gọi LLM nếu có API Key hợp lệ
-        if gemini_key and len(gemini_key) > 10:
-            res = cls._call_gemini(keyword, mined, gemini_key)
-            if res and res.get("ready_to_ship_ideas"):
-                return res
-
-        if openai_key and openai_key.startswith("sk-"):
-            res = cls._call_openai(keyword, mined, openai_key)
-            if res and res.get("ready_to_ship_ideas"):
-                return res
+        # 1. LLM dùng chung (OpenAI chính, hết hạn mức/lỗi thì Gemini); không có khoá hoặc lỗi thì tổng hợp từ số liệu sàn
+        res = llm.generate_json([{"text": cls._build_prompt(keyword, mined)}], timeout_s=15, max_output_tokens=4096,
+                                accept=lambda d: bool(d.get("ready_to_ship_ideas")))
+        if res:
+            return res
 
         # 2. Fallback: Bộ tổng hợp thông minh trực tiếp từ dữ liệu Data-Mining sàn thật
         res = cls._synthesize_from_mined_data(keyword, mined)
@@ -45,9 +32,9 @@ class LLMSeasonalService:
         return res
 
     @classmethod
-    def _call_gemini(cls, keyword: str, mined: Dict[str, Any], api_key: str) -> Optional[Dict[str, Any]]:
-        """Gọi Google Gemini Flash qua HTTP API chuẩn."""
-        prompt = (
+    def _build_prompt(cls, keyword: str, mined: Dict[str, Any]) -> str:
+        """Prompt gửi LLM (OpenAI hoặc Gemini, qua app.services.llm)."""
+        return (
             f"Bạn là chuyên gia phân tích thị hiếu và nguồn hàng TMĐT tại Việt Nam.\n"
             f"DỮ LIỆU KHAI PHÁ THỰC TẾ TỪ SÀN VIETCRAFT:\n"
             f"- Dịp lễ / Cao điểm: '{keyword}'\n"
@@ -87,64 +74,6 @@ class LLMSeasonalService:
             f"}}\n"
             f"Mỗi danh sách trả về 3-4 mục cụ thể, giàu tính thực chiến và thuyết phục."
         )
-
-        headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.4,
-                "maxOutputTokens": 4096,
-                "responseMimeType": "application/json"
-            }
-        }
-
-        # Ưu tiên gemini-3.1-flash-lite cực nhanh (~2-3s), kế tiếp gemini-2.5-flash và gemini-flash-latest
-        for model in ["gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-flash-latest"]:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            try:
-                req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-                with urllib.request.urlopen(req, timeout=12) as response:
-                    body = json.loads(response.read().decode("utf-8"))
-                    text = body["candidates"][0]["content"]["parts"][0]["text"]
-                    
-                    # Loại bỏ code block markdown nếu có
-                    cleaned = re.sub(r"^```(?:json)?\s*", "", text.strip())
-                    cleaned = re.sub(r"\s*```$", "", cleaned)
-                    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-                    if match:
-                        parsed = json.loads(match.group(0))
-                        parsed["ai_model"] = model
-                        print(f"[Gemini] Successfully generated seasonal ideas using {model}")
-                        return parsed
-            except Exception as e:
-                print(f"[Gemini] Model {model} request failed: {e}")
-                continue
-        return None
-
-    @classmethod
-    def _call_openai(cls, keyword: str, mined: Dict[str, Any], api_key: str) -> Optional[Dict[str, Any]]:
-        """Gọi OpenAI GPT-4o-mini qua HTTP API chuẩn."""
-        url = "https://api.openai.com/v1/chat/completions"
-        prompt = (
-            f"Phân tích xu hướng sản phẩm mùa '{keyword}' cho nhóm '{mined.get('cluster_name')}'. "
-            f"Dải giá sàn: {mined.get('market_price_range')}. "
-            f"Trả về JSON gồm ready_to_ship_ideas và pod_blanks."
-        )
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}],
-            "response_format": {"type": "json_object"}
-        }
-        try:
-            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=8) as response:
-                body = json.loads(response.read().decode("utf-8"))
-                content = body["choices"][0]["message"]["content"]
-                return json.loads(content)
-        except Exception:
-            return None
-        return None
 
     @classmethod
     def _synthesize_from_mined_data(cls, keyword: str, mined: Dict[str, Any]) -> Dict[str, Any]:

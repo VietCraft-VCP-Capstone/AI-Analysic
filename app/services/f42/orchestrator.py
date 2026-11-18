@@ -132,30 +132,23 @@ def _get_banned_keywords(db_live) -> Set[str]:
     return _cached_banned
 
 
-def _build_full_seo_description_text(
-    title: str,
-    category_name: str,
-    desc_obj: Any,
-    tags: List[str]
-) -> str:
-    """Ghép bài mô tả cho FE. Chỉ gồm những gì đã có — không chèn cam kết/chính sách mặc định."""
+def _build_full_seo_description_text(desc_obj: Any) -> str:
+    """Ghép bài mô tả cho FE. Chỉ gồm những gì đã có — không chèn cam kết/chính sách mặc định.
+    Không lặp tên (đã có ô riêng) và không thêm mục hashtag (sàn có ô thẻ riêng)."""
     intro = getattr(desc_obj, "intro", "") or ""
     specs = getattr(desc_obj, "specs", []) or []
     highlights = getattr(desc_obj, "highlights", []) or []
     care_guide = getattr(desc_obj, "care_guide", None)
 
-    sections: List[str] = [title.strip()]
+    sections: List[str] = []
     if intro:
-        sections.append(f"THÔNG TIN SẢN PHẨM:\n{intro}")
-    spec_lines = [f"  • {s.label}: {s.value}" for s in specs] or ([f"  • Danh mục: {category_name}"] if category_name else [])
-    if spec_lines:
-        sections.append("THÔNG SỐ SẢN PHẨM:\n" + "\n".join(spec_lines))
+        sections.append(f"Thông tin sản phẩm\n{intro}")
+    if specs:
+        sections.append("Thông số\n" + "\n".join(f"  • {s.label}: {s.value}" for s in specs))
     if highlights:
-        sections.append("ĐẶC ĐIỂM NỔI BẬT:\n" + "\n".join(f"  • {h}" for h in highlights))
+        sections.append("Điểm nổi bật\n" + "\n".join(f"  • {h}" for h in highlights))
     if care_guide:
-        sections.append(f"HƯỚNG DẪN BẢO QUẢN:\n{care_guide}")
-    if tags:
-        sections.append("TỪ KHÓA TÌM KIẾM:\n" + ", ".join("#" + t.replace(" ", "") for t in tags[:8]))
+        sections.append(f"Hướng dẫn bảo quản\n{care_guide}")
     return "\n\n".join(sections).strip()
 
 
@@ -303,8 +296,16 @@ class F42Orchestrator:
         category_name_in = req.get_category_name()
         material_in = req.get_material()
         blank_cost = req.get_blank_cost()
+        commission = req.get_commission_percent()
+        # Giá phôi quy về giá NIÊM YẾT (khách trả): seller còn bị trừ phí sàn nên giá sàn phải cao hơn tương ứng
+        list_cost = blank_cost * (1 + commission / 100)
         target_margin = req.get_target_margin()
-        extra_attr = "; ".join(x for x in (req.extra_attributes or "", parsed.attribute_text()) if x)
+        is_pod = (req.product_type or req.productType or "").strip().lower() == "pod"
+        extra_attr = "; ".join(x for x in (
+            req.extra_attributes or "",
+            parsed.attribute_text(),
+            "Sản phẩm in theo yêu cầu (POD), thiết kế riêng" if is_pod else "",
+        ) if x)
         # Tiêu đề seller nhập = từ khóa cho lượt cào giá kế tiếp (lấp ngành hàng dữ liệu cũ còn thiếu)
         record_seller_query(db_data, title_input)
 
@@ -404,14 +405,14 @@ class F42Orchestrator:
         try:
             pricing_res = _resolve_pricing(
                 comp_est, internal_market, effective_category_id, db_live,
-                blank_cost, target_margin, effective_material or None, has_model=bool(model_sig),
+                list_cost, target_margin, effective_material or None, has_model=bool(model_sig),
             )
         except Exception as exc:
             logger.warning("f42.pricing_failed", extra={"error": str(exc)})
-            pricing_res = compute_pricing([], blank_cost=blank_cost, target_margin=target_margin)
+            pricing_res = compute_pricing([], blank_cost=list_cost, target_margin=target_margin)
         pricing_res.detected_product = pricing_res.detected_product or detected_product
         pricing_res.detected_brand = pricing_res.detected_brand or detected_brand
-        _apply_demand_signal(pricing_res, db_data, title_input, blank_cost)
+        _apply_demand_signal(pricing_res, db_data, title_input, list_cost)
         _apply_quantity_and_condition(pricing_res, parsed)
 
         # ---------------- Khối 3: tag ----------------
@@ -499,7 +500,8 @@ class F42Orchestrator:
 
         rec_price = pricing_res.suggested_price
         # Chỉ tính lợi nhuận khi có giá vốn thật — không tự đặt % lợi nhuận
-        rec_markup = max(0, rec_price - int(blank_cost)) if (blank_cost > 0 and rec_price > 0) else 0
+        # Tiền lời thật = số seller nhận sau khi trừ phí sàn − giá phôi
+        rec_markup = max(0, round(rec_price / (1 + commission / 100)) - int(blank_cost)) if (blank_cost > 0 and rec_price > 0) else 0
 
         # Bằng chứng: ưu tiên chính các sản phẩm làm căn cứ giá, sau đó là tham khảo
         merged_comps: List[ComparableItem] = list(pricing_res.comparables)
@@ -513,7 +515,8 @@ class F42Orchestrator:
                         title=c.title[:140], price=int(round(c.price)), similarity=round(c.similarity, 2),
                         source="Sàn VietCraft" if c.source == "vietcraft" else "Thị trường TMĐT",
                     ))
-        for ic in internal_market.get("comparables") or []:
+        # Tin "cùng tên trên sàn" chỉ khớp 2-3 chữ đầu ("điện thoại" = mọi hãng): chỉ hiện khi giá lấy từ chúng
+        for ic in (internal_market.get("comparables") or []) if pricing_res.method == "internal_similar" else []:
             if ic["title"][:140] not in seen_titles:
                 seen_titles.add(ic["title"][:140])
                 extra_comps.append(ComparableItem(
@@ -591,12 +594,7 @@ class F42Orchestrator:
                 "frequency": item.freq,
             })
 
-        full_desc_text = _build_full_seo_description_text(
-            title=suggested_titles_list[0],
-            category_name=effective_category_name,
-            desc_obj=content_res.description,
-            tags=suggested_tags_list,
-        )
+        full_desc_text = _build_full_seo_description_text(content_res.description)
 
         return UnifiedSuggestionResponse(
             input_analysis=parsed.to_dict(),

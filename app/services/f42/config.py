@@ -21,12 +21,7 @@ TAG_GENERIC_STOPLIST: List[str] = [
     "đẹp", "hot", "rẻ", "tốt", "hàng mới", "giá rẻ", "freeship", "xinh", "cao cấp", "uy tín", "chất lượng"
 ]
 
-# gemini-2.5-flash đã ngừng cấp cho key mới (404); gemini-flash-latest hay hết hạn mức (429)
-LLM_MODEL: str = os.getenv("F42_LLM_MODEL", "gemini-3.5-flash")
-# Model dự phòng khi model chính lỗi (phân tách bằng dấu phẩy). Giữ ngắn để không cộng dồn timeout.
-LLM_FALLBACK_MODELS: List[str] = [
-    m.strip() for m in os.getenv("F42_LLM_FALLBACK_MODELS", "gemini-3-flash-preview,gemini-3.1-flash-lite,gemini-flash-lite-latest").split(",") if m.strip()
-]
+# Model LLM (OpenAI chính, Gemini dự phòng) cấu hình ở app/services/llm/config.py
 LLM_TEMPERATURE: float = float(os.getenv("F42_LLM_TEMPERATURE", 0.4))
 LLM_TOP_P: float = float(os.getenv("F42_LLM_TOP_P", 0.9))
 LLM_MAX_OUTPUT_TOKENS: int = int(os.getenv("F42_LLM_MAX_OUTPUT_TOKENS", 1500))

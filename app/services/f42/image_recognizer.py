@@ -13,8 +13,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from app.services.f42 import config
-from app.services.f42.ai_engine import MarketAIAdvisor
-from app.services.f42.gemini_client import generate_json
+from app.services.llm import generate_json
 from app.services.f42.input_parser import parse_seller_input
 from app.services.f42.vi_text import normalize_nfc, strip_accents
 
@@ -152,8 +151,7 @@ def recognize_product_image(images: Union[str, List[str]], mime_type: str = "", 
         img, mime = decode_image(raw, mime_type)
         parts.append({"inline_data": {"mime_type": mime, "data": base64.b64encode(img).decode()}})
     parts.append({"text": _prompt(categories)})
-    data = caller(parts, MarketAIAdvisor.get_api_key(), [config.LLM_MODEL, *config.LLM_FALLBACK_MODELS],
-                  timeout_s=config.VISION_TIMEOUT_S, temperature=0.2, max_output_tokens=1024,
+    data = caller(parts, timeout_s=config.VISION_TIMEOUT_S, temperature=0.2, max_output_tokens=1024,
                   accept=lambda d: "product_name" in d or "is_product" in d or "items" in d)
     if data is None:
         return {"error": "Chưa nhận diện được ảnh lúc này, vui lòng thử lại sau ít phút."}
