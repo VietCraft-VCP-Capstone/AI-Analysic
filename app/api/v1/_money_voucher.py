@@ -72,6 +72,12 @@ def _viec(tot: Dict[str, Any]) -> Tuple[str, str]:
     return "create", f"Mã {tot['code']} {ly_do}, tạo mã mới cùng điều kiện."
 
 
+def _ma_thay(tot: Dict[str, Any], ds: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Mã cùng điều kiện, chưa hết hạn, còn lượt: shop đã tạo mã thay cho mã cũ."""
+    return next((v for v in ds if v is not tot and not v["expired"] and (not v["limit"] or v["used"] < v["limit"])
+                 and (v["type"], v["value"], v["min_order"]) == (tot["type"], tot["value"], tot["min_order"])), None)
+
+
 def goi_y_luat(ds: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Việc nên làm với voucher: dựa trên mã có tỉ lệ dùng cao nhất; chưa có mã nào thì tạo mã miễn phí vận chuyển."""
     if not ds:
@@ -82,7 +88,12 @@ def goi_y_luat(ds: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if tot["used"] == 0:
         return None
     viec, cau = _viec(tot)
-    y = [f"Mã {tot['code']} ({LOAI.get(tot['type'], tot['type'])}) được dùng {tot['used']}/{tot['limit']} lượt, cao nhất trong kho.", cau]
+    thay = _ma_thay(tot, ds) if viec == "create" else None
+    if thay:
+        viec = "keep" if thay["status"] != "ended" else "reactivate"
+        cau = f"Đã có {thay['code']} thay {tot['code']}, chưa cần tạo mới." if viec == "keep" \
+            else f"Mã {thay['code']} thay {tot['code']} đang tắt, bật lại là dùng tiếp."
+    y =[f"Mã {tot['code']} ({LOAI.get(tot['type'], tot['type'])}) được dùng {tot['used']}/{tot['limit']} lượt, cao nhất trong kho.", cau]
     im = sum(v["status"] in ("unused", "low") for v in ds)
     if im:
         y.append(f"{im} mã hiệu quả thấp, nên tạm dừng để kho gọn hơn.")
@@ -90,4 +101,4 @@ def goi_y_luat(ds: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if chua:
         y.append(f"Shop chưa thử: {', '.join(chua)}.")
     nhap = ban_nhap(tot, [v["code"] for v in ds]) if viec == "create" else None
-    return {"type": tot["type"], "action": viec, "code": tot["code"], "reason": " ".join(y), "points": y, "draft": nhap}
+    return {"type": tot["type"], "action": viec, "code": (thay or tot)["code"], "reason": " ".join(y), "points": y, "draft": nhap}
