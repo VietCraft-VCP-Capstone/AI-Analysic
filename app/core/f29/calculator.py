@@ -12,6 +12,7 @@ from app.config import settings
 from app.core.f29 import (breakdown, category_check, factors, factors_v3 as f3, image_check, material,
                           price_peers, query_relevance as qr, recommend, review_stats, scoring, weights)
 from app.core.f29.constants import BLOCKING_FIELDS, MODEL_VERSION
+from app.core.f29.price_reasons import price_reasons
 from app.core.f29.price_ref import category_of, product_group, product_price
 from app.core.f29.todos import build_warnings, todos_of, warnings_of
 from app.core.listing_intel.embedder import MODEL_ID as SIGLIP_ID
@@ -130,8 +131,16 @@ class HealthScoreCalculator:
             f3.tags_row(scoring.count_approved_tags(product, pending), scoring.count_pending_tags(product, pending),
                         search, method),
             f3.review_row(n_good, n, review_stats.platform_p0(self.live_db), float(cfg["review"]["m"])),
-            f3.price_row(price_peers.position(self.live_db, product, product_price(variants))),
+            f3.price_row(price_peers.position(self.live_db, product, product_price(variants)),
+                         price_reasons(product, self._copied_description(product))),
         ]
+
+    def _copied_description(self, product: Dict[str, Any]) -> bool:
+        desc = product.get("description")
+        if not isinstance(desc, str) or not desc.strip() or not product.get("shop_id"):
+            return False
+        query = {"shop_id": product["shop_id"], "_id": {"$ne": product.get("_id")}, "description": desc}
+        return self.live_db["products"].find_one(query, {"_id": 1}) is not None
 
     def _warnings(self, product: Dict[str, Any], variants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         hints = [h for h in scoring.content_hints(product, self.pending_tag_ids()) if h.get("type") == "warning"]

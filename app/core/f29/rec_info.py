@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Optional
 
 from app.core.f29 import factors_v3 as f3
-from app.core.f29.constants import FACTOR_WEIGHT
 from app.core.f29.rec_base import make
 
 
@@ -14,7 +13,7 @@ def category_recs(hint: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def review_recs(review: Dict[str, Any]) -> List[Dict[str, Any]]:
-    if review["state"] != "scored" or review["points"] >= FACTOR_WEIGHT:
+    if review["state"] != "scored" or review["points"] >= review["weight"]:
         return []
     ev = review["evidence"]
     fixed = f3.review_row(ev["good"] + 1, ev["total"] + 1, ev["p0"], ev["m"])

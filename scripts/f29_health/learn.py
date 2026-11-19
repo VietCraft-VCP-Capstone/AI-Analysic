@@ -5,9 +5,10 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
 from app.core.f29 import factors
+from app.core.f29.price_peers import price_sub
 
-FIXED = {"tags": 7, "material": 7, "buyer": 25}
-FLOOR = 5
+TAG_WEIGHT = 20
+FLOOR = 10
 TAG_TARGET = 3
 
 
@@ -29,12 +30,12 @@ def _apply(fn, cols):
     return np.array([fn(*(None if pd.isna(v) else float(v) for v in row)) for row in zip(*cols)], dtype=float)
 
 
-def subscores(df, cols, targets, review, price):
+def subscores(df, cols, targets, review):
     fns = {
         "image": lambda v: factors.ratio_score(v, targets["image"]),
         "description": lambda v: factors.ratio_score(v, targets["description"]),
         "review": lambda good, n: factors.review_score(good, n, review["p0"], review["m"]),
-        "price": lambda p, ref: factors.price_score(p, ref, price),
+        "price": lambda pct: price_sub(pct, (), 1.0),
     }
     return pd.DataFrame(
         {k: _apply(fns[k], [df[c] for c in _values(col)]) for k, col in cols.items() if k in fns},
@@ -42,9 +43,29 @@ def subscores(df, cols, targets, review, price):
     )
 
 
-def fit_coefs(X, y):
-    model = LogisticRegression(max_iter=1000).fit(X / 100, y)
-    return dict(zip(X.columns, model.coef_[0].tolist()))
+def fit_coefs(X, y, controls=None):
+    Z = X / 100
+    if controls is not None:
+        Z = pd.concat([Z, ((controls - controls.mean()) / controls.std().replace(0, 1)).fillna(0)], axis=1)
+    model = LogisticRegression(max_iter=1000).fit(Z, y)
+    return dict(zip(X.columns, model.coef_[0][:X.shape[1]].tolist()))
+
+
+def shares(coefs):
+    pos = {k: max(c, 0.0) for k, c in coefs.items()}
+    total = sum(pos.values())
+    return {k: v / total if total else 1 / len(pos) for k, v in pos.items()}
+
+
+def pooled(market_coefs, keys):
+    vecs = [shares({k: c[k] for k in keys}) for c in market_coefs]
+    return {k: sum(v[k] for v in vecs) / len(vecs) for k in keys}
+
+
+def agreement(market_coefs, keys):
+    vecs = [shares({k: c[k] for k in keys}) for c in market_coefs]
+    gaps = [0.5 * sum(abs(a[k] - b[k]) for k in keys) for i, a in enumerate(vecs) for b in vecs[i + 1:]]
+    return round(1 - float(np.mean(gaps)), 3)
 
 
 def _shares(coefs, budget, floor):
@@ -69,8 +90,8 @@ def _round(exact, budget):
     return out
 
 
-def to_weights(coefs, fixed=FIXED, floor=FLOOR):
-    budget = 100 - sum(fixed.values())
-    learned = _round(_shares({k: max(c, 0.0) for k, c in coefs.items()}, budget, floor), budget)
-    merged = fixed | learned
+def to_weights(coefs, lam=1.0, tag=TAG_WEIGHT, floor=FLOOR):
+    budget, learned = 100 - tag, shares(coefs)
+    blended = {k: lam * learned[k] + (1 - lam) / len(coefs) for k in coefs}
+    merged = _round(_shares(blended, budget, floor), budget) | {"tags": tag}
     return {k: merged[k] for k in factors.KEYS}

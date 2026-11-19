@@ -5,6 +5,7 @@ from bson import ObjectId
 from app.api.v1._live import LOC_SP_THAT
 from app.core.f29 import breakdown, factors_v3 as f3, price_peers, scoring
 from app.core.f29.calculator import HealthScoreCalculator
+from app.core.f29.price_reasons import price_reasons
 
 LEVERS = ("n_images", "description_length", "n_tags", "price")
 
@@ -51,7 +52,8 @@ def preview_health(
         rows["tags"] = f3.tags_row(round(levers["n_tags"]), rows["tags"]["evidence"]["pending"],
                                    current["search"]["queries"], rows["tags"]["method"])
     if "price" in levers:
-        rows["price"] = f3.price_row(price_peers.position(calc.live_db, product, levers["price"]))
+        rows["price"] = f3.price_row(price_peers.position(calc.live_db, product, levers["price"]),
+                                     price_reasons(product, calc._copied_description(product)))
 
     factors = list(rows.values())
     score, coverage = breakdown.score(factors)

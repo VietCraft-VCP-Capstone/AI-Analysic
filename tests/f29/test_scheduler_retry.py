@@ -105,4 +105,4 @@ def test_nightly_rescan_writes_current_model_version(monkeypatch):
     monkeypatch.setattr(f29_scheduler, "HealthScoreCalculator", lambda: calc)
     f29_scheduler.nightly_full_rescan()
     docs = calc.live_db["listing_health_scores"].docs
-    assert [d["model_version"] for d in docs] == [f29_scheduler.MODEL_VERSION] == ["health-3.0"]
+    assert [d["model_version"] for d in docs] == [f29_scheduler.MODEL_VERSION] == ["health-3.1"]

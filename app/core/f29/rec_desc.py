@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Optional
 
-from app.core.f29.constants import FACTOR_WEIGHT
 from app.core.f29.rec_base import make, scope
 
 
@@ -8,10 +7,10 @@ def _empty(desc: Dict[str, Any], category: Optional[str]) -> List[Dict[str, Any]
     ev = desc["evidence"]
     where = scope(category, ev["in_category"])
     why = (f"Chưa có mô tả, mặt bằng {where} là {ev['median_words']:g} từ. "
-           f"Mô tả đủ 4 tiêu chí sẽ được {FACTOR_WEIGHT} điểm")
+           f"Mô tả đủ 4 tiêu chí sẽ được {desc['weight']} điểm")
     return [make("info", "empty", "description", "Chưa có mô tả", why,
                  "Viết mô tả đủ 4 tiêu chí: số từ, kích thước, chất liệu, khác tên", "description",
-                 FACTOR_WEIGHT, "rule", {"median_words": ev["median_words"]})]
+                 desc["weight"], "rule", {"median_words": ev["median_words"]})]
 
 
 def description_recs(desc: Dict[str, Any], blockers: List[Dict[str, str]],
@@ -22,7 +21,7 @@ def description_recs(desc: Dict[str, Any], blockers: List[Dict[str, str]],
         return []
     ev = desc["evidence"]
     checks = ev["checks"]
-    per = FACTOR_WEIGHT / len(checks)
+    per = desc["weight"] / len(checks)
     where = scope(category, ev["in_category"])
     recs = []
     if not checks["words"]:

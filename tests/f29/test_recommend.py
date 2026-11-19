@@ -80,7 +80,7 @@ def test_no_review_rec_when_not_applicable(monkeypatch):
 def test_every_rec_has_text_field_and_method():
     image = {"state": "scored", "useful": 1, "method": "ml_unvalidated", "images": [
         {"url": "a", "duplicate": True, "issues": ["blurry"], "category_match": False}]}
-    price = {"state": "scored", "pct": 5, "n": 8, "level": "category", "p10": 50000, "p90": 120000}
+    price = {"state": "scored", "pct": 5, "n": 8, "factor": 1.0, "confidence": 1.0, "p10": 50000, "p90": 120000}
     queries = [_q("áo nữ", 3)]
     recs = _build(queries=queries, blockers=[{"field": "title", "message": "Tên có chữ thừa"}],
                   factors=_factors(queries, image=image, median=4, price=price))
@@ -108,11 +108,16 @@ def test_image_mismatch_is_ml_unvalidated_and_gains_nothing():
     assert rec["gain_points"] == 0.0 and rec["method"] == "ml_unvalidated"
 
 
-def test_price_outside_band_wording_and_gain():
-    price = {"state": "scored", "pct": 5, "n": 8, "level": "category", "p10": 50000, "p90": 120000}
+def test_high_price_asks_for_reasons_never_to_cut_price():
+    price = {**{"state": "scored", "pct": 5, "n": 8, "factor": 1.0, "confidence": 1.0, "p10": 50000, "p90": 120000}, "pct": 95}
     rec = next(r for r in _build(factors=_factors(price=price)) if r["kind"] == "price")
-    assert rec["why"] == "Giá nằm ngoài vùng phổ biến của 8 sản phẩm tương đồng (P10–P90: 50.000–120.000 đ)"
-    assert rec["gain_points"] == 10.0 and "sai" not in rec["why"]
+    assert rec["why"] == "Giá cao hơn vùng phổ biến 50.000–120.000 đ của 8 sản phẩm tương đồng"
+    assert rec["gain_points"] == 5.0 and "hạ giá" not in rec["action"] and "giảm giá" not in rec["action"]
+
+
+def test_low_price_only_asks_to_check():
+    rec = _by_id(_build(factors=_factors(price={"state": "scored", "pct": 5, "n": 8, "factor": 1.0, "confidence": 1.0, "p10": 50000, "p90": 120000})), "info:price_low")
+    assert rec["action"] == "Kiểm tra lại giá có nhập nhầm không" and rec["gain_points"] == 0.0
 
 
 def test_missing_size_material_care_are_info(monkeypatch):
@@ -175,7 +180,7 @@ def test_empty_description_rec_is_worth_full_factor():
 
 def test_missing_price_rec():
     rec = _by_id(_build(factors=_factors(price={"state": "seller_missing"})), "price:missing")
-    assert rec["why"] == "Chưa có giá bán (0/20 điểm). Giá trong vùng phổ biến sẽ được 20 điểm"
+    assert rec["why"] == "Chưa có giá bán (0/20 điểm). Nhập giá để được chấm mục này"
     assert rec["field"] == "price" and rec["gain_points"] == 20.0
 
 

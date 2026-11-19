@@ -67,7 +67,7 @@ def test_all_five_full_scores_hundred_good():
     assert result["score"] == 100.0 and result["status"] == "good"
     assert result["coverage"] == {"evaluated": 5, "total": 5}
     assert all(f["weight"] == 20 for f in result["factors"])
-    assert result["versions"]["score"] == MODEL_VERSION == "health-3.0"
+    assert result["versions"]["score"] == MODEL_VERSION == "health-3.1"
 
 
 def test_image_technical_failure_never_scores_zero(monkeypatch):
@@ -94,7 +94,7 @@ def test_identical_input_gives_identical_output():
     ((20, 20, 9.9, 0, 0), "poor"),
 ])
 def test_status_bands(points, status):
-    value, _ = breakdown.score([{"state": "scored", "points": p} for p in points])
+    value, _ = breakdown.score([{"state": "scored", "points": p, "weight": 20} for p in points])
     assert scoring.status_from_score(value) == status
 
 
@@ -113,9 +113,17 @@ def test_tags_without_queries_use_first_half_only():
     assert factors_v3.tags_row(0, 0, [], "rule")["sub_score"] == 0.0
 
 
-def test_price_row_uses_price_points():
-    row = factors_v3.price_row({"state": "scored", "pct": 5, "n": 8, "level": "category", "p10": 1, "p90": 2})
-    assert row["points"] == 10.0
+def test_price_row_cuts_only_unexplained_high_price():
+    pos = {"state": "scored", "pct": 95, "n": 8, "factor": 1.0, "confidence": 1.0, "p10": 1, "p90": 2}
+    assert factors_v3.price_row(pos)["points"] == 15.0
+    assert factors_v3.price_row(pos, ["size"])["points"] == 20.0
+    assert factors_v3.price_row({**pos, "pct": 5})["points"] == 20.0
+
+
+def test_score_uses_each_factor_weight():
+    rows = [{"state": "scored", "points": 30, "weight": 30}, {"state": "scored", "points": 0, "weight": 10},
+            {"state": "not_applicable", "points": 0, "weight": 60}]
+    assert breakdown.score(rows) == (75.0, {"evaluated": 2, "total": 3})
 
 
 def test_default_size_is_not_a_real_size():
