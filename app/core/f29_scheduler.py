@@ -129,6 +129,12 @@ def scan_changed_products() -> int:
             ) if r.get("product_id")
         }
 
+        changed_tag_ids = [t["_id"] for t in db["tags"].find({"updated_at": {"$gt": last_scan_time}}, {"_id": 1})]
+        if changed_tag_ids:
+            changed_ids |= {
+                p["_id"] for p in db["products"].find({**LOC_SP_THAT, "tag_ids": {"$in": changed_tag_ids}}, {"_id": 1})
+            }
+
         related_ids = list(set(changed_variant_product_ids) | changed_review_product_ids)
         if related_ids:
             changed_ids |= {

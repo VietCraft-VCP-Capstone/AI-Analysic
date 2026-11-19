@@ -79,3 +79,30 @@ def test_minute_scan_finishes_pending_full_rescan(monkeypatch):
     f29_scheduler.scan_changed_products()
     assert sorted(calc.calls) == sorted([PRODUCT_ID, OTHER_ID])
     assert f29_scheduler.needs_full_rescan(db) is False
+
+
+def test_tag_approval_triggers_rescore(monkeypatch):
+    tag_id = ObjectId()
+    calc = _FakeCalc()
+    db = _setup(
+        monkeypatch,
+        calc,
+        products=[with_id(base_product(tag_ids=[tag_id])), with_id(base_product(), OTHER_ID)],
+        tags=[{"_id": tag_id, "status": "active", "updated_at": NOW - timedelta(minutes=10)}],
+    )
+    db[f29_scheduler.STATE_COLLECTION].seed([
+        {"_id": f29_scheduler.STATE_ID_MINUTE_SCAN, "last_scan_time": NOW - timedelta(hours=1)},
+        {"_id": f29_scheduler.STATE_ID_NIGHTLY, "model_version": f29_scheduler.MODEL_VERSION},
+    ])
+
+    f29_scheduler.scan_changed_products()
+    assert calc.calls == [PRODUCT_ID]
+
+
+def test_nightly_rescan_writes_current_model_version(monkeypatch):
+    calc = make_calculator(products=[with_id(base_product())])
+    monkeypatch.setattr(f29_scheduler, "db_live", lambda: calc.live_db)
+    monkeypatch.setattr(f29_scheduler, "HealthScoreCalculator", lambda: calc)
+    f29_scheduler.nightly_full_rescan()
+    docs = calc.live_db["listing_health_scores"].docs
+    assert [d["model_version"] for d in docs] == [f29_scheduler.MODEL_VERSION] == ["health-3.0"]

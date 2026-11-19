@@ -56,6 +56,8 @@ def test_allowed_rejects_http_and_other_hosts():
     assert image_fetch.allowed("https://evil.com/a.jpg") is False
     assert image_fetch.allowed(URL) is True
     assert image_fetch.allowed("https://salt.tikicdn.com/a.jpg") is True
+    assert image_fetch.allowed("https://down-vn.img.susercontent.com/file/a.webp") is True
+    assert image_fetch.allowed("https://img.susercontent.com.evil.com/a.webp") is False
 
 
 @pytest.mark.parametrize("url", [

@@ -40,7 +40,7 @@ def test_quality_issues_flags_and_fields():
     assert vision.quality_issues(ok) == []
     bad = {**ok, "img_w": 300, "img_aspect": 2.0, "img_brightness": 0.1, "img_border_uniform": 0.1, "img_text_ratio": 0.2}
     got = {i["code"]: i for i in vision.quality_issues(bad)}
-    assert set(got) == {"low_resolution", "too_dark", "busy_background", "text_overlay", "bad_aspect"}
+    assert set(got) == {"low_resolution", "too_dark"}
     assert all(i["message"] and i["field"] for i in got.values())
     assert "too_bright" in {i["code"] for i in vision.quality_issues({**ok, "img_brightness": 0.95, "img_border_uniform": 0.2})}
 

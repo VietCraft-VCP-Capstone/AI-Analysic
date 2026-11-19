@@ -8,7 +8,11 @@ _MISSING = object()
 
 def _get_path(doc: Dict[str, Any], path: str) -> Any:
     cur = doc
-    for part in path.split("."):
+    parts = path.split(".")
+    for i, part in enumerate(parts):
+        if isinstance(cur, list) and not part.isdigit():
+            vals = (_get_path(x, ".".join(parts[i:])) for x in cur)
+            return [v for v in vals if v is not _MISSING]
         if isinstance(cur, dict):
             if part not in cur:
                 return _MISSING
@@ -47,7 +51,7 @@ def _match_one(doc: Dict[str, Any], query: Dict[str, Any]) -> bool:
                     if val == arg:
                         return False
                 elif op == "$in":
-                    if val not in arg:
+                    if not (any(v in arg for v in val) if isinstance(val, list) else val in arg):
                         return False
                 else:
                     raise NotImplementedError(f"operator chưa hỗ trợ trong fake mongo: {op}")
@@ -102,6 +106,8 @@ class _FakeCollection:
             doc[k] = v
         for k, v in update.get("$setOnInsert", {}).items():
             doc.setdefault(k, v)
+        for k in update.get("$unset", {}):
+            doc.pop(k, None)
 
     def update_one(self, filt, update, upsert=False):
         for d in self.docs:

@@ -6,7 +6,7 @@ from sklearn.linear_model import LogisticRegression
 
 from app.core.f29 import factors
 
-FIXED = {"tags": 10, "material": 10}
+FIXED = {"tags": 7, "material": 7, "buyer": 25}
 FLOOR = 5
 TAG_TARGET = 3
 

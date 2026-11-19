@@ -20,9 +20,6 @@ FIXES = {
     "blurry": ["img_sharpness"],
     "too_dark": ["img_brightness"],
     "too_bright": ["img_brightness"],
-    "busy_background": ["img_border_uniform"],
-    "text_overlay": ["img_text_ratio"],
-    "bad_aspect": ["img_aspect"],
     "few_images": ["n_images"],
     "no_images": ["n_images", *IMAGE_COLS],
 }

@@ -79,7 +79,7 @@ def estimate_cold_start_propensity(product_id: str, live_db) -> Optional[Dict[st
     views = metrics[0].get("views", 0) if metrics else 0
     carts = metrics[0].get("carts", 0) if metrics else 0
 
-    category = (product.get("categories") or ["Thủ công mỹ nghệ"])[0]
+    category = (product.get("categories") or [""])[0]
 
     _, meta = load_model()
 
@@ -94,7 +94,7 @@ def estimate_cold_start_propensity(product_id: str, live_db) -> Optional[Dict[st
 
     advice = _advice(product, quality_res, base_logit)
 
-    peer_count = live_db["products"].count_documents({**LOC_SP_THAT, "categories": category})
+    peer_count = live_db["products"].count_documents({**LOC_SP_THAT, "categories": category}) if category else 0
     by_category = peer_count >= 5
     if not by_category:
         peer_count = live_db["products"].count_documents(LOC_SP_THAT)

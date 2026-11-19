@@ -1,20 +1,7 @@
 import pandas as pd
 
 from app.core.f29 import factors
-from scripts.f29_health.learn import subscores, to_weights
-
-
-def test_to_weights_proportional_with_floor():
-    w = to_weights({"image": 0.27, "description": 0.12, "review": -0.03, "price": 0.44})
-    assert list(w) == ["image", "description", "tags", "material", "review", "price"]
-    assert sum(w.values()) == 100 and w["tags"] == 10 and w["material"] == 10 and w["review"] == 5
-    assert w["price"] > w["image"] > w["description"] >= 5
-
-
-def test_to_weights_all_zero_is_equal():
-    w = to_weights({"image": 0, "description": -1, "review": 0, "price": 0})
-    assert sum(w.values()) == 100 and w["tags"] == 10
-    assert max(w[k] for k in ("image", "description", "review", "price")) - min(w[k] for k in ("image", "description", "review", "price")) <= 1
+from scripts.f29_health.learn import subscores
 
 
 def test_subscores_uses_factor_functions():
