@@ -21,16 +21,16 @@ NGUONG_GAN_NHU_Y_HET = 0.35 # từ mức này 73% đúng là cùng sản phẩm 
 NGUONG_KHONG_LY_DO = 0.35   # không có từ hiếm nào chung thì phải giống tới mức này mới tính
 SO_DOI_THU = 5
 SO_SHOP_GOI_Y = 10           # đủ dư để FE bỏ shop đã theo dõi mà vẫn còn 3 shop
-K_GIA = 8
+# Giá đề xuất: chọn trên Amazon Handmade 2023 (KIEM_CHUNG_AI/RESULT_AMAZON_PRICE_SUGGESTION.md), sai số trung vị 26,8% -> 17,8%.
+K_GIA = 12
 TOI_THIEU_GIA = 3
-TRON_GIA = 10                # càng nhiều đối thủ trực tiếp thì càng tin giá của họ hơn mặt bằng cùng loại
+TRON_GIA = 2                 # càng nhiều đối thủ trực tiếp thì càng tin giá của họ hơn mặt bằng cùng loại
+TRAN_GIONG_GIA = 0.3        # độ giống trung bình từ mức này thì tin hẳn giá đối thủ trực tiếp
 TRONG_SO_KY_TU = 0.6        # cụm ký tự giúp bắt "tshirt"/"t-shirt" nhưng không được lấn từ
 TRONG_SO_MO_TA = 0.5        # mô tả hay là văn mẫu của shop nên nhẹ hơn tên
 TAN_SUAT_LY_DO = 0.5        # từ có ở từ nửa số sản phẩm CÙNG LOẠI trở lên là từ chung của loại, không làm lý do
 CACHE_GIAY = 300
-GIONG_TOI_DA = NGUONG_GAN_NHU_Y_HET   # đe doạ: gần như y hệt thì coi như thay thế được hoàn toàn
-NGUONG_DE_DOA = (50, 25)    # điểm đe doạ: từ 50 là cao, từ 25 là vừa
-Z_TANG_TOC = 3.5            # z-score bền; chọn trên Olist 2017 (báo nhầm ≤ 2%), chấm 2018: báo nhầm 1,2%, 55% cảnh báo đúng
+Z_TANG_TOC = 3.5            # modified z của Iglewicz–Hoaglin (NIST 1.3.5.17); chọn trên Olist 2017 (báo nhầm ≤ 2%), chấm 2018: báo nhầm 1,2%, 55% cảnh báo đúng
 TUAN_TOI_THIEU = 4
 LANG_GIENG_TAG = 10
 TOI_THIEU_SHOP_NHOM = 6
@@ -137,8 +137,9 @@ class MayGiong:
                 break
         return ra
 
-    def lang_gieng(self, listing_id: str, k: int, nguong: float = NGUONG_GIONG) -> List[Tuple[int, float]]:
-        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, không khác chất liệu, đạt ngưỡng."""
+    def lang_gieng(self, listing_id: str, k: int, nguong: float = NGUONG_GIONG,
+                   loc_chat_lieu: bool = True) -> List[Tuple[int, float]]:
+        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, không khác chất liệu (nếu loc_chat_lieu), đạt ngưỡng."""
         i = self.vi_tri.get(listing_id)
         if i is None or self.x is None:
             return []
@@ -147,7 +148,7 @@ class MayGiong:
         ung = sorted(((float(sim[j]), j) for j, r in enumerate(self.dong)
                       if j != i and r.get("product_type_id") == loai
                       and r["shop_id"] != self.dong[i]["shop_id"] and sim[j] >= nguong
-                      and not self.khac_chat_lieu(i, j)), reverse=True)
+                      and not (loc_chat_lieu and self.khac_chat_lieu(i, j))), reverse=True)
         # Đối thủ trực tiếp phải có điểm chung có nghĩa, không chỉ giống nhau ở văn mẫu mô tả.
         return [(j, s) for s, j in ung if s >= NGUONG_KHONG_LY_DO or self._ly_do(i, j, 1)][:k]
 
@@ -189,7 +190,8 @@ def gia_de_xuat(may: MayGiong, listing_id: str, k: int = K_GIA) -> Tuple[Optiona
     """Giá của đối thủ trực tiếp (kNN theo độ giống), pha với mặt bằng cùng loại theo độ tin cậy.
     Trả (kết quả, lý do nếu không có)."""
     i = may.vi_tri.get(listing_id)
-    lg = [(j, s) for j, s in may.lang_gieng(listing_id, k) if may.dong[j].get("price_vnd")]
+    # Không lọc chất liệu: trên Amazon lọc không làm giá sát hơn (chênh 0,0 điểm) mà bớt mẫu; chất liệu đã nằm trong TF-IDF.
+    lg = [(j, s) for j, s in may.lang_gieng(listing_id, k, loc_chat_lieu=False) if may.dong[j].get("price_vnd")]
     if i is None or len(lg) < TOI_THIEU_GIA:
         return None, (f"Mới tìm được {len(lg)} sản phẩm đủ giống cùng loại trên sàn, "
                       f"cần ít nhất {TOI_THIEU_GIA} để AI tính giá đối thủ trực tiếp")
@@ -198,10 +200,11 @@ def gia_de_xuat(may: MayGiong, listing_id: str, k: int = K_GIA) -> Tuple[Optiona
     cung_loai = np.array([float(r["price_vnd"]) for r in may.dong
                           if r.get("product_type_id") == may.dong[i].get("product_type_id")
                           and r["shop_id"] != may.dong[i]["shop_id"] and r.get("price_vnd")])
-    # Đo trên dữ liệu thử: kNN đơn lẻ dao động hơn trung vị cùng loại; pha theo độ tin cậy thì không kém.
-    a = len(lg) / (len(lg) + TRON_GIA) * min(1.0, float(sim.mean()) / 0.5)
+    # Amazon: chỉ kNN thì khoảng quá hẹp (giá thật nằm trong 40%); pha nhẹ với cùng loại giữ khoảng chứa ~48%.
+    a =len(lg) / (len(lg) + TRON_GIA) * min(1.0, float(sim.mean()) / TRAN_GIONG_GIA)
     tron = lambda q: int(round((a * _phan_vi_trong_so(gia, sim, q) + (1 - a) * float(np.quantile(cung_loai, q))) / 1000) * 1000)
     giua, thap, cao = tron(0.5), tron(0.25), tron(0.75)
+    # Sai số trung vị trên Amazon: cao 6,8%, vừa 18,7%, thấp 32,1%.
     tin = "high" if len(lg) >= 6 and sim.mean() >= 0.35 else "medium" if sim.mean() >= 0.2 else "low"
     return {
         "suggested_vnd": giua,
@@ -268,39 +271,32 @@ def may_giong(dong: Sequence[Dict[str, Any]], doc_mo_ta, doc_ten_tag) -> MayGion
     return _CACHE["may"]
 
 
-def suc_manh_shop(dong: Sequence[Dict[str, Any]]) -> Dict[str, float]:
-    """0–1: số đã bán 90 ngày so với shop bán nhiều nhất; sàn chưa có đơn thì dùng số sản phẩm."""
-    ban: Counter = Counter()
-    so: Counter = Counter()
-    for r in dong:
-        ban[r["shop_id"]] += r.get("est_sales_90d") or 0
-        so[r["shop_id"]] += 1
-    goc = ban if any(ban.values()) else so
-    m = max(goc.values(), default=0)
-    return {sid: (v / m if m else 0.0) for sid, v in goc.items()}
-
-
-def diem_de_doa(may: MayGiong, listing_id: str, shop_toi: str, manh: Dict[str, float]) -> Optional[Dict[str, Any]]:
-    """Điểm 0–100 = độ giống với hàng của tôi × sức mạnh shop đối thủ × áp lực giá (họ rẻ hơn)."""
+def diem_de_doa(may: MayGiong, listing_id: str, shop_toi: str) -> Optional[Dict[str, Any]]:
+    """Mức cạnh tranh từ hai sự thật, không hệ số tự đặt: độ giống (ngưỡng đã đo trên Shopee) và họ có rẻ hơn không.
+    Cao = gần như trùng và rẻ hơn; vừa = gần như trùng, hoặc tương tự và rẻ hơn; còn lại là thấp."""
     i = may.vi_tri.get(listing_id)
     if i is None:
         return None
     j, s = may.khop_nhat(listing_id, shop_toi)
     gia_ho = may.dong[i].get("price_vnd")
     gia_toi = may.dong[j].get("price_vnd") if j is not None else None
-    lech = (gia_toi - gia_ho) / gia_toi if gia_ho and gia_toi else None      # > 0: họ rẻ hơn
-    m = manh.get(may.dong[i]["shop_id"], 0.0)
-    diem = round(100 * min(1.0, s / GIONG_TOI_DA) * (0.6 + 0.4 * m) * (1 + min(0.5, max(0.0, lech or 0))) / 1.5)
+    lech = round((gia_toi - gia_ho) / gia_toi * 100) if gia_ho and gia_toi else None   # > 0: họ rẻ hơn (% như trên trang)
+    trung, re = s >= NGUONG_GAN_NHU_Y_HET, (lech or 0) > 0
     return {
-        "score": diem,
-        "level": "high" if diem >= NGUONG_DE_DOA[0] else "medium" if diem >= NGUONG_DE_DOA[1] else "low",
+        "level": "high" if trung and re else "medium" if trung or (re and s >= NGUONG_GIONG) else "low",
         "similarity": round(s, 3),
-        "near_identical": s >= NGUONG_GAN_NHU_Y_HET,
+        "near_identical": trung,
         "matched_product_id": may.dong[j]["listing_id"] if j is not None else None,
         "matched_title": may.dong[j].get("title") if j is not None else None,
-        "price_gap_pct": round(lech * 100) if lech is not None else None,
-        "shop_strength": round(m, 2),
+        "price_gap_pct": lech,
     }
+
+
+def thu_tu_de_doa(th: Optional[Dict[str, Any]]) -> Tuple[int, float, int]:
+    """Mức cao trước; cùng mức thì giống hơn trước, rồi rẻ hơn nhiều hơn trước."""
+    th = th or {}
+    return ({"high": 0, "medium": 1, "low": 2}.get(th.get("level"), 3), -(th.get("similarity") or 0),
+            -(th.get("price_gap_pct") or 0))
 
 
 def tang_dot_bien(tuan: Dict[str, List[float]]) -> List[Dict[str, Any]]:

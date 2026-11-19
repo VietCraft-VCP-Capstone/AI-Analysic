@@ -27,7 +27,7 @@ TU_DIEN = {
     "rayon": ["rayon", "viscose", "modal", "tencel"],
     "tre": ["!tre", "bamboo", "sợi tre"],
     "da thật": ["da thật", "da bò", "leather", "genuine leather"],
-    "da PU": ["da pu", "pu", "simili", "giả da", "da tổng hợp"],
+    "da PU": ["da pu", "pu", "simili", "giả da", "da tổng hợp", "faux leather", "vegan leather", "pu leather", "leatherette"],
     "da": ["!da"],
     "gốm sứ": ["gốm sứ", "sành sứ", "!gốm", "!sứ", "!sành", "ceramic", "porcelain"],
     "thủy tinh": ["thủy tinh", "thuỷ tinh", "glass"],
@@ -36,13 +36,17 @@ TU_DIEN = {
     "nhôm": ["nhôm", "aluminum", "aluminium"],
     "đồng": ["!đồng", "brass", "copper"],
     "bạc": ["!bạc", "silver"],
-    "kim loại": ["kim loại", "metal", "hợp kim", "thép", "!sắt", "steel"],
+    "kim loại": ["kim loại", "metal", "hợp kim", "thép", "!sắt", "steel", "nickel silver", "silver plated", "silver-plated", "mạ bạc"],
     "nhựa": ["nhựa", "plastic", "pp", "abs", "pvc"],
     "mica": ["mica", "acrylic"],
     "silicone": ["silicone", "silicon"],
     "cao su": ["cao su", "rubber"],
     "gỗ": ["!gỗ", "wood", "mdf", "plywood", "gỗ thông"],
     "giấy": ["giấy", "paper", "kraft", "giấy mỹ thuật"],
+    # Cụm không phải chất liệu (đồng hồ, bông tai, màu bạc…): khớp trước (dài hơn) rồi bỏ, để "bạc", "đồng" không bị đọc nhầm.
+    "": ["đồng hồ", "đồng phục", "đồng giá", "bông tai", "bông hoa", "màu bạc", "màu đồng", "màu gỗ", "vân gỗ",
+         "silver tone", "silver-tone", "silver color", "silver colored", "copper color", "copper colored", "gold tone",
+         "satin finish", "cotton candy"],
 }
 
 
@@ -78,7 +82,7 @@ def chuan_hoa(m: Any) -> Tuple[str, ...]:
         for mt in rx.finditer("".join(a if dau else b)):
             tim.add(ten)
             a[mt.start():mt.end()] = b[mt.start():mt.end()] = " " * (mt.end() - mt.start())
-    return tuple(sorted(tim))
+    return tuple(sorted(tim - {""}))
 
 
 def tap_chuan(ds: Iterable[Any]) -> Set[str]:
