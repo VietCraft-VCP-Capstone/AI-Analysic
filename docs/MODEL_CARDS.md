@@ -5,7 +5,7 @@
 - Repo ONNX: https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX
 - Revision ghim: `ba1f3b0843f24bc5417d38e19c37b287d719b2f4`
 - Model gốc: https://huggingface.co/google/siglip2-base-patch16-224
-- Thư mục cache: `~/.cache/vietcraft-li/siglip2-base-patch16-224` (đổi được bằng biến môi trường `LI_MODEL_DIR`)
+- Thư mục model: `vietcraft/ai-data-train-prod/models/siglip2-base-patch16-224` nếu đã tạo, không thì `~/.cache/vietcraft-li/siglip2-base-patch16-224` (đổi được bằng biến môi trường `LI_MODEL_DIR`)
 - Tải lại: `cd AI-Analysic && .venv/bin/python -m scripts.li.fetch_models`
 
 ## Giấy phép
