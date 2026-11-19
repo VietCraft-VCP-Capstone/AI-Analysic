@@ -164,6 +164,20 @@ def backtest(series: Dict[str, pd.Series], seeds=SEEDS):
     return {"folds": folds}, resids
 
 
+def evaluate_validation_gate(folds: List[Dict[str, Any]], margin: float = 0.97) -> Tuple[bool, float]:
+    """Cổng validation nghiêm: thắng seasonal-naive ở MỌI FOLD (biên >=3%) và coverage [0.70, 0.90] ở MỌI FOLD lẫn trung bình."""
+    if not folds:
+        return False, 0.0
+    beats_all = all(
+        f["scaled_mae_model"] < margin * f["scaled_mae_naive"]
+        and f["wmape_model"] < margin * f["wmape_naive"]
+        for f in folds
+    )
+    fold_cov_ok = all(0.70 <= f["coverage_p10_p90"] <= 0.90 for f in folds)
+    cov = float(np.mean([f["coverage_p10_p90"] for f in folds]))
+    return bool(beats_all and fold_cov_ok and 0.70 <= cov <= 0.90), cov
+
+
 def main() -> None:
     t0 = time.time()
     series = {k: v for k, v in weekly_series().items() if len(v) >= 200}
@@ -179,12 +193,7 @@ def main() -> None:
               f"wMAPE model={f['wmape_model']} naive={f['wmape_naive']} | cover80={f['coverage_p10_p90']}", flush=True)
 
     avg = lambda key: float(np.mean([f[key] for f in bt["folds"]]))
-    # Cổng nghiêm: thắng naive Ở MỌI FOLD, cả 2 chỉ số, biên >= 3%.
-    MARGIN = 0.97
-    beats_all = all(f["scaled_mae_model"] < MARGIN * f["scaled_mae_naive"]
-                    and f["wmape_model"] < MARGIN * f["wmape_naive"] for f in bt["folds"])
-    cov = avg("coverage_p10_p90")
-    validated = bool(beats_all and 0.70 <= cov <= 0.90)
+    validated, cov = evaluate_validation_gate(bt["folds"])
 
     # Hiệu chỉnh conformal: học trên fold 1, kiểm trên fold 2 (và ngược lại), rồi gộp cả hai để dùng thật.
     check = {}
@@ -216,7 +225,7 @@ def main() -> None:
         "avg_coverage_p10_p90": round(cov, 4),
         "improvement_vs_naive_scaled_mae_pct": round(100 * (1 - avg("scaled_mae_model") / avg("scaled_mae_naive")), 1),
         "validated": validated,
-        "validation_rule": "thắng seasonal-naive Ở MỌI FOLD trên cả sMAE và wMAPE với biên >=3%, và coverage P10-P90 thô trong [0.70,0.90]",
+        "validation_rule": "thắng seasonal-naive Ở MỌI FOLD trên cả sMAE và wMAPE với biên >=3%, và coverage P10-P90 thô Ở MỌI FOLD lẫn trung bình trong [0.70,0.90]",
         "conformal_residual_quantiles": conformal,
         "conformal_cross_check_coverage": check,
         "conformal_note": "q10/q90 của (y/scale - dự báo) theo nhóm tầm; cộng vào dự báo để có khoảng 80% đã hiệu chỉnh",

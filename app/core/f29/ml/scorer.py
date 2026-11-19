@@ -25,7 +25,7 @@ FEW_PEERS = "Sàn mới có {n} sản phẩm có đơn trong 180 ngày, cần í
 
 @lru_cache(maxsize=1)
 def load_model():
-    meta = json.loads((DIR / "listing_model.json").read_text())
+    meta = json.loads((DIR / "listing_model.json").read_text(encoding="utf-8"))
     if meta["sklearn"] != sklearn.__version__:
         raise RuntimeError(f"Model F29 học bằng scikit-learn {meta['sklearn']}, đang chạy {sklearn.__version__}")
     return joblib.load(DIR / "listing_model.joblib"), meta

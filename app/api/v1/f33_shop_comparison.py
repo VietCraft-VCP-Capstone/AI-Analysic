@@ -33,6 +33,11 @@ def _chuan_hoa(gia_tri, tat_ca):
     return round((gia_tri - lo) / (hi - lo) * 100, 1)
 
 
+def _thang_sao(v):
+    """Trục sao dùng thang cố định 1–5: min–max (BR-192) kéo chênh 0,03 sao thành cả trục 0–100."""
+    return None if v is None else round((v - 1) / 4 * 100, 1)
+
+
 @router.get("/api/analytics/shop-comparison", tags=["F33 · Nhi"])
 def shop_comparison(shop_id: str = CurrentShop):
     ng = nguon_doi_thu(shop_id)
@@ -101,7 +106,7 @@ def shop_comparison(shop_id: str = CurrentShop):
     cot = {t: [tho_all[sid][t] for sid in [shop_id, *top] if tho_all[sid][t] is not None] for t in TRUC}
 
     def chuan(sid):
-        return [_chuan_hoa(tho_all[sid][t], cot[t]) for t in TRUC]
+        return [_thang_sao(tho_all[sid][t]) if t == "avg_rating" else _chuan_hoa(tho_all[sid][t], cot[t]) for t in TRUC]
 
     def tho_tron(sid):
         return {t: (round(v, 2) if isinstance(v, float) else v) for t, v in tho_all[sid].items()}
@@ -118,7 +123,8 @@ def shop_comparison(shop_id: str = CurrentShop):
         "segment_reason": f"{dem_cat[phan_khuc]}/{len(cua_toi)} sản phẩm của shop nằm ở danh mục này",
         "axes": TRUC,
         "axes_vi": TEN_TRUC_VI,
-        "normalization": "min-max 0-100 trên shop bạn và 5 đối thủ; 100 là tốt hơn, riêng giá: 100 là đắt nhất",
+        "normalization": ("min-max 0-100 trên shop bạn và 5 đối thủ; riêng điểm đánh giá theo thang cố định 1–5 sao; "
+                          "100 là tốt hơn, riêng giá: 100 là đắt nhất"),
         "neutral_axes": ["avg_price"],
         "ranked_by": xep_theo,
         "me": chuan(shop_id),

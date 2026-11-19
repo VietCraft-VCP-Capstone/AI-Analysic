@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 from app.config import SEED_KEYWORDS
-from app.core.calendar_vn import upcoming_events
+from app.core.listing_intel.events import upcoming_events
 
 from . import fusion, live_data, store, trend_store
 from .intel import analyze

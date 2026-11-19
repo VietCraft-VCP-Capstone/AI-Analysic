@@ -11,9 +11,11 @@ Chọn cách tính cho sàn ít shop, ít dữ liệu:
 import math
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
+from statistics import median
 from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
+from scipy.stats import binomtest, false_discovery_control, mannwhitneyu
 
 from app.api.v1._materials import chuan_hoa
 from app.api.v1._competitor_ai import tang_dot_bien
@@ -21,10 +23,12 @@ from app.api.v1._competitor_ai import tang_dot_bien
 SO_TUAN = 8
 CUA_SO_MOI_NGAY = 56          # 8 tuần, cùng cửa sổ với phần Theo dõi
 Z_THI_PHAN = 1.96          # thị phần đổi thật ở mức tin cậy 95%, không phải dao động ngẫu nhiên
-TOI_THIEU_XU_HUONG = 10    # dưới 10 sản phẩm bán trong 8 tuần thì chưa nói lên hay xuống
-CUNG_PHAN_KHUC = 0.10      # giá trung vị lệch dưới 10% là cùng phân khúc giá
-GAP_THAM_KHAO = 2.0        # shop đáng tham khảo: cùng phân khúc mà bán gấp từ 2 lần bạn
+TOI_THIEU_XU_HUONG = 10    # OpenIntro: mỗi nửa 4 tuần cần ≥ 10 lần "của shop" và ≥ 10 lần "của shop khác" (tỉ lệ gộp)
+CUNG_PHAN_KHUC = 0.10      # định nghĩa "cùng tầm giá"; Olist: mọi mức 5–30% đều cho ≥ 80% shop chọn ra vẫn bán hơn
+GAP_THAM_KHAO = 2.0        # Olist 2018: 85,4% shop được chọn vẫn bán hơn bạn sau 90 ngày (RESULT_OLIST_REFERENCE_SHOP)
 TOI_THIEU_VUNG_GIA = 3     # dưới 3 sản phẩm có đơn thì chưa nói được vùng giá bán chạy
+IT_DU_LIEU_VUNG = 10       # Olist: khoảng từ 3–9 sản phẩm chỉ chứa 36,9% lượng bán, từ 10–29 sản phẩm 52,3% (lý thuyết 50%)
+MUC_Y_NGHIA = 0.05         # bảng so sánh chỉ tô màu khi khác biệt có ý nghĩa thống kê 5%, cùng mức với xu hướng
 
 
 def _ngay(x: Any) -> Optional[datetime]:
@@ -44,9 +48,11 @@ def _xu_huong(tuan_shop: Sequence[int], tuan_tong: Sequence[int]) -> Dict[str, A
         return {"kind": "surge", "last_week": vot[0]["last_week"], "baseline": vot[0]["baseline"]}
     a0, a1 = sum(tuan_shop[:SO_TUAN // 2]), sum(tuan_shop[SO_TUAN // 2:])
     n0, n1 = sum(tuan_tong[:SO_TUAN // 2]), sum(tuan_tong[SO_TUAN // 2:])
-    if a0 + a1 < TOI_THIEU_XU_HUONG or not n0 or not n1:
+    if not n0 or not n1:
         return {"kind": None}
     p = (a0 + a1) / (n0 + n1)
+    if min(n0, n1) * min(p, 1 - p) < TOI_THIEU_XU_HUONG:
+        return {"kind": None}
     se = math.sqrt(p * (1 - p) * (1 / n0 + 1 / n1))
     z = (a1 / n1 - a0 / n0) / se if se else 0.0
     return {"kind": "up" if z >= Z_THI_PHAN else "down" if z <= -Z_THI_PHAN else "stable",
@@ -68,13 +74,15 @@ def tong_hop_shop(rows: List[dict], toi: str, tuan: Dict[str, List[int]], trung:
     cua_toi = theo_shop.get(toi, [])
     loai_toi = Counter(_loai(r) for r in cua_toi)
 
-    shops = []
+    shops, mau_tl = [], {}
     for sid, ds in theo_shop.items():
         gia = [r["price_vnd"] for r in ds]
         co_dg = [r for r in ds if r.get("n_reviews") and r.get("rating_shrunk") is not None]
         cl = Counter(c for r in ds for c in {c for m in r.get("materials") or [] for c in chuan_hoa(m)})
         ban = sum(r["est_sales_90d"] for r in ds)
         phan_hoi = next((r["shop_response_seconds"] for r in ds if r.get("shop_response_seconds")), None)
+        mau_tl[sid] = next((r["shop_response_samples"] for r in ds if r.get("shop_response_samples")), [])
+        n_dg = sum(r.get("n_reviews") or 0 for r in ds)
         ti_le = next((r["shop_reply_rate"] for r in ds if r.get("shop_reply_rate") is not None), None)
         w = tuan.get(sid) or [0] * SO_TUAN
         d: Dict[str, Any] = {
@@ -88,7 +96,9 @@ def tong_hop_shop(rows: List[dict], toi: str, tuan: Dict[str, List[int]], trung:
             "share_pct": round(100 * ban / tong_ban, 1) if tong_ban else 0.0,
             # Sao đã co ngót theo số lượt (rating_shrunk), gộp theo số lượt đánh giá của từng sản phẩm.
             "rating": round(sum(r["rating_shrunk"] * r["n_reviews"] for r in co_dg) / sum(r["n_reviews"] for r in co_dg), 2) if co_dg else None,
-            "n_reviews": sum(r.get("n_reviews") or 0 for r in ds),
+            # Sao thật (trung bình mọi lượt, không co ngót) để hiện cho người bán, khớp trang shop.
+            "rating_real": round(sum(r.get("rating_sum") or 0 for r in ds) / n_dg, 2) if n_dg else None,
+            "n_reviews": n_dg,
             "favorites": sum(r.get("favorite_count") or 0 for r in ds),
             "response_minutes": round(phan_hoi / 60) if phan_hoi else None,
             "reply_rate": ti_le,
@@ -96,6 +106,7 @@ def tong_hop_shop(rows: List[dict], toi: str, tuan: Dict[str, List[int]], trung:
             "trend": _xu_huong(w, tuan_tong),
             "similar_listings": trung.get(sid, 0),
             "rivalry": None, "shared_types": [], "is_peer": False,
+            "response_better": None, "more_new": False,
         }
         if sid != toi and cua_toi:
             # Mức đối đầu: với từng loại hàng tôi bán, họ có bán không và giá gần tới đâu (min/max của hai giá trung vị).
@@ -109,6 +120,23 @@ def tong_hop_shop(rows: List[dict], toi: str, tuan: Dict[str, List[int]], trung:
         shops.append(d)
 
     me = next((d for d in shops if d["is_me"]), None)
+    kiem = []      # (shop, ô, p, giá trị khi có ý nghĩa)
+    for d in shops:
+        if me is None or d["is_me"]:
+            continue
+        # Thời gian trả lời từng lượt hỏi: Mann–Whitney (1947), không cần giả định phân phối chuẩn.
+        a, b = mau_tl[d["shop_id"]], mau_tl[me["shop_id"]]
+        if a and b and median(a) != median(b):
+            kiem.append((d, "response_better", mannwhitneyu(a, b, alternative="two-sided").pvalue,
+                         "them" if median(a) < median(b) else "me"))
+        # Số sản phẩm mới trong cùng 8 tuần: so hai số đếm Poisson (Przyborowski & Wilenski 1940) = kiểm định nhị thức p = 0,5.
+        if d["new_8w"] > me["new_8w"]:
+            kiem.append((d, "more_new", binomtest(d["new_8w"], d["new_8w"] + me["new_8w"], 0.5).pvalue, True))
+    # Nhiều ô kiểm cùng lúc: hiệu chỉnh Benjamini–Hochberg (1995), trong các ô được tô trung bình ≤ 5% là tô nhầm.
+    if kiem:
+        for (d, o, _, v), q in zip(kiem, false_discovery_control([x[2] for x in kiem], method="bh")):
+            if q < MUC_Y_NGHIA:
+                d[o] = v
     if me and me["price_vnd"]["median"]:
         m = me["price_vnd"]["median"]
         ung = [d for d in shops if not d["is_me"] and abs(d["price_vnd"]["median"] - m) / m <= CUNG_PHAN_KHUC

@@ -25,6 +25,7 @@ import pandas as pd
 from scipy.sparse import csr_matrix, vstack
 from sklearn.feature_extraction.text import TfidfVectorizer
 
+from app.services.f42 import config
 from app.services.f42.vi_text import clean_tokens, normalize_nfc, strip_accents
 
 TOP_K = 40                 # số ứng viên lấy ra trước khi lọc
@@ -66,7 +67,7 @@ class Comparable:
     title: str
     price: float
     similarity: float
-    source: str           # "tiki" | "vietcraft"
+    source: str           # "tiki" | "tiki_fresh" | "vietcraft" | "vietcraft_sold" | "etsy"
     sold: int = 0
     group: str = ""
     category_ids: List[str] = field(default_factory=list)
@@ -213,13 +214,16 @@ def load_market_rows(db_data: Any, days: int = MARKET_FRESH_DAYS) -> List[Dict[s
     since = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)
     rows: Dict[str, Dict[str, Any]] = {}
 
-    def _add(key: str, title: str, price: float, sold: float) -> None:
+    def _add(key: str, title: str, price: float, sold: float, source: Optional[str] = None,
+             match: Optional[str] = None) -> None:
         if not (PRICE_MIN <= price <= PRICE_MAX):
             return
-        prep = _prep(title)
+        prep = _prep(match or title)
         if len(prep) < 3:
             return
         rows[key] = {"title": normalize_nfc(title), "prep": prep, "price": price, "sold": int(sold)}
+        if source:
+            rows[key]["source"] = source
 
     for d in db_data["external_market_products"].find(
         {}, {"external_id": 1, "title": 1, "price_vnd": 1, "sold_count": 1, "review_count": 1}
@@ -229,8 +233,14 @@ def load_market_rows(db_data: Any, days: int = MARKET_FRESH_DAYS) -> List[Dict[s
             _add(str(d.get("external_id") or d["_id"]), str(d.get("title") or ""), _num(d.get("price_vnd")), sold)
     # Bản mới cào ghi đè cùng sản phẩm (cùng khoá tiki_<id>) vì giá mới hơn
     for d in db_data["market_price_listing"].find(
-        {"is_valid": True, "last_seen_at": {"$gte": since}}, {"title": 1, "price": 1, "sold": 1}
+        {"is_valid": True, "last_seen_at": {"$gte": since}},
+        {"title": 1, "price": 1, "sold": 1, "source": 1, "match_title": 1},
     ):
+        if d.get("source") == "etsy":
+            # Tiêu đề Etsy là tiếng Anh nên không khớp được câu tiếng Việt: khớp bằng từ khóa tiếng Việt đã cào
+            if d.get("match_title"):
+                _add(str(d["_id"]), str(d.get("title") or ""), _num(d.get("price")), 0, "etsy", str(d["match_title"]))
+            continue
         _add(str(d["_id"]), str(d.get("title") or ""), _num(d.get("price")), _num(d.get("sold")))
     return list(rows.values())
 
@@ -594,6 +604,22 @@ class ComparableIndex:
         out.sort(key=lambda c: c.similarity, reverse=True)
         return self._diversify(out)[:top_k]
 
+    @staticmethod
+    def _vet_etsy(comps: List[Comparable]) -> List[Comparable]:
+        """
+        Etsy là nguồn phụ (thị trường quốc tế, thường cao hơn trong nước): có đủ giá trong nước thì chỉ giữ tin Etsy
+        nằm trong dải hợp lý quanh trung vị trong nước, và tối đa ETSY_MAX_COMPARABLES tin giống nhất.
+        """
+        etsy = [c for c in comps if c.source == "etsy"]
+        if not etsy:
+            return comps
+        local = [c for c in comps if c.source != "etsy"]
+        if len(local) >= MIN_COMPARABLES:
+            med = float(np.median([c.price for c in local]))
+            etsy = [c for c in etsy if config.ETSY_PRICE_BAND_LOW * med <= c.price <= config.ETSY_PRICE_BAND_HIGH * med]
+        etsy.sort(key=lambda c: c.similarity, reverse=True)
+        return local + etsy[:config.ETSY_MAX_COMPARABLES]
+
     # --------------------------------------------------------------- estimate
     def estimate(self, query: str, exclude_idx: Optional[int] = None) -> ComparableEstimate:
         cands, note, exact_tier = self.search_detail(query, exclude_idx=exclude_idx)
@@ -604,7 +630,7 @@ class ComparableIndex:
         # Đã phải nới điều kiện (ghi chú) thì các tin đều chỉ "cùng loại": không lọc thêm theo tin giống nhất,
         # nếu không 1 tin rất giống (thớt teak) sẽ loại hết các tin còn lại (thớt gỗ khác) → không ra giá.
         floor = MIN_SIM if note else max(MIN_SIM, REL_SIM * top_sim)
-        comps = [c for c in cands if c.similarity >= floor]
+        comps = self._vet_etsy([c for c in cands if c.similarity >= floor])
         sig = self.model_signature(query)
         is_exact = exact_tier
         exact = is_exact and sum(c.sold for c in comps) >= EXACT_MIN_SOLD
@@ -617,6 +643,7 @@ class ComparableIndex:
         sold = np.array([c.sold for c in comps])
         # Tin giống hơn và tin đã thực sự bán được (giá thị trường chấp nhận) nặng ký hơn
         w = sims ** 2 * (1.0 + 0.15 * np.log1p(sold))
+        w = w * np.array([config.ETSY_WEIGHT if c.source == "etsy" else 1.0 for c in comps])
 
         # Lọc ngoại lai bằng MAD trên log-giá
         med = weighted_quantile(logp, w, 0.5)
@@ -645,6 +672,9 @@ class ComparableIndex:
             # Đúng mẫu máy và đã bán thật nhiều: căn cứ mạnh dù số tin ít (Tiki gộp người bán vào 1 tin)
             confidence = "medium"
         match_note = note
+        if any(c.source == "etsy" for c in comps) and sum(1 for c in comps if c.source != "etsy") < MIN_COMPARABLES:
+            etsy_note = "Chưa đủ giá trong nước, đang tham khảo Etsy (thị trường quốc tế, thường cao hơn trong nước)."
+            match_note = f"{note} {etsy_note}" if note else etsy_note
         if match_note:  # phải nới điều kiện (khác mẫu / thương hiệu / chất liệu) → căn cứ yếu
             confidence = "low"
 

@@ -7,11 +7,15 @@ Chạy ngầm theo pattern của `f29_scheduler.py`:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
 
@@ -52,28 +56,43 @@ def _release_lock() -> None:
         pass
 
 
-def run_once(force: bool = False) -> Dict[str, Any]:
+def _run_training_subprocess() -> Dict[str, Any]:
+    """Chạy train.py trong tiến trình con tách biệt khỏi web server để tránh nghẽn GIL/RAM."""
+    app_root = Path(__file__).resolve().parents[2]
+    subprocess.run(
+        [sys.executable, "-m", "app.core.seasonal_dl.train"],
+        cwd=str(app_root),
+        check=True,
+    )
+    meta_path = Path(__file__).resolve().parent / "seasonal_dl" / "model" / "meta.json"
+    if meta_path.exists():
+        return json.loads(meta_path.read_text("utf-8"))
+    return {}
+
+
+def run_once(force: bool = False, use_subprocess: bool = True) -> Dict[str, Any]:
     """Thực thi 1 chu kỳ retrain + validation gate và nạp lại model trong bộ nhớ."""
     if not force and not _acquire_lock():
         return {"status": "skipped_locked"}
 
     started = datetime.now(TZ_VN)
     try:
-        meta = dl_train.train()
-        forecaster.reload() if hasattr(forecaster, "reload") else None
+        meta = _run_training_subprocess() if use_subprocess else (dl_train.train() or {})
+        if hasattr(forecaster, "reload"):
+            forecaster.reload()
         payload = {
             "_id": STATE_ID,
             "last_run_at": started.isoformat(),
             "finished_at": datetime.now(TZ_VN).isoformat(),
             "status": "validated" if meta.get("validated") else "rejected_by_gate",
             "validated": bool(meta.get("validated")),
-            "improvement_vs_naive_pct": meta.get("improvement_vs_naive_pct"),
-            "avg_coverage_raw": meta.get("avg_coverage_raw"),
+            "improvement_vs_naive_scaled_mae_pct": meta.get("improvement_vs_naive_scaled_mae_pct"),
+            "avg_coverage_p10_p90": meta.get("avg_coverage_p10_p90"),
         }
         try:
             db_live()["scheduler_state"].replace_one({"_id": STATE_ID}, payload, upsert=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("seasonal_dl scheduler_state save failed: %s", exc)
         return payload
     except Exception as exc:
         log.exception("seasonal_dl retrain failed: %s", exc)

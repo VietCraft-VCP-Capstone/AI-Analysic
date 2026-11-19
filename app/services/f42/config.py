@@ -11,6 +11,13 @@ COST_MIN_SUGGEST_RATIO: float = float(os.getenv("F42_COST_MIN_SUGGEST_RATIO", 1.
 DEFAULT_TARGET_MARGIN: float = float(os.getenv("F42_DEFAULT_TARGET_MARGIN", 0.30))
 PRICE_ROUND_STEP: int = int(os.getenv("F42_PRICE_ROUND_STEP", 1000))
 
+# Etsy là nguồn tham khảo PHỤ (thị trường quốc tế, thường cao hơn trong nước): trọng số thấp và đối chiếu với giá trong nước
+ETSY_WEIGHT: float = float(os.getenv("F42_ETSY_WEIGHT", 0.4))
+ETSY_MAX_COMPARABLES: int = int(os.getenv("F42_ETSY_MAX_COMPARABLES", 8))
+ETSY_PRICE_BAND_LOW: float = float(os.getenv("F42_ETSY_PRICE_BAND_LOW", 0.4))     # × trung vị giá trong nước
+ETSY_PRICE_BAND_HIGH: float = float(os.getenv("F42_ETSY_PRICE_BAND_HIGH", 2.5))
+ETSY_MIN_FAVORERS: int = int(os.getenv("F42_ETSY_MIN_FAVORERS", 5))               # lượt yêu thích tối thiểu để coi là tin hợp lệ
+
 CATEGORY_MIN_SCORE: float = float(os.getenv("F42_CATEGORY_MIN_SCORE", 0.25))
 CATEGORY_TOP_K: int = int(os.getenv("F42_CATEGORY_TOP_K", 3))
 CATEGORY_AUTOCONFIRM_SCORE: float = float(os.getenv("F42_CATEGORY_AUTOCONFIRM_SCORE", 0.60))
@@ -21,12 +28,7 @@ TAG_GENERIC_STOPLIST: List[str] = [
     "đẹp", "hot", "rẻ", "tốt", "hàng mới", "giá rẻ", "freeship", "xinh", "cao cấp", "uy tín", "chất lượng"
 ]
 
-# gemini-2.5-flash đã ngừng cấp cho key mới (404); gemini-flash-latest hay hết hạn mức (429)
-LLM_MODEL: str = os.getenv("F42_LLM_MODEL", "gemini-3.5-flash")
-# Model dự phòng khi model chính lỗi (phân tách bằng dấu phẩy). Giữ ngắn để không cộng dồn timeout.
-LLM_FALLBACK_MODELS: List[str] = [
-    m.strip() for m in os.getenv("F42_LLM_FALLBACK_MODELS", "gemini-3-flash-preview,gemini-3.1-flash-lite,gemini-flash-lite-latest").split(",") if m.strip()
-]
+# Model LLM (OpenAI chính, Gemini dự phòng) cấu hình ở app/services/llm/config.py
 LLM_TEMPERATURE: float = float(os.getenv("F42_LLM_TEMPERATURE", 0.4))
 LLM_TOP_P: float = float(os.getenv("F42_LLM_TOP_P", 0.9))
 LLM_MAX_OUTPUT_TOKENS: int = int(os.getenv("F42_LLM_MAX_OUTPUT_TOKENS", 1500))

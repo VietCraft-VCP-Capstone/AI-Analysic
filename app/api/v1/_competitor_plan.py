@@ -3,12 +3,15 @@ Không dùng mô hình ngôn ngữ: cùng số liệu luôn ra cùng kế hoạc
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
-from app.api.v1._competitor_landscape import vung_ban_chay
+from app.api.v1._competitor_ai import thu_tu_de_doa
+from app.api.v1._competitor_landscape import IT_DU_LIEU_VUNG, vung_ban_chay
 
 TOI_DA_VIEC = 10      # trang chia 5 việc mỗi trang, trang đầu vẫn là 5 việc gấp nhất
 MOI_LOAI = 2          # mỗi loại việc tối đa 2 dòng để kế hoạch không toàn một việc
 THU_TU_MUC = {"gap": 0, "quan_trong": 1, "nen_lam": 2, "duy_tri": 3}
-VUOT_VUNG_GIA = 1.05  # giá thấp nhất của bạn vượt quá 5% trên vùng bán chạy mới nhắc
+# Sai số trung vị của giá đề xuất trên Amazon Handmade theo độ tin cậy: lệch ít hơn mức này thì có thể chính AI sai.
+SAI_SO_GIA = {"high": 0.068, "medium": 0.187, "low": 0.321}
+DANH_GIA_DU = 5       # Spiegel Research Center 2017: 5 đánh giá đầu làm khả năng được mua tăng mạnh nhất (+270%)
 
 
 def _tien(v: Optional[float]) -> str:
@@ -44,15 +47,16 @@ def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: D
                        "items": [{"title": x["title"], "mine": x["threat"]["matched_title"],
                                   "similarity_pct": round(x["threat"]["similarity"] * 100),
                                   "cheaper_pct": x["threat"]["price_gap_pct"] if (x["threat"].get("price_gap_pct") or 0) > 0 else None}
-                                 for x in sorted(sao, key=lambda x: -x["threat"]["score"])[:2]]})
+                                 for x in sorted(sao, key=lambda x: thu_tu_de_doa(x["threat"]))[:2]]})
     for s in (f36 or {}).get("surging") or []:
         su.append({"kind": "tang_toc", "shop_id": s["shop_id"], "shop": s.get("shop_name"),
                    "last_week": s["last_week"], "baseline": round(s["baseline"])})
     for p in f35_theo_sp:
         g, gia = p.get("ai_price"), p.get("my_price")
-        # Chỉ báo khi lệch cả khoảng đề xuất lẫn khoảng giá đối thủ thật: shop cao cấp vẫn trong khoảng đối thủ thì để yên.
-        if g and gia and ((gia > g["high_vnd"] * 1.05 and gia > g["rival_price_max_vnd"])
-                          or (gia < g["low_vnd"] * 0.95 and gia < g["rival_price_min_vnd"])):
+        # Chỉ báo khi lệch khỏi khoảng đề xuất nhiều hơn sai số của AI ở độ tin cậy đó, và ngoài khoảng giá đối thủ thật.
+        e = SAI_SO_GIA.get((g or {}).get("confidence"), SAI_SO_GIA["low"])
+        if g and gia and ((gia > g["high_vnd"] * (1 + e) and gia > g["rival_price_max_vnd"])
+                          or (gia < g["low_vnd"] * (1 - e) and gia < g["rival_price_min_vnd"])):
             su.append({"kind": "gia", "product_id": p["product_id"], "title": p["title"], "my_price": int(gia),
                        "vs_suggested_pct": round((gia / g["suggested_vnd"] - 1) * 100),
                        "low": g["low_vnd"], "high": g["high_vnd"], "n_rivals": g["n_neighbors"],
@@ -71,9 +75,10 @@ def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: D
                for d in diem if not d["is_mine"] and d["product_type_name"] == loai and (not cl or cl & set(d["materials"]))]
         vung = vung_ban_chay(doi)
         lo, hi = min(d["price_vnd"] for d in toi), max(d["price_vnd"] for d in toi)
-        if vung and lo > vung["p75"] * VUOT_VUNG_GIA:
+        # Không thêm biên: Olist 2017, biên 0% đã tách được hàng bán kém (RESULT_OLIST_PRICE_BAND_MARGIN).
+        if vung and lo > vung["p75"]:
             su.append({"kind": "vung_gia", "type": loai, "n_mine": len(toi), "my_min": lo, "my_max": hi,
-                       "low": vung["p25"], "high": vung["p75"], "materials": sorted(cl),
+                       "low": vung["p25"], "high": vung["p75"], "n": vung["n"], "materials": sorted(cl),
                        "rival_max": max(d["price_vnd"] for d in doi)})
     ten_tag = (f34 or {}).get("tag_names") or {}
     for p in ((f34 or {}).get("per_product") or [])[:3]:
@@ -96,17 +101,17 @@ def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: D
             su.append({"kind": "theo_doi", "shop_id": s["shop_id"], "shop": s.get("shop_name"), "overlap": s["overlap"],
                        "categories": [ten_dm.get(c) or c for c in s.get("categories") or []]})
             break
-    # Đánh giá dồn vào nhóm bán chạy mà shop mình gần như chưa có: nên xin đánh giá.
+    # Đối thủ có đánh giá mà tổng của mình dưới mốc 5, tức chưa sản phẩm nào đạt mốc: nên xin đánh giá.
     top = (f32 or {}).get("competitors") or []
     tong_dg = sum(c.get("n_reviews") or 0 for c in top)
-    dg_top5 = sum(c.get("n_reviews") or 0 for c in top[:5])
     dg_toi = sum(x.get("n_reviews") or 0 for x in (f32 or {}).get("my_listings") or [])
-    if tong_dg >= 5 and dg_top5 / tong_dg >= 0.5 and dg_toi <= 3:
-        su.append({"kind": "danh_gia", "top5": dg_top5, "total": tong_dg, "mine": dg_toi})
+    if tong_dg >= DANH_GIA_DU and dg_toi < DANH_GIA_DU:
+        su.append({"kind": "danh_gia", "total": tong_dg, "mine": dg_toi})
     # Điểm mạnh nên giữ: trả lời khách nhanh nhất danh mục.
     khac = [s["response_minutes"] for s in shops if not s["is_me"] and s.get("response_minutes") is not None]
     if toi_shop and toi_shop.get("response_minutes") is not None and khac and toi_shop["response_minutes"] < min(khac):
-        su.append({"kind": "duy_tri", "mine": toi_shop["response_minutes"], "others_min": min(khac), "others_max": max(khac)})
+        su.append({"kind": "duy_tri", "mine": toi_shop["response_minutes"], "others_min": min(khac), "others_max": max(khac),
+                   "n_others": len(khac)})
     return su
 
 
@@ -133,13 +138,13 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if k == "de_doa":
             so = (f"gần như trùng {f['mine']}" + (f", rẻ hơn {f['cheaper_pct']}%" if f.get("cheaper_pct") else "")
                   if f.get("near_identical") else
-                  (f"rẻ hơn {f['mine']} {f['cheaper_pct']}%" if f.get("cheaper_pct") else f"giống {f['mine']}")
+                  (f"rẻ hơn {f['mine']} {f['cheaper_pct']}%" if f.get("cheaper_pct") else f"tương tự {f['mine']}")
                   + f", tương đồng {f['similarity_pct']}%")
             why = f"{_tien(f['price'])}, {so}." if f.get("price") else f"{so[0].upper()}{so[1:]}."
             viec.append({"action": f"{'Xem' if f['level'] == 'high' else 'Lưu ý'} \"{f['title']}\" của {f['shop']}",
                          "why": why, "link": f"/seller/competitors/{f['shop_id']}"})
         elif k == "ban_sao":
-            ly_do = " ".join(f"{x['title']} giống {x['mine']}" + (f", rẻ hơn {x['cheaper_pct']}%" if x.get("cheaper_pct") else "") + "."
+            ly_do = " ".join(f"{x['title']} gần như trùng {x['mine']}" + (f", rẻ hơn {x['cheaper_pct']}%" if x.get("cheaper_pct") else "") + "."
                              for x in f["items"])
             viec.append({"action": f"Đối chiếu {f['n']} mẫu của {f['shop']} gần như trùng hàng bạn",
                          "why": ly_do, "link": "/seller/insights/competitors#theo-doi"})
@@ -154,8 +159,9 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     else f"{_tien(f['my_min'] - f['high'])} – {_tien(f['my_max'] - f['high'])}")
             cl = f" {', '.join(f['materials'])}" if f["materials"] else ""
             # Vùng p25–p75 theo lượng bán chứa ít nhất một nửa lượng bán (giá rời rạc thì nhiều hơn), nên không ghi "50%".
+            it = f" (mới tính từ {f['n']} sản phẩm, ít dữ liệu)" if f["n"] < IT_DU_LIEU_VUNG else ""
             viec.append({"action": f"Rà soát giá {f['n_mine']} mẫu {f['type'].lower()}: cao hơn giá bán chạy {vuot}",
-                         "why": f"Bạn {gia_toi}. Giá bán chạy của {f['type'].lower()}{cl} {_tien(f['low'])} – {_tien(f['high'])}; "
+                         "why": f"Bạn {gia_toi}. Giá bán chạy của {f['type'].lower()}{cl} {_tien(f['low'])} – {_tien(f['high'])}{it}; "
                                 f"mẫu đắt nhất của đối thủ {_tien(f['rival_max'])}.",
                          "link": f"/seller/insights/competitors?loai={quote(f['type'])}#gia"})
         elif k == "tang_toc":
@@ -169,21 +175,24 @@ def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                          "link": f"/seller/competitors/{f['shop_id']}"})
         elif k == "tu_khoa":
             them = f", {f['better_sellers']} trong đó bán chạy hơn" if f["better_sellers"] else ""
-            viec.append({"action": f"Thêm từ khoá \"{f['tag']}\" cho {f['title']}",
-                         "why": f"{f['used_by']} mẫu giống đang dùng từ khoá này{them}.",
+            # Chỉ nêu sự thật đếm được: chưa có dữ liệu chứng minh thêm từ khoá thì bán tốt hơn.
+            viec.append({"action": f"Cân nhắc từ khoá \"{f['tag']}\" cho {f['title']}",
+                         "why": f"{f['used_by']} mẫu tương tự đang dùng từ khoá này{them}.",
                          "link": f"/seller/products?edit={f['product_id']}"})
         elif k == "theo_doi":
             viec.append({"action": f"Theo dõi {f['shop']}",
-                         "why": f"Có mẫu giống {f['overlap']} sản phẩm của bạn, nhiều nhất trong các shop bạn chưa theo dõi.",
+                         "why": f"Có mẫu tương tự {f['overlap']} sản phẩm của bạn, nhiều nhất trong các shop bạn chưa theo dõi.",
                          "link": f"/seller/competitors/{f['shop_id']}"})
         elif k == "danh_gia":
             viec.append({"action": "Xin đánh giá từ khách đã nhận hàng",
-                         "why": f"Top 5 chiếm {f['top5']}/{f['total']} lượt đánh giá của Top 20; shop bạn có {f['mine']}.",
+                         "why": f"Sản phẩm của bạn có tổng {f['mine']} lượt đánh giá, chưa mẫu nào đạt mốc {DANH_GIA_DU}; "
+                                f"Top 20 đối thủ có {f['total']}.",
                          "link": "/seller/orders"})
         elif k == "duy_tri":
+            lo, hi = _thoi_gian(f["others_min"]), _thoi_gian(f["others_max"])
             viec.append({"action": f"Giữ tốc độ trả lời khách {_thoi_gian(f['mine'])}",
-                         "why": f"Nhanh nhất trong các shop đo được từ chat 90 ngày; shop khác "
-                                f"{_thoi_gian(f['others_min'])} – {_thoi_gian(f['others_max'])}.",
+                         "why": f"Nhanh nhất trong {f['n_others'] + 1} shop đo được từ chat 90 ngày; "
+                                f"shop khác {lo if lo == hi else f'{lo} – {hi}'}.",
                          "link": "/seller/chat"})
         viec[-1]["priority"] = _muc(f)      # thứ tự xếp ở trên đã đi từ khẩn cấp tới duy trì
         if len(viec) == TOI_DA_VIEC:
