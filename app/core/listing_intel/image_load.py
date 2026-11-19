@@ -37,11 +37,20 @@ def _compute(url: str, save: bool):
     return {"vec": vec, **metrics}
 
 
+_MEMORY: dict = {}
+MEMORY_MAX = 2000
+
+
 def load(url: str, save: bool = True):
+    if url in _MEMORY:
+        return _MEMORY[url]
     hit = store.get_embedding(url)
-    if hit is not None:
-        return {"vec": hit[0], **hit[1]}
-    return _compute(url, save)
+    item = {"vec": hit[0], **hit[1]} if hit is not None else _compute(url, save)
+    if item is not None:
+        if len(_MEMORY) >= MEMORY_MAX:
+            _MEMORY.clear()
+        _MEMORY[url] = item
+    return item
 
 
 def load_all(urls: list[str], save: bool = True) -> list:

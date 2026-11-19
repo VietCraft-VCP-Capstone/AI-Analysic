@@ -1,12 +1,11 @@
 {
   "model_version": "health-2.2",
   "weights": {
-    "image": 24,
-    "description": 11,
-    "tags": 10,
-    "material": 10,
-    "review": 5,
-    "price": 40
+    "image": 20,
+    "description": 20,
+    "tags": 20,
+    "review": 20,
+    "price": 20
   },
   "targets": {
     "image": 6,
@@ -353,12 +352,12 @@
       21
     ],
     "tags": [
-      10,
-      10
+      7,
+      7
     ],
     "material": [
-      10,
-      10
+      7,
+      7
     ],
     "review": [
       5,
@@ -367,6 +366,10 @@
     "price": [
       31,
       50
+    ],
+    "buyer": [
+      25,
+      25
     ]
   },
   "tiki_check": {

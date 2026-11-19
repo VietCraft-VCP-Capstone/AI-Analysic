@@ -1,14 +1,13 @@
 import re
 
-KEYS = ("image", "description", "tags", "material", "review", "price")
+KEYS = ("image", "description", "tags", "review", "price")
 
 LABELS = {
-    "image": "Số ảnh",
-    "description": "Số từ mô tả",
-    "tags": "Số tag",
-    "material": "Chất liệu",
-    "review": "Tỉ lệ đánh giá tốt",
-    "price": "Cạnh tranh giá",
+    "image": "Hình ảnh",
+    "description": "Mô tả",
+    "tags": "Tag",
+    "review": "Đánh giá",
+    "price": "Giá bán",
 }
 
 

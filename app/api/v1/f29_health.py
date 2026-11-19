@@ -19,8 +19,8 @@ from app.core.f29.ml.scorer import load_model, score_listing
 from app.core.f29.preview import preview_health
 
 router = APIRouter()
-NO_SHOP = "Cần cấu hình gian hàng trước khi xem điểm tối ưu sản phẩm"
-NO_WEIGHTS = "Điểm tối ưu sản phẩm đang được cập nhật, vui lòng thử lại sau."
+NO_SHOP = "Cần cấu hình gian hàng trước khi xem độ hoàn thiện trang sản phẩm"
+NO_WEIGHTS = "Độ hoàn thiện trang sản phẩm đang được cập nhật, vui lòng thử lại sau."
 
 
 def _kiem_quyen_listing(id: str, shop_id: str) -> None:
@@ -56,12 +56,14 @@ def health_score(id: str, shop_id: str = CurrentShop):
 
     try:
         calc = HealthScoreCalculator()
-        result = calc.calculate(id)
-        if result and "error" not in result:
-            try:
-                calc.save(result)
-            except Exception:
-                pass
+        result = calc.stored_result(id)
+        if result is None:
+            result = calc.calculate(id)
+            if result and "error" not in result:
+                try:
+                    calc.save(result)
+                except Exception as e:
+                    print(f"[f29_health save] {type(e).__name__}: {e}", flush=True)
     except Exception as e:
         print(f"[f29_health] {type(e).__name__}: {e}", flush=True)
         return insufficient("Hệ thống chưa thể tính điểm cho sản phẩm này, vui lòng thử lại sau.", build_meta(**meta_args))
@@ -135,8 +137,9 @@ def sync_listing_health(id: str, shop_id: str = CurrentShop):
         if result and "error" not in result:
             try:
                 calc.save(result)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[f29_health sync save] {type(e).__name__}: {e}", flush=True)
+                return insufficient("Đã tính điểm nhưng chưa lưu được, vui lòng thử lại.", build_meta(**meta_args))
             meta = build_meta(model_version=MODEL_VERSION, collection="products", attributed_to_live_shop=True, **meta_args)
             return ok({"status": "synced", "product_id": id, "score": result.get("score")}, meta)
     except Exception as e:
@@ -147,5 +150,5 @@ def sync_listing_health(id: str, shop_id: str = CurrentShop):
         not_found("listing")
     if "error" in result:
         return insufficient(NO_WEIGHTS, build_meta(**meta_args))
-    return insufficient("Không thể tính điểm tối ưu sản phẩm", build_meta(**meta_args))
+    return insufficient("Không thể tính độ hoàn thiện trang sản phẩm", build_meta(**meta_args))
 

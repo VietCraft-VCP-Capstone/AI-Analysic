@@ -6,7 +6,7 @@ LEARNED = f"Học ({MODEL_VERSION})"
 EQUAL = "Chia đều"
 MARKETS = ("olist_test", "tiki_test", "shopee_test")
 SOURCES = {"image": "learned", "description": "learned", "price": "learned",
-           "tags": "policy", "material": "policy", "review": "floor"}
+           "tags": "policy", "material": "policy", "review": "floor", "buyer": "policy"}
 
 
 def _auc(entry: Any) -> float | None:

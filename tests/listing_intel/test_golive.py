@@ -49,7 +49,7 @@ def test_served_without_meta_keys_logs_once(env, monkeypatch, caplog):
 def test_image_fix_impacts_match_displayed_total(env, urls):
     parts = intel.build(listing(image_urls=urls), AT, store_embeddings=False)
     feats, g = parts["feats"], parts["inp"].group
-    codes = ("low_resolution", "blurry", "too_dark", "busy_background", "text_overlay", "few_images", "no_images")
+    codes = ("low_resolution", "blurry", "too_dark", "few_images", "no_images")
     fixes = {c: advice.FIXES[c] for c in codes}
     tops = fusion.load_bundle().top_medians
     med = tops.get(g) or tops["all"]

@@ -19,16 +19,12 @@ BRIGHTNESS_RANGE = (0.25, 0.9)
 MIN_BORDER_UNIFORM = 0.4
 MIN_BRIGHT_CONTRAST = 0.02
 MAX_TEXT_RATIO = 0.08
-ASPECT_RANGE = (0.75, 1.34)
 
 ISSUES = {
     "low_resolution": ("img_w", "Ảnh có cạnh ngắn dưới 500px, nên dùng ảnh lớn hơn để hiển thị rõ nét."),
     "blurry": ("img_sharpness", "Ảnh bị mờ, hãy chụp lại với tiêu cự rõ nét."),
     "too_dark": ("img_brightness", "Ảnh quá tối, hãy bổ sung ánh sáng."),
     "too_bright": ("img_brightness", "Ảnh bị cháy sáng, hãy giảm độ sáng khi chụp."),
-    "busy_background": ("img_border_uniform", "Nền ảnh rối, nên dùng nền trơn để sản phẩm nổi bật."),
-    "text_overlay": ("img_text_ratio", "Ảnh chèn nhiều chữ, nên giữ ảnh sản phẩm sạch."),
-    "bad_aspect": ("img_aspect", "Tỉ lệ ảnh lệch, nên dùng ảnh vuông hoặc gần vuông."),
 }
 
 
@@ -107,8 +103,5 @@ def quality_issues(q) -> list[dict]:
         "too_dark": q["img_brightness"] < lo_b,
         "too_bright": q["img_brightness"] > hi_b
         and (q["img_border_uniform"] < MIN_BORDER_UNIFORM or q["img_contrast"] < MIN_BRIGHT_CONTRAST),
-        "busy_background": q["img_border_uniform"] < MIN_BORDER_UNIFORM,
-        "text_overlay": q["img_text_ratio"] > MAX_TEXT_RATIO,
-        "bad_aspect": not ASPECT_RANGE[0] <= q["img_aspect"] <= ASPECT_RANGE[1],
     }
     return [{"code": c, "message": ISSUES[c][1], "field": ISSUES[c][0]} for c, on in flags.items() if on]

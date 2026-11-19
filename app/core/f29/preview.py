@@ -1,20 +1,28 @@
 from typing import Any, Dict, Optional
 
-from app.core.f29 import factors, scoring, weights
+from bson import ObjectId
+
+from app.api.v1._live import LOC_SP_THAT
+from app.core.f29 import breakdown, factors_v3 as f3, price_peers, scoring
 from app.core.f29.calculator import HealthScoreCalculator
-from app.core.f29.factors import KEYS
 
 LEVERS = ("n_images", "description_length", "n_tags", "price")
-INPUT_OF = {"image": "n_images", "description": "description_length", "tags": "n_tags", "price": "price"}
 
 
-def _sub(key: str, used: Dict[str, Any], rows: Dict[str, Any], pc: Dict[str, Any]) -> float:
-    if key == "price":
-        ref = rows["price"]["reference"]
-        if not ref["comparable"]:
-            return 0.0
-        return factors.price_score(used["price"], ref["price"], pc)
-    return factors.ratio_score(float(used[INPUT_OF[key]]), float(rows[key]["target"]))
+def _image(row: Dict[str, Any], n: int, median: float, in_category: bool) -> Dict[str, Any]:
+    state = "seller_missing" if n == 0 else "scored"
+    return f3.image_row({"state": state, "useful": n, "method": row["method"]}, median, in_category)
+
+
+def _description(product: Dict[str, Any], row: Dict[str, Any], words: int, median: float,
+                 in_category: bool) -> Dict[str, Any]:
+    if row["state"] == "seller_missing":
+        text = " ".join(f"w{i}x" for i in range(words))
+        return f3.description_row({**product, "description": text}, median, in_category)
+    checks = {**row["evidence"]["checks"], "words": words >= median}
+    passed = sum(checks.values())
+    return f3._row("description", "scored", passed / len(checks) * 100, "rule",
+                   f"Đạt {passed}/{len(checks)} tiêu chí mô tả", {**row["evidence"], "checks": checks, "words": words})
 
 
 def preview_health(
@@ -24,39 +32,36 @@ def preview_health(
     if current is None or "error" in current:
         return current
 
-    rows = {r["key"]: r for r in current["breakdown"]}
-    cfg = weights.load()
-    w, pc = cfg["weights"], cfg["price"]
-    now_in = {"n_images": rows["image"]["value"], "description_length": rows["description"]["value"],
-              "n_tags": rows["tags"]["value"], "price": rows["price"]["value"]}
+    product = calc.live_db["products"].find_one({"_id": ObjectId(product_id), **LOC_SP_THAT})
+    median_images, median_words, in_category = f3.peer_medians(calc.live_db, product)
+    rows = {r["key"]: r for r in current["factors"]}
+    snap = current["content_snapshot"]
+    now_in = {"n_images": snap["n_images"], "description_length": snap["desc_words"],
+              "n_tags": rows["tags"]["evidence"]["approved"], "price": snap["price"]}
     given = {k: v for k, v in overrides.items() if v is not None}
-    used = {**now_in, **{k: v for k, v in given.items() if k in LEVERS}}
+    levers = {k: v for k, v in given.items() if k in LEVERS}
+    used = {**now_in, **levers}
 
-    unscored = {"price"} if used["price"] is not None and not rows["price"]["reference"]["comparable"] else set()
-    subs: Dict[str, Optional[float]] = {}
-    points: Dict[str, float] = {}
-    for key in KEYS:
-        if key in unscored:
-            subs[key], points[key] = None, 0.0
-            continue
-        if key in ("review", "material"):
-            subs[key], points[key] = rows[key]["sub_score"], rows[key]["points"]
-            continue
-        sub = _sub(key, used, rows, pc)
-        subs[key], points[key] = round(sub, 1), round(w[key] * sub / 100, 1)
+    if "n_images" in levers:
+        rows["image"] = _image(rows["image"], round(levers["n_images"]), median_images, in_category)
+    if "description_length" in levers:
+        rows["description"] = _description(product, rows["description"], round(levers["description_length"]),
+                                           median_words, in_category)
+    if "n_tags" in levers:
+        rows["tags"] = f3.tags_row(round(levers["n_tags"]), rows["tags"]["evidence"]["pending"],
+                                   current["search"]["queries"], rows["tags"]["method"])
+    if "price" in levers:
+        rows["price"] = f3.price_row(price_peers.position(calc.live_db, product, levers["price"]))
 
-    scored = [k for k in KEYS if k not in unscored]
-    score = round(sum(points[k] for k in scored) * 100 / sum(w[k] for k in scored), 1)
-    if current.get("cap"):
-        score = min(score, current["cap"]["score"])
-    empty = {"image": not used["n_images"], "description": not used["description_length"],
-             "tags": not used["n_tags"], "price": used["price"] is None}
+    factors = list(rows.values())
+    score, coverage = breakdown.score(factors)
     return {
         "product_id": product_id,
         "score": score,
         "status": scoring.status_from_score(score),
-        "axes": subs,
-        "axes_missing": [k for k in KEYS if empty.get(k, rows[k]["missing"])],
+        "coverage": coverage,
+        "axes": {r["key"]: r["sub_score"] for r in factors},
+        "axes_missing": [r["key"] for r in factors if r["state"] != "scored"],
         "current_score": current["score"],
         "delta_vs_current": round(score - current["score"], 1),
         "inputs": used,

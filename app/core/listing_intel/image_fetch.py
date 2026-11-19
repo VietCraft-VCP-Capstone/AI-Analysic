@@ -7,7 +7,7 @@ from urllib.parse import unquote, urlparse
 
 from PIL import Image, ImageOps
 
-ALLOWED_HOSTS = {"res.cloudinary.com", "salt.tikicdn.com"}
+ALLOWED_HOSTS = {"res.cloudinary.com", "salt.tikicdn.com", "down-vn.img.susercontent.com", "bizweb.dktcdn.net"}
 CHUNK = 65536
 MAX_PIXELS = 25_000_000
 USER_AGENT = "vietcraft-listing-intel/1.0"
