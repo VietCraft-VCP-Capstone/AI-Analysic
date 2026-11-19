@@ -25,7 +25,7 @@ def _trang_thai(c: Dict[str, Any], bay_gio: datetime) -> str:
 
 
 def kho_voucher(coupons: List[Dict[str, Any]], trong_ky: Dict[str, int], bay_gio: datetime) -> Dict[str, Any]:
-    """Kho mã của shop: tổng, đã dùng / giới hạn (trọn đời), số đơn trong kỳ, mã nằm im."""
+    """Kho mã của shop: tổng, đã dùng / giới hạn (trọn đời), số đơn trong kỳ, mã hiệu quả thấp."""
     ds = []
     for c in coupons:
         het = c.get("end_date")
@@ -85,7 +85,7 @@ def goi_y_luat(ds: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     y = [f"Mã {tot['code']} ({LOAI.get(tot['type'], tot['type'])}) được dùng {tot['used']}/{tot['limit']} lượt, cao nhất trong kho.", cau]
     im = sum(v["status"] in ("unused", "low") for v in ds)
     if im:
-        y.append(f"{im} mã đang nằm im, nên tắt bớt cho kho gọn.")
+        y.append(f"{im} mã hiệu quả thấp, nên tạm dừng để kho gọn hơn.")
     chua = [LOAI[k] for k in LOAI if k not in {v["type"] for v in ds}]
     if chua:
         y.append(f"Shop chưa thử: {', '.join(chua)}.")
