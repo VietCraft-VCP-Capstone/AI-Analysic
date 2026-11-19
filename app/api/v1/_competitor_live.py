@@ -15,7 +15,7 @@ from bson import ObjectId
 
 from app.api.v1 import _live
 from app.api.v1._materials import chuan_hoa, tap_chuan
-from app.api.v1._competitor_ai import diem_de_doa, may_giong, suc_manh_shop, tang_dot_bien
+from app.api.v1._competitor_ai import diem_de_doa, may_giong, tang_dot_bien, thu_tu_de_doa
 from app.api.v1._live import LOC_DON_THAT, LOC_SP_THAT, _so, la_shop_live
 from app.api.v1._mart import db
 from app.api.v1._template import build_meta, mart_not_ready, meta_from_record, not_found, ok
@@ -26,14 +26,14 @@ MART = "mart_competitor"
 MODEL = "competitor-live-1.0"
 CUA_SO_BAN_NGAY = 90
 CUA_SO_MOI_NGAY = 7
-K_CO_NGOT = K_BAYESIAN_SHRINKAGE   # cùng hằng co ngót với F29 và build_marts.M_BAYES (docs/BAYES_M_SELECTION.md)
+K_CO_NGOT = K_BAYESIAN_SHRINKAGE   # = F29; Olist: K 20–100 sai như nhau, sao thô (K = 0) sai hơn 66%
 DA_GIAO = "DELIVERED"
 DANG_BAN = {"status": "PUBLISHED", "is_hidden": {"$ne": True}}   # = PUBLIC_QUERY của BE
 SO_CANH_BAO_TOI_DA = 50
 GIO_VN = timedelta(hours=7)
 CUA_SO_CHAT_NGAY = 90
-TOI_THIEU_LUOT_HOI = 5                 # dưới 5 lượt khách hỏi thì chưa đủ để nói shop trả lời nhanh hay chậm
-CHO_QUA_HAN = timedelta(hours=24)      # khách hỏi chưa quá 24 giờ thì chưa tính là bị bỏ lỡ
+TOI_THIEU_LUOT_HOI = 6                 # khoảng tin cậy 95% của trung vị cần ≥ 6 mẫu (1 − 2·0,5⁶ = 96,9%; 5 mẫu chỉ 93,75%)
+CHO_QUA_HAN = timedelta(hours=24)      # mốc 24 giờ như Contact Response Time của Amazon; chưa quá mốc thì chưa tính là bỏ lỡ
 
 
 def db_live():
@@ -98,7 +98,7 @@ def _cl(m: Any) -> str:
 def tra_loi_chat(conversations: Iterable[dict], messages: Iterable[dict], shops: Iterable[dict],
                  now: Any) -> Dict[str, Dict[str, Any]]:
     """Mỗi shop: trung vị số giây từ lúc khách bắt đầu chờ tới tin trả lời đầu tiên của chủ shop, và % lượt hỏi
-    được trả lời. Chỉ tính tin 90 ngày gần nhất; shop dưới 5 lượt hỏi không có trong kết quả."""
+    được trả lời, kèm số giây từng lượt để kiểm định. Chỉ tính tin 90 ngày gần nhất; shop dưới 6 lượt hỏi không có."""
     now = _utc(now)
     tu = now - timedelta(days=CUA_SO_CHAT_NGAY)
     shops = list(shops)
@@ -133,7 +133,8 @@ def tra_loi_chat(conversations: Iterable[dict], messages: Iterable[dict], shops:
     for sid in set(giay) | set(bo_lo):
         n = len(giay[sid]) + bo_lo[sid]
         if n >= TOI_THIEU_LUOT_HOI:
-            ra[sid] = {"seconds": median(giay[sid]) if giay[sid] else None, "reply_rate": round(100 * len(giay[sid]) / n)}
+            ra[sid] = {"seconds": median(giay[sid]) if giay[sid] else None, "reply_rate": round(100 * len(giay[sid]) / n),
+                       "samples": sorted(giay[sid])}
     return ra
 
 
@@ -254,6 +255,7 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
             # Đo từ tin nhắn chat; average_response_time_seconds của shop là số tĩnh, BE không cập nhật nên không dùng.
             "shop_response_seconds": tl.get("seconds"),
             "shop_reply_rate": tl.get("reply_rate"),
+            "shop_response_samples": tl.get("samples") or [],    # để tô màu bằng kiểm định Mann–Whitney (F32)
             "computed_at": _iso(now),
             "model_version": MODEL,
         })
@@ -267,6 +269,7 @@ def tinh_dong_doi_thu(products: Iterable[dict], variants: Iterable[dict], orders
     for r in dong:
         n = n_dg[r["product_id"]]
         r["n_reviews"] = int(n)
+        r["rating_sum"] = float(tong_sao[r["product_id"]])     # để hiện sao thật của shop, không co ngót
         r["rating_shrunk"] = (round((tong_sao[r["product_id"]] + tong_dm[r["category_id"]] / n_dm[r["category_id"]]
                                      * K_CO_NGOT) / (n + K_CO_NGOT), 2) if n else None)
 
@@ -507,18 +510,18 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
         sp_theo_shop[r["shop_id"]].append(r)
     tag_toi = sorted({t for r in dong if r["shop_id"] == shop_id for t in r["tags"]})
     canh_bao = tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now)
-    # AI: chấm mức đe doạ, đe doạ cao lên đầu; cùng điểm thì mới đăng trước.
-    may, manh = may_giong(dong, mo_ta_live, ten_tag_live), suc_manh_shop(dong)
+    # AI: chấm mức cạnh tranh, mức cao lên đầu; cùng mức thì giống hơn trước, rồi mới đăng trước.
+    may = may_giong(dong, mo_ta_live, ten_tag_live)
     for a in canh_bao:
-        a["threat"] = diem_de_doa(may, a["listing_id"], shop_id, manh)
+        a["threat"] = diem_de_doa(may, a["listing_id"], shop_id)
     canh_bao.sort(key=lambda a: a["listed_at"] or "", reverse=True)
-    canh_bao.sort(key=lambda a: -((a["threat"] or {}).get("score") or 0))
+    canh_bao.sort(key=lambda a: thu_tu_de_doa(a["threat"]))
     tuan = tuan_ban_theo_shop([f["shop_id"] for f in followers], now)
     tang_toc = [{**x, "shop_name": ten.get(x["shop_id"]), "weeks": tuan.get(x["shop_id"])} for x in tang_dot_bien(tuan)]
 
     # Dòng thời gian 8 tuần: mọi sản phẩm mới của shop đang theo dõi; hàng cùng ngách thì kèm mức cạnh tranh.
     moc8 = now - timedelta(weeks=8)
-    ngach8 = {a["listing_id"] for a in tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now, cua_so_ngay=56)}
+    ngach8 = {a["listing_id"]: a for a in tinh_canh_bao(dong, [{"_id": shop_id, "owner_id": chu}], followers, now, cua_so_ngay=56)}
     theo_ma = {r["listing_id"]: r for r in dong}
 
     def ra_mat(m: str) -> List[Dict[str, Any]]:
@@ -527,11 +530,13 @@ def theo_doi_live(shop_id: str, gioi_han: int) -> Dict[str, Any]:
             luc = _utc(r.get("created_at"))
             if luc is None or luc < moc8:
                 continue
-            th = diem_de_doa(may, r["listing_id"], shop_id, manh) if r["listing_id"] in ngach8 else None
+            th = diem_de_doa(may, r["listing_id"], shop_id) if r["listing_id"] in ngach8 else None
             khop = theo_ma.get((th or {}).get("matched_product_id"))
             out.append({"listing_id": r["listing_id"], "title": r.get("title"), "listed_at": _iso(luc),
                         "product_type_name": r.get("product_type_name"), "price_vnd": r["price_vnd"],
                         "in_my_niche": r["listing_id"] in ngach8, "threat": th,
+                        # Từ khoá của shop mình mà sản phẩm này trùng: nói được vì sao nó thuộc ngách khi mình chưa bán loại đó.
+                        "matched_tags": ngach8[r["listing_id"]]["matched_tags"] if r["listing_id"] in ngach8 else [],
                         "matched_price_vnd": khop["price_vnd"] if khop else None})
         return sorted(out, key=lambda x: x["listed_at"])
 

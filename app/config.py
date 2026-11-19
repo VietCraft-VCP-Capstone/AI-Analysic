@@ -41,6 +41,18 @@ class Settings:
     # External APIs
     PRINTIFY_TOKEN: str = os.getenv("PRINTIFY_TOKEN", "")
     ETSY_API_KEY: str = os.getenv("ETSY_API_KEY", "")
+    ETSY_SHARED_SECRET: str = os.getenv("ETSY_SHARED_SECRET", "")
+
+    @property
+    def etsy_x_api_key(self) -> str:
+        """Etsy Open API v3 yêu cầu header `x-api-key` dạng `keystring:shared_secret`."""
+        key = (os.getenv("ETSY_API_KEY") or self.ETSY_API_KEY or "").strip()
+        secret = (os.getenv("ETSY_SHARED_SECRET") or self.ETSY_SHARED_SECRET or "").strip()
+        if not key:
+            return ""
+        if ":" in key:
+            return key
+        return f"{key}:{secret}" if secret else key
 
 
 

@@ -24,6 +24,13 @@ from app.core.seasonal_intel import (
     real_stl, seasonal_peak_years, compare_shop_vs_industry, compare_shop_vs_industry_summary,
     summarize_industry_orders, seller_competition, keyword_shop_coverage, impact_report, build_playbook,
 )
+from app.core.seasonal_opportunity import (
+    TREND_MAX_STALE_DAYS,
+    canonical_seller_key,
+    dedupe_external_docs,
+    filter_trend_points_by_date,
+    score_opportunity_keywords,
+)
 from app.core.redis_cache import cache_get_json, cache_set_json
 
 router = APIRouter()
@@ -723,15 +730,22 @@ def _ap_dung_so_sanh(
     ev = t.get("evidence") or {}
     ev.pop("interval", None)
     n_used = (shop_recent_n if used_shop_recent else c["shop"]["n"]) if sv is not None else (c["industry"]["n_orders"] if iv is not None else 0)
+    plats_used = (industry_scale or {}).get("platforms") or ["Tiki", "Etsy", "Printify", "VietCraft"]
+    plats_str = ", ".join(plats_used)
+    etsy_fav_note = (
+        f", {int(industry_scale['etsyFavorersTotal']):,} lượt yêu thích Etsy"
+        if industry_scale and int(industry_scale.get("etsyFavorersTotal") or 0) > 0
+        else ""
+    )
     scale_desc = (
         f"{industry_scale['productsCount']:,} sản phẩm từ {industry_scale['sellersCount']:,} gian hàng "
-        f"({', '.join(industry_scale.get('platforms') or ['Tiki', 'Printify', 'VietCraft'])}, {industry_scale['totalSold']:,} lượt bán)"
+        f"({plats_str}, {industry_scale['totalSold']:,} lượt bán{etsy_fav_note})"
         if industry_scale and industry_scale.get("productsCount")
         else "dữ liệu toàn ngành TMĐT & Google Trends VN"
     )
     ev.update({
         "n": max(n_used, int((industry_scale or {}).get("productsCount") or 0)),
-        "sources": ["Tiki", "Printify", "VietCraft", "Google Trends VN 5 năm"],
+        "sources": [*plats_used, "Google Trends VN 5 năm"],
         "confidence": t["confidence"],
         "howObtained": (
             f"Shop: đo từ {shop_recent_n} đơn thực tế gần nhất; Toàn ngành: tổng hợp từ {scale_desc}."
@@ -741,15 +755,59 @@ def _ap_dung_so_sanh(
         "formula": f"Shop {_fmt_trait(key, sv)} · Toàn ngành {_fmt_trait(key, iv)}",
         "confidenceReason": (
             "Đo trực tiếp từ đơn hoàn tất cùng kỳ." if c["basis"] == "measured_shop"
-            else ("Đo từ đơn thực tế của shop đối chiếu với mẫu toàn ngành đa sàn (Tiki, Printify, VietCraft)." if used_shop_recent
-                  else "Tổng hợp từ dữ liệu đa sàn TMĐT (Tiki, Printify, VietCraft) và mô hình Google Trends STL 5 năm.")
+            else (f"Đo từ đơn thực tế của shop đối chiếu với mẫu toàn ngành đa sàn ({plats_str})." if used_shop_recent
+                  else f"Tổng hợp từ dữ liệu đa sàn TMĐT ({plats_str}) và mô hình Google Trends STL 5 năm.")
         ),
         "comparison": f"So với mặt bằng toàn ngành ({_fmt_trait(key, iv)}).",
-        "modelVersion": "seasonal_intel.compare_shop_vs_industry v3",
+        "modelVersion": "seasonal_intel.compare_shop_vs_industry v4",
         "updatedAt": today.isoformat(),
     })
     t["industryScale"] = industry_scale
     t["evidence"] = ev
+
+
+EXTERNAL_FRESHNESS_DAYS = 30
+VC_ORDER_WINDOW_DAYS = 90
+
+
+def _cutoff_utc_dt(hom_nay: date, days_back: int) -> datetime:
+    """Trả về mốc datetime bắt đầu cửa sổ `days_back` ngày tính lùi từ `hom_nay`."""
+    return datetime.combine(hom_nay - timedelta(days=days_back), datetime.min.time())
+
+
+def _load_vietcraft_real_sold_map(window_days: int = VC_ORDER_WINDOW_DAYS, as_of: Optional[date] = None) -> Dict[str, int]:
+    """Tổng hợp lượt bán THẬT theo product_id từ đơn hoàn tất trong `window_days` ngày gần nhất (bỏ đơn mô phỏng)."""
+    ref_day = as_of or datetime.now(TZ_VN).date()
+    cache_key = f"seasonal:vc_prod_sold:{window_days}d:{ref_day.isoformat()}:v2"
+    cached = cache_get_json(cache_key)
+    if isinstance(cached, dict):
+        return {str(k): int(v) for k, v in cached.items()}
+    sold_map: Dict[str, int] = {}
+    try:
+        since_dt = _cutoff_utc_dt(ref_day, window_days)
+        agg = db_live()["orders"].aggregate([
+            {
+                "$match": {
+                    "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
+                    "is_simulated": {"$ne": True},
+                    "created_at": {"$gte": since_dt},
+                }
+            },
+            {"$unwind": "$items"},
+            {
+                "$group": {
+                    "_id": "$items.product_id",
+                    "qty": {"$sum": {"$ifNull": ["$items.quantity", 1]}},
+                }
+            },
+        ])
+        for row in agg:
+            if row.get("_id") is not None:
+                sold_map[str(row["_id"])] = int(row.get("qty") or 0)
+        cache_set_json(cache_key, sold_map, ttl_seconds=1800)
+    except Exception as exc:
+        log.warning("seasonal: không tổng hợp được lượt bán thật VietCraft: %s", exc)
+    return sold_map
 
 
 def _tinh_opportunity_keywords(
@@ -762,122 +820,207 @@ def _tinh_opportunity_keywords(
     shop_products: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Tính toán ma trận từ khóa cơ hội (Opportunity Keyword Matrix) theo chuẩn eRank / SaleSamurai.
-    Kết hợp lượt tìm kiếm thật (Volume), mức độ cạnh tranh (Competition) và Điểm cơ hội (Keyword Score).
+    Ma trận từ khóa cơ hội (Opportunity Keyword Matrix) chuẩn AI Analytic đa sàn:
+    - Hợp nhất & khử trùng tuyệt đối 4 nguồn dữ liệu thật: Tiki + Etsy Open API v3 + VietCraft Live (90 ngày) + Google Trends VN.
+    - Áp dụng lọc date đồng bộ: độ tươi 30 ngày cho listing thị trường (`collected_at` / `fetched_at`), cửa sổ 90 ngày cho đơn VietCraft,
+      cửa sổ 52 tuần tính đến `hom_nay` & kiểm tra độ trễ <= 28 ngày cho đà tăng Google Trends.
+    - Chấm điểm bằng công thức Hybrid (Log-Anchored + Percentile Rank) kèm chốt chặn chống mâu thuẫn.
     """
     camp_id = (active_camp.get("id") or "").lower()
-    stl_amp = stl.get("amplitude", 0.35) if isinstance(stl, dict) else 0.35
-    # 1. Khai phá từ khóa & đối thủ thực tế từ external_market_products và mart_competitor
-    kw_stats: Dict[str, Dict[str, Any]] = {}
+    fresh_since_dt = _cutoff_utc_dt(hom_nay, EXTERNAL_FRESHNESS_DAYS)
+
+    # 1. Đọc & khử trùng sản phẩm thị trường đa sàn (ưu tiên bản ghi tươi trong 30 ngày gần nhất)
     ext_query: Dict[str, Any] = {"is_active": True}
     if cat_slug and cat_slug != "tong-hop":
         ext_query["category_slug"] = cat_slug
 
-    ext_cache_key = f"seasonal:opp_ext_docs:{cat_slug or 'all'}:v1"
-    ext_docs = cache_get_json(ext_cache_key)
-    if not isinstance(ext_docs, list):
+    ext_cache_key = f"seasonal:opp_ext_docs:{cat_slug or 'all'}:{camp_id}:{hom_nay.isoformat()}:v3"
+    cached_ext_pack = cache_get_json(ext_cache_key)
+    ext_data_stale = False
+    if isinstance(cached_ext_pack, dict) and isinstance(cached_ext_pack.get("docs"), list):
+        ext_docs = cached_ext_pack["docs"]
+        ext_data_stale = bool(cached_ext_pack.get("stale"))
+    else:
         try:
-            ext_docs = list(
+            proj = {
+                "_id": 0,
+                "external_id": 1,
+                "platform": 1,
+                "trend_keyword": 1,
+                "sub_category": 1,
+                "title": 1,
+                "tags": 1,
+                "sold_count": 1,
+                "sold_delta_30d": 1,
+                "favorers_delta_30d": 1,
+                "delta_window_days": 1,
+                "num_favorers": 1,
+                "views": 1,
+                "review_count": 1,
+                "price_vnd": 1,
+                "seller_id": 1,
+                "seller_name": 1,
+                "listing_type": 1,
+                "customizable": 1,
+                "occasion_id": 1,
+                "rating_average": 1,
+                "collected_at": 1,
+            }
+            fresh_ext_q = {**ext_query, "collected_at": {"$gte": fresh_since_dt}}
+            occ_docs = list(
                 db()["external_market_products"]
-                .find(
-                    ext_query,
-                    {
-                        "_id": 0,
-                        "trend_keyword": 1,
-                        "sub_category": 1,
-                        "title": 1,
-                        "sold_count": 1,
-                        "price_vnd": 1,
-                        "seller_id": 1,
-                        "seller_name": 1,
-                        "listing_type": 1,
-                        "customizable": 1,
-                        "occasion_id": 1,
-                        "rating_average": 1,
-                    },
-                )
-                .sort("sold_count", -1)
-                .limit(120)
+                .find({**fresh_ext_q, "occasion_id": camp_id}, proj)
+                .sort([("sold_count", -1), ("num_favorers", -1)])
+                .limit(200)
             )
-            cache_set_json(ext_cache_key, ext_docs, ttl_seconds=1800)
+            cat_docs = list(
+                db()["external_market_products"]
+                .find(fresh_ext_q, proj)
+                .sort([("sold_count", -1), ("num_favorers", -1)])
+                .limit(300)
+            )
+            ext_docs = dedupe_external_docs(occ_docs + cat_docs, target_occasion_id=camp_id)
+            if not ext_docs:
+                # Fallback an toàn nếu cron thu thập chưa chạy trong 30 ngày qua, gắn cờ stale minh bạch
+                ext_data_stale = True
+                occ_docs = list(
+                    db()["external_market_products"]
+                    .find({**ext_query, "occasion_id": camp_id}, proj)
+                    .sort([("sold_count", -1), ("num_favorers", -1)])
+                    .limit(200)
+                )
+                cat_docs = list(
+                    db()["external_market_products"]
+                    .find(ext_query, proj)
+                    .sort([("sold_count", -1), ("num_favorers", -1)])
+                    .limit(300)
+                )
+                ext_docs = dedupe_external_docs(occ_docs + cat_docs, target_occasion_id=camp_id)
+            cache_set_json(ext_cache_key, {"docs": ext_docs, "stale": ext_data_stale}, ttl_seconds=1800)
         except Exception as exc:
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             ext_docs = []
+
+    # Bổ sung tín hiệu từ bảng `market_listings` (crawler F42 Etsy + Tiki) — lọc độ tươi 30 ngày theo `fetched_at`
+    f42_cache_key = f"seasonal:opp_f42_market:{hom_nay.isoformat()}:v2"
+    f42_listings = cache_get_json(f42_cache_key)
+    if not isinstance(f42_listings, list):
+        f42_listings = []
+        try:
+            f42_listings = list(
+                db()["market_listings"]
+                .find(
+                    {"is_valid": True, "fetched_at": {"$gte": fresh_since_dt}},
+                    {"_id": 1, "source": 1, "keyword": 1, "title": 1, "price": 1, "sold": 1, "review_count": 1},
+                )
+                .limit(600)
+            )
+            cache_set_json(f42_cache_key, f42_listings, ttl_seconds=1800)
+        except Exception as exc:
+            log.warning("seasonal: market_listings unavailable: %s", exc)
+            f42_listings = []
+
+    kw_stats: Dict[str, Dict[str, Any]] = {}
+    seen_ext_ids_per_kw: Dict[str, set] = {}
 
     for doc in ext_docs:
         raw_kw = (doc.get("trend_keyword") or doc.get("sub_category") or "").strip().lower()
         if not raw_kw or len(raw_kw) < 3:
             continue
+        ext_id = str(doc.get("external_id") or "")
+        seen_set = seen_ext_ids_per_kw.setdefault(raw_kw, set())
+        if ext_id and ext_id in seen_set:
+            continue
+        if ext_id:
+            seen_set.add(ext_id)
+
         entry = kw_stats.setdefault(
             raw_kw,
             {
                 "sold_sum": 0,
+                "etsy_favorers": 0,
+                "etsy_views": 0,
+                "etsy_listings": 0,
                 "prices": [],
                 "sellers": set(),
+                "platforms": set(),
                 "listing_count": 0,
                 "occasion_hits": 0,
                 "customizable": False,
                 "listing_type": "physical",
             },
         )
-        entry["sold_sum"] += int(doc.get("sold_count") or 0)
+        plat = str(doc.get("platform") or "Tiki").strip()
+        plat_low = plat.lower()
+        entry["platforms"].add(plat)
+
+        if plat_low == "etsy":
+            fav = int(doc.get("num_favorers") or doc.get("review_count") or 0)
+            entry["etsy_favorers"] += fav
+            entry["etsy_views"] += int(doc.get("views") or 0)
+            entry["etsy_listings"] += 1
+        else:
+            entry["sold_sum"] += int(doc.get("sold_count") or 0)
+
         pv = int(doc.get("price_vnd") or 0)
         if pv > 0:
             entry["prices"].append(pv)
-        seller = doc.get("seller_id") or doc.get("seller_name")
-        if seller:
-            entry["sellers"].add(seller)
+
+        s_key = canonical_seller_key(doc.get("seller_id"), doc.get("seller_name"), plat)
+        if s_key:
+            entry["sellers"].add(s_key)
+
         entry["listing_count"] += 1
         if (doc.get("occasion_id") or "").lower() == camp_id:
             entry["occasion_hits"] += 1
         if doc.get("customizable"):
             entry["customizable"] = True
         ltype = (doc.get("listing_type") or "").lower()
-        if ltype in ("pod", "custom"):
-            entry["listing_type"] = ltype
+        if ltype in ("pod", "pod_blank", "custom"):
+            entry["listing_type"] = "pod" if ltype == "pod_blank" else ltype
 
-    # Bổ sung mật độ cạnh tranh từ mart_competitor và toàn bộ sản phẩm đang bán trên sàn (toàn ngành)
-    comp_cache_key = f"seasonal:opp_comp_map:{cat_slug or 'all'}:v1"
-    comp_map = cache_get_json(comp_cache_key)
-    if not isinstance(comp_map, dict):
-        comp_map = {}
-        try:
-            comp_query = {"category_slug": cat_slug} if (cat_slug and cat_slug != "tong-hop") else {}
-            for comp in db()["mart_competitor"].find(comp_query, {"_id": 0, "keyword": 1, "trend_keyword": 1, "listing_count": 1, "competitor_count": 1}).limit(80):
-                ckw = (comp.get("keyword") or comp.get("trend_keyword") or "").strip().lower()
-                if ckw:
-                    comp_map[ckw] = comp_map.get(ckw, 0) + int(comp.get("listing_count") or comp.get("competitor_count") or 1)
-            cache_set_json(comp_cache_key, comp_map, ttl_seconds=1800)
-        except Exception as exc:
-            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
-            pass
-
-    platform_prods = cache_get_json("seasonal:plat_prods:v1")
+    # Đọc danh sách sản phẩm live VietCraft (kèm lượt bán thật trong cửa sổ 90 ngày gần nhất)
+    plat_cache_key = f"seasonal:plat_prods:{hom_nay.isoformat()}:v3"
+    platform_prods = cache_get_json(plat_cache_key)
     if not isinstance(platform_prods, list):
         platform_prods = []
         try:
-            platform_prods = list(
+            raw_prods = list(
                 db_live()["products"]
-                .find({"status": {"$ne": "DELETED"}}, {"_id": 0, "title": 1, "tags": 1, "shop_id": 1, "sold_count": 1, "price": 1, "retail_price": 1})
+                .find(
+                    {"status": {"$ne": "DELETED"}, "is_hidden": {"$ne": True}},
+                    {"_id": 1, "title": 1, "tags": 1, "shop_id": 1, "original_price": 1, "price": 1, "retail_price": 1},
+                )
                 .limit(1500)
             )
-            cache_set_json("seasonal:plat_prods:v1", platform_prods, ttl_seconds=1800)
+            vc_sold_map = _load_vietcraft_real_sold_map(window_days=VC_ORDER_WINDOW_DAYS, as_of=hom_nay)
+            for pp in raw_prods:
+                pid_str = str(pp.get("_id") or "")
+                platform_prods.append({
+                    "pid": pid_str,
+                    "title": pp.get("title") or "",
+                    "tags": pp.get("tags") or [],
+                    "shop_id": str(pp.get("shop_id") or ""),
+                    "sold_count": vc_sold_map.get(pid_str, 0),
+                    "price": int(pp.get("original_price") or pp.get("price") or pp.get("retail_price") or 0),
+                })
+            cache_set_json(plat_cache_key, platform_prods, ttl_seconds=1800)
         except Exception as exc:
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             platform_prods = []
 
-    # 2. Ưu tiên từ khóa khớp ĐÚNG DỊP + NGÀNH HÀNG trước, sau đó mới bổ sung từ khóa bán chạy của ngành
+    # 2. Ưu tiên từ khóa khớp ĐÚNG DỊP + NGÀNH HÀNG trước, sau đó bổ sung seed dịp và từ khóa bán chạy ngành
     occasion_kw_items = [
         k for k, _ in sorted(
             ((k, v) for k, v in kw_stats.items() if v["occasion_hits"] > 0),
-            key=lambda kv: (kv[1]["occasion_hits"], kv[1]["sold_sum"]),
+            key=lambda kv: (kv[1]["occasion_hits"], kv[1]["sold_sum"] + kv[1]["etsy_favorers"]),
             reverse=True,
         )
     ]
     general_kw_items = [
         k for k, _ in sorted(
             ((k, v) for k, v in kw_stats.items() if v["occasion_hits"] == 0),
-            key=lambda kv: kv[1]["sold_sum"],
+            key=lambda kv: (kv[1]["sold_sum"] + kv[1]["etsy_favorers"]),
             reverse=True,
         )
     ]
@@ -900,20 +1043,17 @@ def _tinh_opportunity_keywords(
         if len(candidate_tags) >= 10:
             break
 
-    opportunity_keywords: List[Dict[str, Any]] = []
+    # 3. Thu thập đặc trưng thô đã khử trùng cho từng từ khóa ứng viên
+    raw_rows: List[Dict[str, Any]] = []
     for idx, tag in enumerate(candidate_tags[:10]):
         st = kw_stats.get(tag)
         s_obj, matched_key, match_kind = _tra_cuu_trend(tag)
         pts = [(d.strftime("%Y-%m-%d"), float(v)) for d, v in s_obj.items()] if s_obj is not None else []
         trend_vals = [float(p[1]) for p in pts[-52:] if len(p) >= 2] if pts else []
-        has_real_trend = match_kind in ("exact", "partial") and len(trend_vals) > 0
-        trend_mean = round(sum(trend_vals) / len(trend_vals), 1) if has_real_trend else None
-        wow = None
-        if has_real_trend and len(trend_vals) >= 12:
-            wow = round((sum(trend_vals[-4:]) / 4.0) / max(1.0, sum(trend_vals[-12:-4]) / 8.0) * 100.0 - 100.0, 1)
 
-        # Gom thêm dữ liệu toàn sàn VietCraft khớp từ khóa để phản ánh bức tranh toàn ngành
-        plat_sellers: set = set()
+        # Gom sản phẩm VietCraft khớp từ khóa (khử trùng product_id và canonical shop_id với `external_market_products`)
+        all_sellers: set = set(st["sellers"]) if st else set()
+        seen_ext_pids = seen_ext_ids_per_kw.get(tag, set())
         plat_sold = 0
         plat_prices: List[int] = []
         plat_hits = 0
@@ -922,76 +1062,185 @@ def _tinh_opportunity_keywords(
         for pp in platform_prods:
             txt = f"{pp.get('title') or ''} {' '.join(pp.get('tags') or [])}".lower()
             if t_low in txt or (t_toks and sum(1 for x in t_toks if x in txt) / len(t_toks) >= 0.75):
+                vc_ext_id = f"vietcraft_{pp.get('pid')}"
+                s_key = canonical_seller_key(pp.get("shop_id"), None, "VietCraft")
+                if s_key:
+                    all_sellers.add(s_key)
+                # Nếu sản phẩm VietCraft này đã nằm trong `external_market_products` thì không cộng trùng sold/listing
+                if vc_ext_id in seen_ext_pids:
+                    continue
                 plat_hits += 1
-                if pp.get("shop_id"):
-                    plat_sellers.add(str(pp["shop_id"]))
                 plat_sold += int(pp.get("sold_count") or 0)
-                pv = int(pp.get("price") or pp.get("retail_price") or 0)
+                pv = int(pp.get("price") or 0)
                 if pv > 0:
                     plat_prices.append(pv)
 
-        if st or plat_hits > 0:
-            n_obs = (st["listing_count"] if st else 0) + plat_hits
-            sold_real = (int(st["sold_sum"]) if st else 0) + plat_sold
-            ext_sellers = len(st["sellers"]) if st else 0
-            sellers_real = ext_sellers + len(plat_sellers) + comp_map.get(tag, 0)
-            all_prices = (st["prices"] if st else []) + plat_prices
-            avg_price = int(round(sum(all_prices) / len(all_prices), -3)) if all_prices else None
-            l_type = st["listing_type"] if st else "physical"
-            custom = st["customizable"] if st else False
-            sources = []
-            if st:
-                sources.append("Dữ liệu sàn TMĐT ngoài (external_market_products)")
-            if plat_hits > 0:
-                sources.append("Toàn bộ gian hàng ngành trên VietCraft")
-            if has_real_trend:
-                sources.append("Google Trends Việt Nam (52 tuần)")
-            if tag in comp_map:
-                sources.append("Dữ liệu đối thủ mart_competitor")
-            how_obtained = f"Tổng hợp toàn ngành từ {n_obs} listing ({sellers_real} shop trên sàn ngoài & toàn sàn VietCraft)."
-        else:
-            n_obs = 0
-            sold_real = 0
-            sellers_real = comp_map.get(tag, 0)
-            avg_price = None
-            l_type = "physical"
-            custom = False
-            sources = ["Google Trends Việt Nam (52 tuần)" if has_real_trend else "Từ khóa chuẩn ngành hàng theo dịp"]
+        # Bổ sung tín hiệu Etsy từ `market_listings` (crawler F42) khớp trực tiếp keyword mà chưa có trong `external_market_products`
+        f42_etsy_fav = 0
+        f42_etsy_hits = 0
+        f42_prices: List[int] = []
+        for ml in f42_listings:
+            if str(ml.get("source") or "").lower() != "etsy":
+                continue
+            ml_id = str(ml.get("_id") or "")
+            if ml_id and ml_id in seen_ext_pids:
+                continue
+            ml_kw = str(ml.get("keyword") or "").strip().lower()
+            ml_title = str(ml.get("title") or "").lower()
+            if ml_kw == t_low or (len(t_low) >= 4 and t_low in ml_title):
+                f42_etsy_hits += 1
+                f42_etsy_fav += int(ml.get("review_count") or 0)
+                mp = int(ml.get("price") or 0)
+                if mp > 0:
+                    f42_prices.append(mp)
+
+        n_obs = (st["listing_count"] if st else 0) + plat_hits + f42_etsy_hits
+        sold_real = (int(st["sold_sum"]) if st else 0) + plat_sold
+        etsy_favorers = (int(st["etsy_favorers"]) if st else 0) + f42_etsy_fav
+        etsy_listings = (int(st["etsy_listings"]) if st else 0) + f42_etsy_hits
+        sellers_real = len(all_sellers)
+        all_prices = (st["prices"] if st else []) + plat_prices + f42_prices
+        avg_price = int(round(sum(all_prices) / len(all_prices), -3)) if all_prices else None
+        l_type = st["listing_type"] if st else "physical"
+        custom = bool(st["customizable"]) if st else False
+        plats_in_kw = set(st["platforms"]) if st else set()
+        if plat_hits > 0:
+            plats_in_kw.add("VietCraft")
+        if f42_etsy_hits > 0:
+            plats_in_kw.add("Etsy")
+
+        raw_rows.append({
+            "idx": idx,
+            "tag": tag,
+            "sold_real": sold_real,
+            "sellers_real": sellers_real,
+            "etsy_favorers": etsy_favorers,
+            "etsy_listings": etsy_listings,
+            "n_obs": n_obs,
+            "avg_price": avg_price,
+            "l_type": l_type,
+            "custom": custom,
+            "platforms": sorted(plats_in_kw),
+            "trend_match": match_kind,
+            "matched_key": matched_key if match_kind == "exact" else None,
+            "trend_vals": trend_vals if match_kind == "exact" else [],
+            "trend_points": pts if match_kind == "exact" else [],
+            "plat_hits": plat_hits,
+            "has_ext": bool(st),
+        })
+
+    # 4. Chấm điểm bằng công thức chuẩn AI Analytic (Hybrid Log-Anchored + Percentile + Guardrails + Lọc ngày Trends)
+    scored_list = score_opportunity_keywords(raw_rows, as_of=hom_nay)
+
+    opportunity_keywords: List[Dict[str, Any]] = []
+    for row, sc in zip(raw_rows, scored_list):
+        idx = row["idx"]
+        tag = row["tag"]
+        sold_real = row["sold_real"]
+        sellers_real = row["sellers_real"]
+        etsy_favorers = row["etsy_favorers"]
+        etsy_listings = row["etsy_listings"]
+        n_obs = row["n_obs"]
+        match_kind = row["trend_match"]
+        matched_key = row["matched_key"]
+        score = sc["keyword_score"]
+        score_basis = sc["score_basis"]
+        sales_per_shop = sc["sales_per_shop"]
+        trend_norm = sc["trend_index_norm"]
+        trend_raw = sc["trend_index_raw"]
+        wow = sc["search_wow_pct"]
+        trend_stale_days = sc.get("trend_stale_days")
+        is_trend_stale = bool(sc.get("is_trend_stale"))
+        breakdown = sc["score_breakdown"]
+
+        has_exact_trend = match_kind == "exact" and trend_norm is not None
+
+        sources: List[str] = []
+        if "Tiki" in row["platforms"]:
+            sources.append("Tiki (listing hoạt động thu thập ≤ 30 ngày)")
+        if "Etsy" in row["platforms"] or etsy_listings > 0:
+            sources.append("Etsy Open API v3 (num_favorers, views, tags; lọc tin mới ≤ 180 ngày)")
+        if "VietCraft" in row["platforms"] or row["plat_hits"] > 0:
+            sources.append(f"VietCraft Live (đơn hoàn tất thật {VC_ORDER_WINDOW_DAYS} ngày gần nhất)")
+        if has_exact_trend:
+            sources.append("Google Trends Việt Nam (52 tuần đến hiện tại, khớp chính xác)")
+        if not sources:
+            sources.append("Từ khóa chuẩn ngành hàng theo dịp")
+
+        if n_obs > 0:
+            etsy_part = f", {etsy_favorers:,} lượt thích trên Etsy ({etsy_listings} mẫu)" if etsy_favorers > 0 else ""
+            stale_part = f" [Cảnh báo: dữ liệu thị trường cũ hơn {EXTERNAL_FRESHNESS_DAYS} ngày]" if ext_data_stale else ""
             how_obtained = (
-                f"Đo từ chỉ số Google Trends 52 tuần («{matched_key}»); chưa có listing đối soát trong DB."
-                if has_real_trend
-                else "Từ khóa gợi ý theo ngành hàng và dịp; chưa có đủ dữ liệu listing & chuỗi tìm kiếm riêng."
+                f"Tổng hợp & khử trùng từ {n_obs} listing ({sellers_real} shop duy nhất trên "
+                f"{', '.join(row['platforms']) or 'đa sàn'}, {sold_real:,} lượt bán{etsy_part}).{stale_part}"
             )
+        elif has_exact_trend:
+            how_obtained = f"Đo từ chuỗi Google Trends VN 52 tuần khớp chính xác «{matched_key}»; chưa có listing đối soát trong DB."
+        else:
+            how_obtained = "Chưa có listing bán thật, tín hiệu Etsy hay chuỗi Google Trends khớp chính xác cho từ khóa này."
 
-        # Không bịa lượt tìm kiếm hay số shop: volume = lượt bán thật (nếu có) hoặc chỉ số Trends 0-100
-        display_vol = sold_real if sold_real > 0 else (int(round(trend_mean)) if trend_mean is not None else 0)
+        if sold_real > 0:
+            display_vol = sold_real
+            volume_basis = "listing_sales"
+            vol_level = "high" if sold_real >= 500 else ("medium" if sold_real >= 100 else "low")
+        elif etsy_favorers > 0:
+            display_vol = etsy_favorers
+            volume_basis = "etsy_engagement"
+            vol_level = "high" if etsy_favorers >= 200 else ("medium" if etsy_favorers >= 40 else "low")
+        elif has_exact_trend and trend_norm is not None:
+            display_vol = int(round(trend_norm))
+            volume_basis = "trends_index"
+            vol_level = "high" if trend_norm >= 60 else ("medium" if trend_norm >= 30 else "low")
+        else:
+            display_vol = 0
+            volume_basis = "insufficient"
+            vol_level = "low"
+
         display_comp = sellers_real
-        vol_level = "high" if (sold_real >= 500 or (trend_mean or 0) >= 60) else ("medium" if (sold_real >= 100 or (trend_mean or 0) >= 30) else "low")
-        comp_level = "low" if display_comp <= 5 else ("medium" if display_comp <= 20 else "high")
+        comp_level = "low" if display_comp <= 5 else ("medium" if display_comp <= 15 else "high")
 
-        # Điểm cơ hội 0-100 tính trực tiếp từ chỉ số Trends (0-100) + đà tăng 4 tuần - áp lực số shop thật
-        base_signal = trend_mean if trend_mean is not None else (45.0 if sold_real > 0 else 25.0)
-        wow_bonus = max(-10.0, min(20.0, (wow or 0.0) * 0.25))
-        comp_penalty = min(25.0, display_comp * 1.5) if display_comp > 0 else 0.0
-        score = min(95, max(15, int(round(base_signal + wow_bonus - comp_penalty))))
-
-        conf = "high" if n_obs >= 10 else ("fair" if n_obs >= 3 else "preliminary")
-        if not has_real_trend and n_obs < 3:
+        if score is None:
             conf = "preliminary"
-        trend_note = {
-            "exact": f"Chuỗi tìm kiếm khớp trực tiếp «{matched_key}».",
-            "partial": f"Chuỗi tìm kiếm khớp gần đúng «{matched_key}».",
-            "proxy": "Chưa có chuỗi tìm kiếm riêng cho từ khóa này.",
-            "none": "Chưa có chuỗi tìm kiếm.",
-        }[match_kind]
+        elif sold_real >= 50 and n_obs >= 8 and not ext_data_stale:
+            conf = "high"
+        elif n_obs >= 3 or etsy_favorers >= 30:
+            conf = "fair"
+        else:
+            conf = "preliminary"
+
+        if has_exact_trend and is_trend_stale:
+            trend_note = (
+                f"Google Trends khớp «{matched_key}» nhưng dữ liệu mới nhất trễ {trend_stale_days} ngày "
+                f"(> {TREND_MAX_STALE_DAYS} ngày) nên không dùng đà 4 tuần vào điểm."
+            )
+        elif has_exact_trend:
+            trend_note = f"Google Trends khớp chính xác «{matched_key}» (chuẩn hóa {trend_norm}/100, gốc {trend_raw})."
+        else:
+            trend_note = "Chưa có chuỗi Google Trends riêng khớp chính xác (không dùng chuỗi gần đúng/thay thế vào điểm)."
+
+        sps_note = f", bình quân ~{sales_per_shop} lượt bán/shop" if sales_per_shop is not None else ""
         conf_reason = (
-            f"Đo từ {n_obs} listing thật ({sellers_real} shop, {sold_real:,} lượt bán). {trend_note}"
+            f"Đo từ {n_obs} listing đã khử trùng ({sellers_real} shop duy nhất, {sold_real:,} lượt bán{sps_note}). {trend_note}"
             if n_obs >= 1
             else f"Chưa có listing đối thủ trong DB. {trend_note}"
         )
+
+        caveats = [
+            "Lượt bán Tiki là tích lũy toàn thời gian (sẽ tự chuyển sang biến thiên 30 ngày sau khi tích lũy đủ snapshot hằng ngày); Etsy dùng num_favorers do API công khai ẩn lượt bán.",
+            "Chưa bao gồm đối thủ ngoài tập listing đã thu thập.",
+        ]
+        if ext_data_stale:
+            caveats.insert(0, f"Dữ liệu listing thị trường cũ hơn {EXTERNAL_FRESHNESS_DAYS} ngày — cần chạy lại bộ thu thập.")
+        if is_trend_stale and trend_stale_days is not None:
+            caveats.insert(0, f"Chuỗi Google Trends trễ {trend_stale_days} ngày so với hôm nay nên đã bỏ qua đà tăng 4 tuần.")
+
         cov = keyword_shop_coverage(tag, shop_products or [])
         if cov["gap"] and shop_products:
-            kw_action = {"type": "create_listing", "label": "Shop chưa có sản phẩm này — tạo listing", "priority": "high" if score >= 60 else "normal"}
+            kw_action = {
+                "type": "create_listing",
+                "label": "Shop chưa có sản phẩm này — tạo listing",
+                "priority": "high" if (score is not None and score >= 60) else "normal",
+            }
         elif cov["matching"] > 0:
             kw_action = {"type": "optimize_tags", "label": f"Gắn tag cho {cov['matching']} sản phẩm đã có", "priority": "normal"}
         else:
@@ -1002,39 +1251,58 @@ def _tinh_opportunity_keywords(
             "tag": tag,
             "volume": display_vol,
             "sold_count_real": sold_real,
-            "trend_index": trend_mean,
+            "etsy_favorers": etsy_favorers,
+            "etsy_listings": etsy_listings,
+            "sales_per_shop": sales_per_shop,
+            "trend_index": trend_norm,
+            "trend_index_raw": trend_raw,
+            "trend_stale_days": trend_stale_days,
             "volume_level": vol_level,
             "competition": display_comp,
             "competition_level": comp_level,
             "keyword_score": score,
-            "listing_type": l_type,
-            "customizable": custom,
+            "score_basis": score_basis,
+            "score_breakdown": breakdown,
+            "listing_type": row["l_type"],
+            "customizable": row["custom"],
             "when_made": "2024–2026",
-            "avg_price_vnd": avg_price,
+            "avg_price_vnd": row["avg_price"],
             "conversion_rate_pct": None,
-            "is_starred": score >= 75 or idx == 0,
+            "is_starred": bool(score is not None and score >= 70),
             "search_wow_pct": wow,
             "trend_match": match_kind,
             "trend_series_used": matched_key,
-            "volume_basis": "listing_sales" if sold_real > 0 else ("trends_index" if trend_mean is not None else "insufficient"),
+            "volume_basis": volume_basis,
+            "platforms": row["platforms"],
             "shop_coverage": cov,
             "action": kw_action,
             "evidence": {
                 "id": f"ev_kw_{camp_id}_{idx}",
-                "definition": f"Chỉ số nhu cầu và số shop đối thủ đo được cho từ khóa '{tag}' trên ngành {cat_slug}.",
+                "definition": f"Điểm cơ hội chuẩn AI Analytic cho từ khóa '{tag}' (ngành {cat_slug}), tính từ Cầu thật, Dư địa/shop và Đà tăng.",
                 "sources": sources,
                 "howObtained": how_obtained,
-                "period": [(hom_nay - timedelta(days=90)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
+                "period": [
+                    f"Listing ≤ {EXTERNAL_FRESHNESS_DAYS}d · Đơn VC {VC_ORDER_WINDOW_DAYS}d · Trends 52w",
+                    hom_nay.strftime("%Y-%m-%d"),
+                ],
                 "n": n_obs,
-                "formula": f"Trends TB={trend_mean if trend_mean is not None else 'N/A'}, 4w={wow if wow is not None else 'N/A'}%, Shop đo được={display_comp} → Score {score}/100.",
+                "formula": breakdown["formula_text"],
                 "confidence": conf,
                 "confidenceReason": conf_reason,
-                "mayBeWrongBecause": ["Chưa bao gồm đối thủ ngoài tập listing đã thu thập."],
+                "mayBeWrongBecause": caveats,
                 "updatedAt": hom_nay.strftime("%Y-%m-%d"),
-            }
+            },
         })
 
-    opportunity_keywords.sort(key=lambda x: x["keyword_score"], reverse=True)
+    opportunity_keywords.sort(
+        key=lambda x: (
+            x["keyword_score"] is not None,
+            x["keyword_score"] if x["keyword_score"] is not None else -1,
+            x["sold_count_real"],
+            x["etsy_favorers"],
+        ),
+        reverse=True,
+    )
     return opportunity_keywords
 
 
@@ -1589,12 +1857,14 @@ def seasonal(
     # Phân rã STL thật sự từ chuỗi tuần
     stl = _tinh_stl_that(trend_series, chu_ky=52)
 
-    # Xây dựng Hồ Sơ Tiềm Năng 5 Lớp từ SẢN PHẨM THẬT ĐANG BÁN thu thập trên các sàn TMĐT (Tiki, Printify, VietCraft Live)
-    # Lọc đúng ngành hàng người bán, đúng dịp mua sắm được chọn, ưu tiên lượt mua cao (sold_count) & lượt quan tâm/truy cập (review_count)
-    ext_ready_key = f"seasonal:ext_ready:{cat_slug}:{active_camp['id']}:v3"
+    # Xây dựng Hồ Sơ Tiềm Năng 5 Lớp từ SẢN PHẨM THẬT ĐANG BÁN thu thập trên các sàn TMĐT (Tiki, Etsy, Printify, VietCraft Live)
+    # Lọc đúng ngành hàng người bán, đúng dịp mua sắm, độ tươi thu thập <= 30 ngày (`collected_at`), khử trùng theo external_id
+    fresh_since_dt = _cutoff_utc_dt(hom_nay, EXTERNAL_FRESHNESS_DAYS)
+    ext_ready_key = f"seasonal:ext_ready:{cat_slug}:{active_camp['id']}:{hom_nay.isoformat()}:v5"
     raw_ext_ready = cache_get_json(ext_ready_key)
     if not isinstance(raw_ext_ready, list):
         ext_coll = db()["external_market_products"]
+        active_signal_or = [{"sold_count": {"$gt": 0}}, {"num_favorers": {"$gt": 0}}]
         raw_ext_ready = list(
             ext_coll.find(
                 {
@@ -1603,13 +1873,14 @@ def seasonal(
                     "listing_type": "ready_to_ship",
                     "is_active": True,
                     "inventory_status": "available",
-                    "sold_count": {"$gt": 0},
+                    "collected_at": {"$gte": fresh_since_dt},
+                    "$or": active_signal_or,
                 },
                 {"_id": 0},
-            ).sort([("sold_count", -1), ("review_count", -1)]).limit(100)
+            ).sort([("sold_count", -1), ("num_favorers", -1), ("review_count", -1)]).limit(140)
         )
         distinct_clusters = {x.get("query_cluster") or x.get("sub_category") for x in raw_ext_ready if x.get("query_cluster") or x.get("sub_category")}
-        if len(raw_ext_ready) < 12 or len(distinct_clusters) < 9:
+        if len(raw_ext_ready) < 16 or len(distinct_clusters) < 9:
             extra_ready = list(
                 ext_coll.find(
                     {
@@ -1618,13 +1889,15 @@ def seasonal(
                         "listing_type": "ready_to_ship",
                         "is_active": True,
                         "inventory_status": "available",
-                        "sold_count": {"$gt": 0},
+                        "collected_at": {"$gte": fresh_since_dt},
+                        "$or": active_signal_or,
                     },
                     {"_id": 0},
-                ).sort([("sold_count", -1), ("review_count", -1)]).limit(40)
+                ).sort([("sold_count", -1), ("num_favorers", -1), ("review_count", -1)]).limit(50)
             )
             raw_ext_ready.extend(extra_ready)
         if not raw_ext_ready:
+            # Fallback nếu DB chưa chạy cron trong 30 ngày qua
             raw_ext_ready = list(
                 ext_coll.find(
                     {
@@ -1633,8 +1906,9 @@ def seasonal(
                         "is_active": True,
                     },
                     {"_id": 0},
-                ).sort([("sold_count", -1), ("review_count", -1)]).limit(60)
+                ).sort([("sold_count", -1), ("num_favorers", -1), ("review_count", -1)]).limit(80)
             )
+        raw_ext_ready = dedupe_external_docs(raw_ext_ready, target_occasion_id=active_camp["id"])
         # Loại bỏ các listing nhiễu từ crawler tìm kiếm sai ngành (ví dụ: diệt gián, móc treo trong thời trang)
         off_cat_noise = {
             "thoi-trang": ("diệt gián", "diệt kiến", "diệt muỗi", "móc treo", "kệ để", "nồi ", "chảo "),
@@ -1677,22 +1951,33 @@ def seasonal(
         c_key = item.get("query_cluster") or item.get("sub_category") or item.get("title", "")[:25]
         grouped_clusters.setdefault(c_key, []).append(item)
 
-    # Sắp xếp ưu tiên cụm có lượt bán + lượt quan tâm/truy cập (review_count) cao, cộng điểm thưởng nếu đúng dịp đang chọn
+    # Sắp xếp ưu tiên cụm có lượt bán + lượt yêu thích/quan tâm cao, cộng điểm thưởng nếu đúng dịp đang chọn
+    def _item_rank_signal(x: Dict[str, Any]) -> int:
+        return int(x.get("sold_count") or 0) + 2 * int(x.get("num_favorers") or 0) + 3 * int(x.get("review_count") or 0)
+
     sorted_cluster_items = sorted(
         grouped_clusters.items(),
         key=lambda kv: (
-            (sum(int(x.get("sold_count") or 0) + 5 * int(x.get("review_count") or 0) for x in kv[1]))
-            * (1.5 if any(x.get("occasion_id") == active_camp["id"] and int(x.get("sold_count") or 0) >= 5 for x in kv[1]) else 1.0)
+            (sum(_item_rank_signal(x) for x in kv[1]))
+            * (
+                1.5
+                if any(
+                    x.get("occasion_id") == active_camp["id"]
+                    and (int(x.get("sold_count") or 0) >= 5 or int(x.get("num_favorers") or 0) >= 20)
+                    for x in kv[1]
+                )
+                else 1.0
+            )
         ),
         reverse=True,
     )
 
     real_blueprints: List[Dict[str, Any]] = []
     for c_key, items_in_cluster in sorted_cluster_items[:12]:
-        # Sắp xếp sản phẩm trong cụm theo lượt mua (sold_count) + lượt quan tâm (review_count) giảm dần
+        # Sắp xếp sản phẩm trong cụm theo lượt mua (sold_count) + yêu thích Etsy (num_favorers) + đánh giá giảm dần
         items_sorted = sorted(
             items_in_cluster,
-            key=lambda x: (int(x.get("sold_count") or 0), int(x.get("review_count") or 0)),
+            key=lambda x: (int(x.get("sold_count") or 0), int(x.get("num_favorers") or 0), int(x.get("review_count") or 0)),
             reverse=True,
         )
         lead = items_sorted[0]
@@ -1703,8 +1988,14 @@ def seasonal(
             p_min = int(round(lead["price_vnd"] * 0.88 / 1000.0) * 1000)
             p_max = int(round(lead["price_vnd"] * 1.15 / 1000.0) * 1000)
 
-        distinct_sellers = {x.get("seller_id") or x.get("seller_name") for x in items_sorted if x.get("seller_id") or x.get("seller_name")}
+        distinct_sellers = {
+            canonical_seller_key(x.get("seller_id"), x.get("seller_name"), x.get("platform"))
+            for x in items_sorted
+            if x.get("seller_id") or x.get("seller_name")
+        }
+        distinct_sellers.discard(None)
         total_sold = sum(int(x.get("sold_count") or 0) for x in items_sorted)
+        total_favorers = sum(int(x.get("num_favorers") or 0) for x in items_sorted)
 
         # Danh sách shop thật đang bán trong cụm: gộp các listing theo tên shop
         sellers_map: Dict[str, Dict[str, Any]] = {}
@@ -1717,6 +2008,7 @@ def seasonal(
                 "platform": x.get("platform") or "Tiki",
                 "listingCount": 0,
                 "soldCount": 0,
+                "favorersCount": 0,
                 "minPriceVnd": None,
                 "maxPriceVnd": None,
                 "topProductTitle": x.get("title") or "",
@@ -1725,11 +2017,12 @@ def seasonal(
             })
             entry["listingCount"] += 1
             entry["soldCount"] += int(x.get("sold_count") or 0)
+            entry["favorersCount"] += int(x.get("num_favorers") or 0)
             pv = int(x.get("price_vnd") or 0)
             if pv:
                 entry["minPriceVnd"] = pv if entry["minPriceVnd"] is None else min(entry["minPriceVnd"], pv)
                 entry["maxPriceVnd"] = pv if entry["maxPriceVnd"] is None else max(entry["maxPriceVnd"], pv)
-        cluster_sellers = sorted(sellers_map.values(), key=lambda s: s["soldCount"], reverse=True)
+        cluster_sellers = sorted(sellers_map.values(), key=lambda s: (s["soldCount"], s["favorersCount"]), reverse=True)
 
         real_blueprints.append({
             "cluster_sellers": cluster_sellers,
@@ -1744,9 +2037,11 @@ def seasonal(
             "product_url": lead.get("product_url") or "",
             "platform": lead.get("platform") or "Tiki",
             "seller_name": lead.get("seller_name") or "Gian hàng TMĐT",
-            "seller_count": max(len(distinct_sellers), min(12, len(items_sorted))),
+            "seller_count": len(distinct_sellers) if distinct_sellers else len(items_sorted),
             "sold_count": int(lead.get("sold_count") or 0),
+            "num_favorers": int(lead.get("num_favorers") or 0),
             "cluster_total_sold": total_sold,
+            "cluster_total_favorers": total_favorers,
             "rating_average": float(lead.get("rating_average") or 0.0),
             "review_count": int(lead.get("review_count") or 0),
             "cluster_query": c_key,
@@ -1759,6 +2054,7 @@ def seasonal(
                     "productUrl": x.get("product_url") or "",
                     "sellerName": x.get("seller_name") or "",
                     "soldCount": int(x.get("sold_count") or 0),
+                    "favorersCount": int(x.get("num_favorers") or 0),
                     "ratingAverage": float(x.get("rating_average") or 0.0),
                 }
                 for x in items_sorted[:3]
@@ -2208,45 +2504,77 @@ def seasonal(
             "higherSpending": round(((s_aov - baseline_spending) / max(1.0, float(baseline_spending))) * 100.0, 1) if s_aov > 0 else None,
         }
 
-    # Tổng hợp chỉ số & độ lớn toàn ngành từ dữ liệu đa sàn TMĐT (Tiki, Printify, VietCraft) theo ngành hàng & dịp đang chọn
-    ind_scale_key = f"seasonal:ind_scale:{cat_slug or 'all'}:{active_camp['id']}:v2"
+    # Tổng hợp chỉ số & độ lớn toàn ngành từ dữ liệu đa sàn TMĐT (Tiki, Etsy, Printify, VietCraft) — lọc độ tươi <= 30 ngày
+    ind_scale_key = f"seasonal:ind_scale:{cat_slug or 'all'}:{active_camp['id']}:{hom_nay.isoformat()}:v4"
     ind_scale = cache_get_json(ind_scale_key)
     if not isinstance(ind_scale, dict) or not ind_scale.get("productsCount"):
         try:
             ext_q: Dict[str, Any] = {"is_active": True}
             if cat_slug and cat_slug != "tong-hop":
                 ext_q["category_slug"] = cat_slug
-            ext_rows = list(
-                db()["external_market_products"].find(
-                    ext_q,
-                    {"_id": 0, "occasion_id": 1, "title": 1, "price_vnd": 1, "original_price_vnd": 1, "sold_count": 1, "seller_name": 1, "seller_id": 1, "platform": 1},
-                )
-            )
-            if len(ext_rows) < 20:
-                ext_rows = list(
-                    db()["external_market_products"].find(
-                        {"is_active": True},
-                        {"_id": 0, "occasion_id": 1, "title": 1, "price_vnd": 1, "original_price_vnd": 1, "sold_count": 1, "seller_name": 1, "seller_id": 1, "platform": 1},
-                    )
-                )
+            scale_proj = {
+                "_id": 0,
+                "external_id": 1,
+                "occasion_id": 1,
+                "title": 1,
+                "price_vnd": 1,
+                "original_price_vnd": 1,
+                "sold_count": 1,
+                "num_favorers": 1,
+                "customizable": 1,
+                "seller_name": 1,
+                "seller_id": 1,
+                "platform": 1,
+                "collected_at": 1,
+            }
+            scale_is_stale = False
+            raw_ext_rows = list(db()["external_market_products"].find({**ext_q, "collected_at": {"$gte": fresh_since_dt}}, scale_proj))
+            if len(raw_ext_rows) < 20:
+                raw_ext_rows = list(db()["external_market_products"].find({"is_active": True, "collected_at": {"$gte": fresh_since_dt}}, scale_proj))
+            if not raw_ext_rows:
+                scale_is_stale = True
+                raw_ext_rows = list(db()["external_market_products"].find(ext_q, scale_proj))
+                if len(raw_ext_rows) < 20:
+                    raw_ext_rows = list(db()["external_market_products"].find({"is_active": True}, scale_proj))
+            # Khử trùng theo external_id (ưu tiên bản ghi đúng dịp) để không cộng trùng sản phẩm & lượt bán
+            ext_rows = dedupe_external_docs(raw_ext_rows, target_occasion_id=active_camp["id"])
             n_ext = len(ext_rows)
-            ext_sellers = len({x.get("seller_name") or x.get("seller_id") for x in ext_rows if x.get("seller_name") or x.get("seller_id")})
+            ext_seller_keys = {
+                canonical_seller_key(x.get("seller_id"), x.get("seller_name"), x.get("platform"))
+                for x in ext_rows
+                if x.get("seller_id") or x.get("seller_name")
+            }
+            ext_seller_keys.discard(None)
+            ext_sellers = len(ext_seller_keys)
             ext_sold = sum(int(x.get("sold_count") or 0) for x in ext_rows)
-            ext_plats = sorted({str(x.get("platform")) for x in ext_rows if x.get("platform")}) or ["Tiki", "Printify", "VietCraft"]
+            etsy_rows = [x for x in ext_rows if str(x.get("platform") or "").lower() == "etsy"]
+            etsy_fav_total = sum(int(x.get("num_favorers") or 0) for x in etsy_rows)
+            ext_plats = sorted({str(x.get("platform")) for x in ext_rows if x.get("platform")}) or ["Tiki", "Etsy", "Printify", "VietCraft"]
 
             # Lọc tập con riêng của dịp đang chọn nếu có đủ >= 6 sản phẩm để đo hành vi đặc thù từng dịp
             occ_rows = [x for x in ext_rows if str(x.get("occasion_id") or "").lower() == str(active_camp["id"]).lower()]
             meas_rows = occ_rows if len(occ_rows) >= 6 else ext_rows
             n_meas = len(meas_rows)
+            combo_tokens = (
+                "combo", "set ", "bộ ", "đôi", "túi quà", "hộp quà",
+                "gift box", "gift set", "bundle", "matching", "couple", "pack",
+            )
             combo_hits = sum(
                 1 for x in meas_rows
-                if any(kw in (x.get("title") or "").lower() for kw in ("combo", "set ", "bộ ", "đôi", "túi quà", "hộp quà"))
+                if any(kw in (x.get("title") or "").lower() for kw in combo_tokens)
             )
-            disc_rows = [x for x in meas_rows if int(x.get("original_price_vnd") or 0) > int(x.get("price_vnd") or 0) > 0]
+            custom_hits = sum(
+                1 for x in meas_rows
+                if x.get("customizable") or any(kw in (x.get("title") or "").lower() for kw in ("custom", "personalized", "khắc tên", "in tên"))
+            )
+            # Chỉ tính tỷ lệ giảm giá trên sàn có `original_price_vnd` tách biệt (loại Etsy do API chỉ trả 1 giá)
+            disc_eligible = [x for x in meas_rows if str(x.get("platform") or "").lower() != "etsy"] or meas_rows
+            disc_rows = [x for x in disc_eligible if int(x.get("original_price_vnd") or 0) > int(x.get("price_vnd") or 0) > 0]
             ext_combo_pct = round((combo_hits / max(1, n_meas)) * 100.0, 1)
-            ext_disc_pct = round((len(disc_rows) / max(1, n_meas)) * 100.0, 1)
+            ext_custom_pct = round((custom_hits / max(1, n_meas)) * 100.0, 1)
+            ext_disc_pct = round((len(disc_rows) / max(1, len(disc_eligible))) * 100.0, 1)
 
-            # Đo mức chênh lệch giá bán dịp này so với trung bình toàn ngành
+            # Đo mức chênh lệch giá bán dịp này so với trung bình toàn ngành (trên cùng sàn để tránh lệch tỷ giá USD/VND)
             all_prices = [int(x.get("price_vnd") or 0) for x in ext_rows if int(x.get("price_vnd") or 0) > 0]
             occ_prices = [int(x.get("price_vnd") or 0) for x in occ_rows if int(x.get("price_vnd") or 0) > 0]
             occ_aov_premium = None
@@ -2261,16 +2589,20 @@ def seasonal(
                 "productsCount": n_ext,
                 "sellersCount": ext_sellers,
                 "totalSold": ext_sold,
+                "etsyProductsCount": len(etsy_rows),
+                "etsyFavorersTotal": etsy_fav_total,
                 "platforms": ext_plats,
                 "occasionProductsCount": len(occ_rows),
                 "extComboPct": ext_combo_pct,
+                "extCustomPct": ext_custom_pct,
                 "extDiscPct": ext_disc_pct,
                 "occAovPremium": occ_aov_premium,
+                "isStale": scale_is_stale,
             }
             cache_set_json(ind_scale_key, ind_scale, ttl_seconds=1800)
         except Exception as exc:
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
-            ind_scale = {"productsCount": 0, "sellersCount": 0, "totalSold": 0, "platforms": ["Tiki", "Printify", "VietCraft"]}
+            ind_scale = {"productsCount": 0, "sellersCount": 0, "totalSold": 0, "etsyProductsCount": 0, "etsyFavorersTotal": 0, "platforms": ["Tiki", "Etsy", "Printify", "VietCraft"]}
 
     if ind_scale.get("occAovPremium") is not None:
         spending_growth_pct = round((float(ind_scale["occAovPremium"]) + float(spending_growth_pct)) / 2.0)
@@ -2310,7 +2642,7 @@ def seasonal(
 
     active_camp["occasion_traits"] = occasion_traits
 
-    # Danh sách ý tưởng hàng sẵn và POD lấy từ SẢN PHẨM THẬT ĐANG BÁN trên các sàn TMĐT
+    # Danh sách ý tưởng hàng sẵn và POD lấy từ SẢN PHẨM THẬT ĐANG BÁN trên các sàn TMĐT (Tiki, Etsy, Printify, VietCraft)
     ready_ideas = []
     opportunity_clusters = []
 
@@ -2319,9 +2651,11 @@ def seasonal(
         _, _, kw_match = _tra_cuu_trend(bp["keyword"])
         prof_i = potential_profiles[idx] if idx < len(potential_profiles) else None
         up_i = ((prof_i or {}).get("layers", {}).get("demand", {}).get("metrics") or {})
-        if len(kw_pts) >= 12 and kw_match != "none":
-            recent_4w = sum(p[1] for p in kw_pts[-4:]) / 4.0
-            base_8w = sum(p[1] for p in kw_pts[-12:-4]) / 8.0
+        # Chỉ tính đà tăng trưởng Trends khi khớp chính xác `exact` và dữ liệu mới (trễ <= 28 ngày so với hôm nay)
+        kw_vals_filtered, kw_stale_days = filter_trend_points_by_date(kw_pts, as_of=hom_nay, window_weeks=52)
+        if len(kw_vals_filtered) >= 12 and kw_match == "exact" and (kw_stale_days is None or kw_stale_days <= TREND_MAX_STALE_DAYS):
+            recent_4w = sum(kw_vals_filtered[-4:]) / 4.0
+            base_8w = sum(kw_vals_filtered[-12:-4]) / 8.0
             trend_growth_pct = round(((recent_4w - base_8w) / max(10.0, base_8w)) * 100)
         else:
             trend_growth_pct = None
@@ -2331,12 +2665,21 @@ def seasonal(
         price_range_str = f"{p_min_val:,}đ – {p_max_val:,}đ"
         seller_cnt = int(bp.get("seller_count") or 0)
         sold_cnt = int(bp.get("sold_count") or 0)
+        fav_cnt = int(bp.get("num_favorers") or 0)
+        cluster_fav_total = int(bp.get("cluster_total_favorers") or fav_cnt)
         platform_name = bp.get("platform") or "Tiki"
         seller_name = bp.get("seller_name") or "Gian hàng TMĐT"
         trend_txt = (f"tìm kiếm '{bp['keyword']}' {trend_growth_pct:+d}% (4 tuần vs 8 tuần trước)" if trend_growth_pct is not None
                      else f"chưa có chuỗi tìm kiếm riêng cho '{bp['keyword']}'")
         model_txt = (f"; mô hình dự báo mức cầu dịp ×{up_i['uplift_p50']:.2f} (80%: ×{up_i['uplift_p10']:.2f}–×{up_i['uplift_p90']:.2f})"
                      if up_i.get("uplift_p50") else "")
+
+        if sold_cnt > 0:
+            market_lead_txt = f"Đang bán thực tế trên {platform_name} ({seller_name}) với {sold_cnt:,} lượt bán; "
+        elif fav_cnt > 0:
+            market_lead_txt = f"Đang mở bán trên {platform_name} ({seller_name}) với {fav_cnt:,} lượt yêu thích; "
+        else:
+            market_lead_txt = f"Gợi ý theo ngành (chưa có dữ liệu bán thật) cho dịp {active_camp['name']}; "
 
         ready_ideas.append({
             "title": bp["title"],
@@ -2354,16 +2697,13 @@ def seasonal(
             "seller_name": seller_name,
             "seller_count": seller_cnt,
             "sold_count": sold_cnt,
+            "num_favorers": fav_cnt,
             "rating_average": bp.get("rating_average") or 0.0,
             "review_count": bp.get("review_count") or 0,
             "search_trend_pct": trend_growth_pct,
             "is_template": bool(bp.get("is_template")),
-            "evidence_level": "template" if bp.get("is_template") else ("market_listing" if sold_cnt else "hybrid_mining"),
-            "why_it_sells": (
-                (f"Đang bán thực tế trên {platform_name} ({seller_name}) với {sold_cnt:,} lượt bán; " if sold_cnt > 0
-                 else f"Gợi ý theo ngành (chưa có dữ liệu bán thật) cho dịp {active_camp['name']}; ")
-                + trend_txt + model_txt + "."
-            ),
+            "evidence_level": "template" if bp.get("is_template") else ("market_listing" if (sold_cnt > 0 or fav_cnt > 0) else "hybrid_mining"),
+            "why_it_sells": market_lead_txt + trend_txt + model_txt + ".",
             "sourcing_tip": f"Giá tham chiếu {bp['price']:,}đ ({price_range_str}" + (f", {seller_cnt} shop trong cụm" if seller_cnt else "") + f"). Giá vốn mục tiêu ≤ {bp['cost']:,}đ ({bp.get('cost_basis') or 'ước tính 45% giá bán'}).",
             "upsell_bundle_tip": (
                 f"Ngành có {traits_cmp['combo_pct']['industry']['value']:.0f}% đơn dịp này mua ≥ 2 món — thử bundle."
@@ -2371,7 +2711,7 @@ def seasonal(
                 else "Chưa đủ dữ liệu ngành về mua combo; thử bundle nhỏ rồi đo."
             ),
             "suggested_theme": f"Chủ đề {active_camp['name']} · Nhóm {bp['category']}",
-            "design_hook": f"Tham khảo mẫu bán chạy của {seller_name} ({platform_name})",
+            "design_hook": f"Tham khảo mẫu nổi bật của {seller_name} ({platform_name})",
             "signal_label": prof_i["signal_label"] if prof_i else "Tín hiệu sơ bộ ●○○○",
             "verdict": prof_i["verdict"] if prof_i else "chua_chac",
         })
@@ -2387,9 +2727,21 @@ def seasonal(
                 "productUrl": bp.get("product_url") or "",
                 "sellerName": seller_name,
                 "soldCount": sold_cnt,
+                "favorersCount": fav_cnt,
                 "ratingAverage": bp.get("rating_average") or 0.0,
             }
         ]
+
+        cluster_total_sold = int(bp.get("cluster_total_sold") or sold_cnt)
+        if cluster_total_sold > 0:
+            order_count_range = f"{cluster_total_sold:,} lượt bán ghi nhận"
+            lead_metric_txt = f"sản phẩm dẫn đầu bán {sold_cnt:,} chiếc"
+        elif cluster_fav_total > 0:
+            order_count_range = f"{cluster_fav_total:,} lượt yêu thích ({platform_name})"
+            lead_metric_txt = f"sản phẩm dẫn đầu có {fav_cnt:,} lượt yêu thích trên {platform_name}"
+        else:
+            order_count_range = "Chưa ghi nhận lượt bán"
+            lead_metric_txt = "chưa ghi nhận lượt bán công khai"
 
         opportunity_clusters.append({
             "id": f"clust-real-{idx}",
@@ -2397,7 +2749,7 @@ def seasonal(
             "category": bp["category"],
             "quadrant": quadrant,
             "quadrantLabel": quadrant_label,
-            "orderCountRange": f"{max(20, bp.get('cluster_total_sold') or sold_cnt):,} lượt bán ghi nhận",
+            "orderCountRange": order_count_range,
             "sellerCount": seller_cnt,
             "newSellersLast30Days": None,
             "searchTrendPct": trend_growth_pct,
@@ -2406,21 +2758,22 @@ def seasonal(
             "productUrl": bp.get("product_url") or "",
             "sellerName": seller_name,
             "soldCount": sold_cnt,
+            "favorersCount": fav_cnt,
             "representativeProducts": rep_products,
             "sellers": bp.get("cluster_sellers") or [],
-            "clusteringMethod": f"Thu thập trực tiếp từ {platform_name} & VietCraft (trạng thái: Đang bán)",
+            "clusteringMethod": f"Thu thập trực tiếp từ {platform_name} & đa sàn (đã khử trùng, trạng thái: Đang bán)",
             "evidence": {
                 "id": f"ev_clust_real_{idx}",
                 "definition": f"Sản phẩm thật đang mở bán trên sàn {platform_name} trong nhóm '{bp.get('cluster_query') or bp['category']}'.",
                 "sources": [f"API sản phẩm đang bán {platform_name}", "Google Trends VN", "external_market_products"],
-                "howObtained": f"Truy vấn các sản phẩm có trạng thái đang bán (availability=1), gom nhóm {seller_cnt} gian hàng cùng phân khúc.",
-                "excluded": "Đã loại bỏ sản phẩm ngừng bán (out of stock), sản phẩm ẩn hoặc giá bất thường (< 10.000đ).",
+                "howObtained": f"Truy vấn các sản phẩm có trạng thái đang bán, khử trùng theo external_id và gom nhóm {seller_cnt} gian hàng duy nhất cùng phân khúc.",
+                "excluded": "Đã loại bỏ sản phẩm ngừng bán, trùng lặp đa dịp hoặc giá bất thường.",
                 "period": [(hom_nay - timedelta(days=30)).strftime("%Y-%m-%d"), hom_nay.strftime("%Y-%m-%d")],
                 "n": seller_cnt,
-                "formula": f"Khoảng giá thực tế từ {p_min_val:,}đ đến {p_max_val:,}đ trên {seller_cnt} shop đang bán; sản phẩm dẫn đầu bán {sold_cnt:,} chiếc.",
-                "confidence": "high" if sold_cnt >= 20 else "fair",
+                "formula": f"Khoảng giá thực tế từ {p_min_val:,}đ đến {p_max_val:,}đ trên {seller_cnt} shop đang bán; {lead_metric_txt}.",
+                "confidence": "high" if (sold_cnt >= 20 or fav_cnt >= 50) else "fair",
                 "confidenceReason": f"Dữ liệu thực tế từ listing đang mở bán của {seller_name} trên {platform_name}.",
-                "mayBeWrongBecause": ["Giá bán trên sàn ngoài có thể thay đổi theo giờ Flash Sale."],
+                "mayBeWrongBecause": ["Giá bán trên sàn ngoài có thể thay đổi theo giờ Flash Sale hoặc tỷ giá USD/VND (Etsy)."],
                 "updatedAt": hom_nay.isoformat(),
                 "rawDataUrl": bp.get("product_url") or "",
             },
@@ -2464,9 +2817,10 @@ def seasonal(
         pod_kw = p_doc.get("trend_keyword") or p_doc["title"]
         pod_pts = _lay_chuoi_trend_cho_tu_khoa(pod_kw)
         _, _, pod_match = _tra_cuu_trend(pod_kw)
-        if len(pod_pts) >= 12 and pod_match != "none":
-            p_r4 = sum(p[1] for p in pod_pts[-4:]) / 4.0
-            p_b8 = sum(p[1] for p in pod_pts[-12:-4]) / 8.0
+        pod_vals_filtered, pod_stale_days = filter_trend_points_by_date(pod_pts, as_of=hom_nay, window_weeks=52)
+        if len(pod_vals_filtered) >= 12 and pod_match == "exact" and (pod_stale_days is None or pod_stale_days <= TREND_MAX_STALE_DAYS):
+            p_r4 = sum(pod_vals_filtered[-4:]) / 4.0
+            p_b8 = sum(pod_vals_filtered[-12:-4]) / 8.0
             pod_trend_pct = round(((p_r4 - p_b8) / max(10.0, p_b8)) * 100)
         else:
             pod_trend_pct = None
@@ -2795,14 +3149,19 @@ def seasonal(
         "Tuyến Miền Trung & Tây Nguyên": {"carrier": "Viettel Post", "total": 0, "delayed": 0, "cancelled": 0},
         "Tuyến Miền Bắc & Lân cận": {"carrier": "J&T Express / SPX", "total": 0, "delayed": 0, "cancelled": 0},
     }
-    cached_rb = cache_get_json("seasonal:route_buckets:v1")
+    route_cache_key = f"seasonal:route_buckets:{hom_nay.isoformat()}:v2"
+    cached_rb = cache_get_json(route_cache_key)
     if isinstance(cached_rb, dict) and all(k in cached_rb for k in route_buckets):
         route_buckets = cached_rb
     else:
         try:
+            since_90_dt = _cutoff_utc_dt(hom_nay, 90)
             recent_orders = list(
                 db_live()["orders"].find(
-                    {},
+                    {
+                        "created_at": {"$gte": since_90_dt},
+                        "is_simulated": {"$ne": True},
+                    },
                     {
                         "_id": 0,
                         "order_status": 1,
@@ -2843,7 +3202,7 @@ def seasonal(
                     bucket["delayed"] += 1
                 elif delivered_at and created_at and hasattr(delivered_at, "__sub__") and (delivered_at - created_at).days > 4:
                     bucket["delayed"] += 1
-            cache_set_json("seasonal:route_buckets:v1", route_buckets, ttl_seconds=1800)
+            cache_set_json(route_cache_key, route_buckets, ttl_seconds=1800)
         except Exception as exc:
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             pass
@@ -2987,6 +3346,7 @@ def seasonal(
             "keyword": bp.get("keyword"),
             "price_vnd": bp.get("price"),
             "sold_count": bp.get("cluster_total_sold") or bp.get("sold_count") or 0,
+            "favorers_count": bp.get("cluster_total_favorers") or bp.get("num_favorers") or 0,
             "seller_count": bp.get("seller_count") or 0,
             "platform": bp.get("platform") or "Tiki",
         }
@@ -3024,12 +3384,17 @@ def seasonal(
         "top_opportunity_keywords": [
             {
                 "tag": k.get("tag"),
-                "volume": k.get("volume") or k.get("sold_count_real") or k.get("trend_index_real") or 0,
+                "volume": k.get("sold_count_real") or k.get("etsy_favorers") or k.get("volume") or 0,
+                "sold_count_real": k.get("sold_count_real") or 0,
+                "etsy_favorers": k.get("etsy_favorers") or 0,
+                "sales_per_shop": k.get("sales_per_shop"),
+                "keyword_score": k.get("keyword_score"),
                 "competition": k.get("competition", 0),
                 "wow": k.get("search_wow_pct"),
             }
-            for k in (opportunity_keywords or [])[:5]
-        ],
+            for k in (opportunity_keywords or [])
+            if k.get("keyword_score") is not None
+        ][:5],
         "strict_scope": {
             "allowed_price_min": min(_p_min, _occ_p_min),
             "allowed_price_max": max(int(round(_p_max * 1.25, -3)), _occ_p_max),
