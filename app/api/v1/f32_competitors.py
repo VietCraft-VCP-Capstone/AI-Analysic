@@ -81,7 +81,9 @@ def competitors(shop_id: str = CurrentShop, categoryId: Optional[str] = None):
         now = _bay_gio()
         trung = {g["shop_id"]: g["overlap"] for g in shop_canh_tranh_nhat(may, [r["listing_id"] for r in cua_minh], k=99)}
         toan_canh = {**tong_hop_shop(trong_cat, shop_id, tuan_ban_trong_dm(trong_cat, now), trung, now),
-                     "price_points": diem_gia(trong_cat, shop_id)}
+                     "price_points": diem_gia(trong_cat, shop_id),
+                     # shortcut: gửi điểm giá cả sàn cho ô "Danh mục khác" của thẻ Phân bố giá; sàn vài nghìn sản phẩm thì tách lệnh riêng theo loại hàng.
+                     "price_points_other": diem_gia([r for r in coll if r["category_id"] != cat], shop_id)}
 
     return ok({
         **toan_canh,

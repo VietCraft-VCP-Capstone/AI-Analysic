@@ -165,7 +165,8 @@ def diem_gia(rows: List[dict], toi: str) -> List[Dict[str, Any]]:
             for t in chuan_hoa(c["material"]):
                 gia_cl[t] = min(c["price_vnd"], gia_cl.get(t, c["price_vnd"]))
         ra.append({"listing_id": r["listing_id"], "title": r.get("title"), "shop_name": r.get("shop_name"),
-                   "is_mine": r["shop_id"] == toi, "product_type_id": r.get("product_type_id"),
+                   "is_mine": r["shop_id"] == toi, "category_name": r.get("category_name"),
+                   "product_type_id": r.get("product_type_id"),
                    "product_type_name": _loai(r), "price_vnd": r["price_vnd"], "units_90d": r["est_sales_90d"],
                    "materials": sorted(chuan), "materials_unknown": sorted(la),
                    "price_by_material": {t: g for t, g in gia_cl.items() if g != r["price_vnd"]}})
