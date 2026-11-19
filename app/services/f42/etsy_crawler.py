@@ -111,7 +111,7 @@ def fetch_etsy(keyword: str, session: Optional[requests.Session] = None, limit: 
     res = http.get(
         ETSY_SEARCH_URL,
         params={"keywords": keyword, "limit": limit},
-        headers={"x-api-key": settings.ETSY_API_KEY, "Accept": "application/json"},
+        headers={"x-api-key": settings.etsy_x_api_key, "Accept": "application/json"},
         timeout=TIMEOUT_S,
     )
     res.raise_for_status()
