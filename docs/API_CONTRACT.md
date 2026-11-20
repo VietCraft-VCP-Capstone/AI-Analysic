@@ -519,10 +519,11 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   `share_before_pct`, `share_after_pct`, `z`); `null` khi chưa đạt điều kiện của OpenIntro: mỗi nửa 4 tuần cần ≥ 10 lần
   "của shop" và ≥ 10 lần "của shop khác" theo tỉ lệ gộp. `is_peer`: shop bán nhiều nhất
   trong các shop có giá trung vị lệch ≤ 10% so với mình và bán gấp ≥ 2 lần. `concentration_top3_pct`: thị phần cộng của 3 shop
-  đầu (CR3). `price_points[]`: mỗi sản phẩm một điểm `{listing_id, title, shop_name, is_mine, product_type_id,
+  đầu (CR3). `price_points[]`: mỗi sản phẩm một điểm `{listing_id, title, shop_name, is_mine, category_name, product_type_id,
   product_type_name, price_vnd, units_90d, materials[] (tên chuẩn), materials_unknown[] (cách gõ chưa có trong từ điển),
   price_by_material{tên chuẩn: giá} (chỉ khi biến thể chất liệu đó có giá khác `price_vnd`)}`. FE tính vùng giá bán chạy
-  = khoảng 25–75% theo trọng số lượng bán, cần ≥ 3 sản phẩm có đơn.
+  = khoảng 25–75% theo trọng số lượng bán, cần ≥ 3 sản phẩm có đơn. `price_points_other[]`: cùng dạng, cho mọi sản phẩm
+  thuộc các danh mục khác trên sàn; FE dùng cho nhóm "Danh mục khác" của ô Loại hàng.
 - F35 (khi đã chọn `productId`) `ai_price`: `{suggested_vnd, low_vnd, high_vnd, confidence: high|medium|low,
   rival_weight, n_neighbors, avg_similarity, rival_price_min_vnd, rival_price_max_vnd, neighbors[], method}` hoặc
   `null` kèm `ai_price_reason`. Giá = trung vị có trọng số độ giống của tối đa 12 sản phẩm giống nhất (cùng loại, khác
