@@ -119,20 +119,14 @@ def test_seasonal_dl_forecaster_and_retail_motivation():
     assert m_info["method"] in ("seasonal_naive_conformal", "deep_ensemble")
     assert "avg_coverage_raw" in m_info
 
-    # 2. Motivation test: Fashion at Tet must be majority self-use (75% self, 25% gift)
+    # 2. Motivation test: khi chưa đủ đơn thực tế của shop -> không bịa tỷ lệ % cố định
     mot_fashion = _tinh_motivation_retail("thoi-trang", "tet")
-    assert mot_fashion["self_purchases_pct"] == 75.0
-    assert mot_fashion["gift_purchases_pct"] == 25.0
-    assert mot_fashion["top_reasons"][0]["reason"] == "Tự mua dùng"
-    assert mot_fashion["top_reasons"][0]["pct"] == 75
+    assert mot_fashion["source_type"] == "insufficient"
+    assert mot_fashion["self_purchases_pct"] is None
+    assert mot_fashion["gift_purchases_pct"] is None
+    assert mot_fashion["top_reasons"] == []
 
-    # 3. Motivation test: General / tong-hop at Tet must be majority self-use (70% self, 30% gift)
-    mot_general = _tinh_motivation_retail("tong-hop", "tet")
-    assert mot_general["self_purchases_pct"] == 70.0
-    assert mot_general["gift_purchases_pct"] == 30.0
-    assert mot_general["top_reasons"][0]["reason"] == "Tự mua dùng"
-
-    # 4. Funnel calculation for upcoming campaign (actual_camp_orders = 0)
+    # 3. Funnel calculation for upcoming campaign (chỉ dùng dữ liệu thật từ product_events + orders)
     fake_camp = {"id": "tet", "name": "Tết Nguyên Đán"}
     funnel_data = _tinh_campaign_funnel_va_kenh(
         active_camp=fake_camp,
@@ -143,15 +137,21 @@ def test_seasonal_dl_forecaster_and_retail_motivation():
         spending_growth_pct=25,
         hom_nay=datetime.date(2026, 11, 15),
         base_orders=10,
-        actual_camp_orders=0,
+        actual_camp_orders=2,
+        actual_views=100,
+        actual_cart_adds=10,
     )
     funnel = funnel_data["campaign_funnel"]
-    assert funnel["actual"]["orders"] == 0
-    assert funnel["actual"]["impressions"] == 0
+    assert funnel["actual"]["orders"] == 2
+    assert funnel["actual"]["views"] == 100
+    assert funnel["actual"]["cart_adds"] == 10
+    assert funnel["actual"]["impressions"] is None
     assert funnel["real_ctr_pct"] is None
+    assert funnel["real_cart_rate_pct"] == 10.0
+    assert funnel["real_order_rate_pct"] == 20.0
 
     channels = funnel_data["channel_breakdown"]
-    assert all(ch["is_target_plan"] is True for ch in channels)
+    assert all(ch["orders_count"] == 0 and ch["gmv_vnd"] == 0 for ch in channels)
     assert all(ch["growth_pct"] is None for ch in channels)
 
 

@@ -119,6 +119,11 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
     except Exception:
         pass
+    try:
+        from app.core.seasonal_dl_scheduler import stop as stop_seasonal_scheduler
+        stop_seasonal_scheduler()
+    except Exception:
+        pass
 
 
 app = FastAPI(
