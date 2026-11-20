@@ -5,11 +5,12 @@ from typing import Any, Dict, List, Optional, Tuple
 from bson import ObjectId
 
 from app.api.v1._live import LOC_SP_THAT
-from app.core.f29.constants import FACTOR_WEIGHT, MIN_CATEGORY_SAMPLE
+from app.core.f29 import weights
+from app.core.f29.constants import MIN_CATEGORY_SAMPLE
 from app.core.f29.factors import LABELS, desc_words, review_score
 from app.core.f29.material import has_material, material_conflict
 from app.core.f29.price_ref import category_of
-from app.core.f29.price_peers import price_points
+from app.core.f29.price_peers import HIGH_PCT, price_sub
 from app.core.f29.scoring import normalize_image
 from app.core.listing_quality.detectors.pod_content import PodContentDetector
 
@@ -62,9 +63,9 @@ def has_size(product: Dict[str, Any], text: str) -> bool:
 
 def _row(key: str, state: str, sub: Optional[float], method: str, reason: str,
          evidence: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    counted = sub is not None
-    return {"key": key, "label": LABELS[key], "weight": FACTOR_WEIGHT, "state": state,
-            "points": round(FACTOR_WEIGHT * sub / 100, 1) if counted else 0.0,
+    counted, weight = sub is not None, weights.load()["weights"][key]
+    return {"key": key, "label": LABELS[key], "weight": weight, "state": state,
+            "points": round(weight * sub / 100, 1) if counted else 0.0,
             "sub_score": round(sub, 1) if counted else None,
             "method": method, "reason": reason, "evidence": evidence or {}}
 
@@ -124,22 +125,28 @@ def review_row(n_good: int, n: int, p0: float, m: float) -> Dict[str, Any]:
                 f"{n_good}/{n} đánh giá tốt", {"good": n_good, "total": n, "p0": p0, "m": m})
 
 
-def price_reason(pct: float, n: int) -> str:
+def price_reason(pct: float, n: int, factor: float = 1.0, reasons=()) -> str:
     if pct < 0.5:
-        return f"Rẻ nhất trong {n} sản phẩm cùng loại"
-    if pct > 99.5:
-        return f"Đắt nhất trong {n} sản phẩm cùng loại"
-    if pct < 50:
-        return f"Rẻ hơn {100 - pct:.0f}% trong {n} sản phẩm cùng loại"
-    return f"Đắt hơn {pct:.0f}% trong {n} sản phẩm cùng loại"
+        text = f"Rẻ nhất trong {n} sản phẩm cùng loại"
+    elif pct > 99.5:
+        text = f"Đắt nhất trong {n} sản phẩm cùng loại"
+    elif pct < 50:
+        text = f"Rẻ hơn {100 - pct:.0f}% trong {n} sản phẩm cùng loại"
+    else:
+        text = f"Đắt hơn {pct:.0f}% trong {n} sản phẩm cùng loại"
+    if factor != 1.0:
+        text += ", đã quy đổi theo chất liệu"
+    if pct > HIGH_PCT:
+        text += ", có nêu lý do giá" if reasons else ", chưa nêu lý do giá cao"
+    return text
 
 
-def price_row(pos: Dict[str, Any]) -> Dict[str, Any]:
+def price_row(pos: Dict[str, Any], reasons=()) -> Dict[str, Any]:
     state = pos["state"]
     if state == "seller_missing":
         return _row("price", state, 0.0, "rule", "Chưa có giá bán")
     if state == "not_applicable":
         return _row("price", state, None, "rule", "Chưa đủ sản phẩm cùng loại để so giá", {"peers": pos["n"]})
-    evidence = {k: pos[k] for k in ("pct", "n", "level", "p10", "p90")}
-    return _row("price", "scored", price_points(pos["pct"]) * 5, "rule",
-                price_reason(pos["pct"], pos["n"]), evidence)
+    evidence = {k: pos[k] for k in ("pct", "n", "factor", "confidence", "p10", "p90")} | {"reasons": list(reasons)}
+    return _row("price", "scored", price_sub(pos["pct"], reasons, pos["confidence"]), "rule",
+                price_reason(pos["pct"], pos["n"], pos["factor"], reasons), evidence)

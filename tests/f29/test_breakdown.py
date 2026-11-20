@@ -4,7 +4,7 @@ from app.core.f29.breakdown import score
 
 
 def _f(state, points=0.0):
-    return {"key": "x", "state": state, "points": points}
+    return {"key": "x", "state": state, "points": points, "weight": 20}
 
 
 def test_score_counts_scored_and_seller_missing_only():

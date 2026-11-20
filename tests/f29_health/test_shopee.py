@@ -17,6 +17,9 @@ def _shopee(ids, rating=60.0, created="2026-10-01", seen="2026-10-11"):
         "ratingCount": [rating] * n,
         "createdAt": pd.to_datetime([created] * n, utc=True),
         "_lastSeenAt": pd.to_datetime([seen] * n, utc=True),
+        "shopFollowerCount": [100] * n,
+        "isOfficialShop": [False] * n,
+        "shopRating": [4.8] * n,
     })
 
 
@@ -26,7 +29,7 @@ def test_load_columns_and_dedup(tmp_path):
     df = shopee.load(tmp_path)
     assert list(df.columns) == [
         "listing_id", "source", "seller", "group", "n_images", "desc_len",
-        "price", "price_ref", "sold", "age_days", "top25", "split",
+        "price", "price_ref", "sold", "age_days", "top25", "split", "log_followers", "official", "shop_rating",
     ]
     assert df["listing_id"].is_unique
     assert len(df) == 38

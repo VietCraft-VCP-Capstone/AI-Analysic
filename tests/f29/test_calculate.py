@@ -119,20 +119,15 @@ class TestCalculateIntegration:
         assert not any(w["field"] == "price" for w in result["warnings"])
         assert result["axes"]["price"] is None
 
-    def test_cheap_price_vs_same_material_peers(self):
+    def test_cheap_price_is_not_penalised(self):
         result = _with_peers("Áo cotton mẫu", "50000")
         price = next(f for f in result["factors"] if f["key"] == "price")
-        assert price["state"] == "scored" and price["evidence"]["level"] == "category_material"
-        assert price["evidence"]["n"] == 8 and result["axes"]["price"] == 0.0
+        assert price["state"] == "scored" and price["evidence"]["n"] == 8 and result["axes"]["price"] == 100.0
+        assert any(r["id"] == "info:price_low" for r in result["recommendations"])
 
     def test_price_at_market_level_scores_full(self):
         price = next(f for f in _with_peers("Áo cotton mẫu", "100000")["factors"] if f["key"] == "price")
         assert price["sub_score"] == 100.0 and price["points"] == 20.0
-
-    def test_other_material_peers_use_category_level(self):
-        result = _with_peers("Áo len mẫu", "50000")
-        price = next(f for f in result["factors"] if f["key"] == "price")
-        assert price["state"] == "scored" and price["evidence"]["level"] == "category"
 
     def test_junk_title_warns_with_cleaned_suggestion(self):
         product = with_id(base_product(title="icon arrow left bold Share: Favorite (48) Thắt lưng vải canvas nam"))

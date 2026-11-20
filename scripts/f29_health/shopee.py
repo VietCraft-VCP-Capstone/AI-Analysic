@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from scripts.f29_health import frames
@@ -13,7 +14,7 @@ SHOPEE_DIR = Path(
 MIN_AGE_DAYS = 30
 COLUMNS = [
     "listing_id", "source", "seller", "group", "n_images", "desc_len",
-    "price", "price_ref", "sold", "age_days", "top25", "split",
+    "price", "price_ref", "sold", "age_days", "top25", "split", "log_followers", "official", "shop_rating",
 ]
 
 
@@ -37,6 +38,9 @@ def load(folder: Path | None = None) -> pd.DataFrame:
         "price": raw["priceMin"].astype(float) / 1e5,
         "age_days": age,
         "sold": raw["ratingCount"].fillna(0) / age.clip(lower=MIN_AGE_DAYS),
+        "log_followers": np.log1p(raw["shopFollowerCount"].fillna(0).astype(float)),
+        "official": raw["isOfficialShop"].fillna(False).astype(float),
+        "shop_rating": raw["shopRating"].astype(float),
     })
     df = df[df["price"] > 0].reset_index(drop=True)
     df["top25"] = top25(df, "sold", ["group"])

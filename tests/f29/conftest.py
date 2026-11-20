@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core.f29 import image_check, price_ref, price_suggest, review_stats, weights
+from app.core.f29 import image_check, material, price_ref, price_suggest, review_stats, weights
 from app.core.f29.scoring import normalize_image
 from tests.f29.fake_price import FakePriceModel
 
@@ -15,6 +15,11 @@ def health_weights(monkeypatch):
     weights.clear_cache()
     yield
     weights.clear_cache()
+
+
+@pytest.fixture(autouse=True)
+def fixed_price_params(monkeypatch):
+    monkeypatch.setattr(material, "price_params", lambda: material.DEFAULT_PARAMS)
 
 
 @pytest.fixture(autouse=True)

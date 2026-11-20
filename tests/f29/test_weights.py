@@ -31,9 +31,7 @@ def test_load_missing_fields_raises(tmp_path):
     base = json.loads(FIXTURE.read_text("utf-8"))
     cases = [
         {**base, "weights": {"image": 27, "description": 13, "review": 5, "price": 55}},
-        {**base, "targets": {"image": 6, "description": 570}},
         {**base, "review": {}},
-        {**base, "price": {"full_at": 1.0, "zero_at": 2.0}},
     ]
     for i, data in enumerate(cases):
         path = tmp_path / f"broken{i}.json"
