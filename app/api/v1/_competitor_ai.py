@@ -13,6 +13,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
+from app.api.v1._competitor_subkind import LOAI_NHO, nhan_cua
 from app.api.v1._materials import chuan_hoa, tap_chuan
 
 # Hai ngưỡng đo trên 17.000 tin Shopee chưa dùng để chỉnh (22/10/2026), đáp án là nhãn "cùng sản phẩm":
@@ -91,6 +92,7 @@ class MayGiong:
         mo_ta, ten_tag = mo_ta or {}, ten_tag or {}
         self.dong = list(dong)
         self.vi_tri = {r["listing_id"]: i for i, r in enumerate(self.dong)}
+        self.loai_nho = nhan_cua(self.dong, mo_ta)
         ten = [TACH_TRUONG.join(truong(r, ten_tag)) for r in self.dong]
         mt = [(mo_ta.get(r["listing_id"]) or "")[:300] for r in self.dong]
         ky_tu = [bo_dau(r.get("title")) for r in self.dong]      # bỏ dấu riêng ở đây để bắt tên gõ không dấu
@@ -137,20 +139,27 @@ class MayGiong:
                 break
         return ra
 
+    def _cung_loai(self, i: int, j: int) -> List[str]:
+        nho = self.loai_nho[i]
+        return [f"cùng loại: {LOAI_NHO[self.dong[i]['product_type_name']][nho]['ten']}"] if nho and nho == self.loai_nho[j] else []
+
     def lang_gieng(self, listing_id: str, k: int, nguong: float = NGUONG_GIONG,
-                   loc_chat_lieu: bool = True) -> List[Tuple[int, float]]:
-        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, không khác chất liệu (nếu loc_chat_lieu), đạt ngưỡng."""
+                   loc_chat_lieu: bool = True, loc_loai_nho: bool = True) -> List[Tuple[int, float]]:
+        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, không khác chất liệu (nếu loc_chat_lieu), đạt ngưỡng.
+        Hai bên đều có loại nhỏ (nếu loc_loai_nho) thì chỉ cần cùng loại nhỏ, bỏ ngưỡng và luật từ hiếm."""
         i = self.vi_tri.get(listing_id)
         if i is None or self.x is None:
             return []
         loai = self.dong[i].get("product_type_id")
+        nho = self.loai_nho[i] if loc_loai_nho else None
         sim = (self.x @ self.x[i].T).toarray().ravel()
         ung = sorted(((float(sim[j]), j) for j, r in enumerate(self.dong)
                       if j != i and r.get("product_type_id") == loai
-                      and r["shop_id"] != self.dong[i]["shop_id"] and sim[j] >= nguong
+                      and r["shop_id"] != self.dong[i]["shop_id"]
+                      and (nho == self.loai_nho[j] if nho and self.loai_nho[j] else sim[j] >= nguong)
                       and not (loc_chat_lieu and self.khac_chat_lieu(i, j))), reverse=True)
         # Đối thủ trực tiếp phải có điểm chung có nghĩa, không chỉ giống nhau ở văn mẫu mô tả.
-        return [(j, s) for s, j in ung if s >= NGUONG_KHONG_LY_DO or self._ly_do(i, j, 1)][:k]
+        return [(j, s) for s, j in ung if (nho and self.loai_nho[j]) or s >= NGUONG_KHONG_LY_DO or self._ly_do(i, j, 1)][:k]
 
     def khop_nhat(self, listing_id: str, shop_id: str) -> Tuple[Optional[int], float]:
         """Sản phẩm cùng loại của shop_id giống listing_id nhất."""
@@ -174,7 +183,7 @@ class MayGiong:
             "est_sales_90d": self.dong[j].get("est_sales_90d") or 0,
             "similarity": round(s, 3),
             "near_identical": s >= NGUONG_GAN_NHU_Y_HET,
-            "reasons": self._ly_do(i, j),
+            "reasons": self._ly_do(i, j) or self._cung_loai(i, j),
             "materials": self.dong[j].get("materials") or [],
         } for j, s in self.lang_gieng(listing_id, k)]
 
@@ -191,7 +200,8 @@ def gia_de_xuat(may: MayGiong, listing_id: str, k: int = K_GIA) -> Tuple[Optiona
     Trả (kết quả, lý do nếu không có)."""
     i = may.vi_tri.get(listing_id)
     # Không lọc chất liệu: trên Amazon lọc không làm giá sát hơn (chênh 0,0 điểm) mà bớt mẫu; chất liệu đã nằm trong TF-IDF.
-    lg = [(j, s) for j, s in may.lang_gieng(listing_id, k, loc_chat_lieu=False) if may.dong[j].get("price_vnd")]
+    # Không lọc loại nhỏ: trên 12 sản phẩm thật sai số giá trung vị +1,4 điểm, CI 95% [-1,3; +4,3], chưa chứng minh không tệ hơn.
+    lg = [(j, s) for j, s in may.lang_gieng(listing_id, k, loc_chat_lieu=False, loc_loai_nho=False) if may.dong[j].get("price_vnd")]
     if i is None or len(lg) < TOI_THIEU_GIA:
         return None, (f"Mới tìm được {len(lg)} sản phẩm đủ giống cùng loại trên sàn, "
                       f"cần ít nhất {TOI_THIEU_GIA} để AI tính giá đối thủ trực tiếp")

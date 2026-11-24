@@ -1,0 +1,109 @@
+{
+  "Giày dép": {
+    "football_boots": {"ten": "giày đá bóng", "mo_ta": "Giày đá bóng sân cỏ tự nhiên hoặc sân cỏ nhân tạo (turf)."},
+    "sneaker": {"ten": "giày sneaker", "mo_ta": "Giày sneaker thường ngày hoặc thể thao, mang đi học, đi làm, đi chơi."},
+    "slide_sandals": {"ten": "dép quai ngang", "mo_ta": "Dép lê hoặc dép quai ngang một quai, mang thường ngày."}
+  },
+  "Hộp quà": {
+    "gift_box": {"ten": "hộp quà", "mo_ta": "Hộp quà bán để gói hoặc tặng kèm một sản phẩm khác."},
+    "test": {"ten": "tin thử nghiệm", "mo_ta": "Tin đăng thử nghiệm hoặc giữ chỗ, không phải sản phẩm thật."}
+  },
+  "Laptop": {
+    "everyday_laptop": {"ten": "laptop văn phòng", "mo_ta": "Laptop làm việc văn phòng, học tập và dùng hằng ngày, kể cả máy mỏng nhẹ và MacBook."},
+    "gaming_laptop": {"ten": "laptop gaming", "mo_ta": "Laptop cấu hình cao, quảng cáo để chơi game."}
+  },
+  "Ly tách": {
+    "ceramic_cup_set": {"ten": "bộ ly sứ", "mo_ta": "Bộ ly hoặc tách sứ uống cà phê, uống trà tại nhà."}
+  },
+  "Phụ kiện": {
+    "bandana": {"ten": "khăn bandana", "mo_ta": "Khăn bandana bằng vải, quấn đầu hoặc đeo cổ."},
+    "decorative_sticker": {"ten": "sticker trang trí", "mo_ta": "Sticker trang trí dán điện thoại, sổ tay hoặc phong bì."}
+  },
+  "Quần dài": {
+    "wide_leg_trousers": {"ten": "quần ống rộng", "mo_ta": "Quần dài ống rộng nữ, mặc thường ngày hoặc đi làm."}
+  },
+  "Set Áo Quần": {
+    "office_suit_set": {"ten": "bộ vest công sở", "mo_ta": "Blazer hoặc gi-lê đi cùng quần, mặc đi làm và dịp trang trọng."},
+    "casual_top_pants_set": {"ten": "bộ áo quần thường ngày", "mo_ta": "Áo và quần đồng bộ mặc thường ngày."},
+    "corset_dress_set": {"ten": "set đầm corset", "mo_ta": "Set đồ dự tiệc lấy đầm corset làm chủ đạo."}
+  },
+  "Set áo váy": {
+    "top_skirt_set": {"ten": "set áo chân váy", "mo_ta": "Áo và chân váy bán chung thành một bộ."},
+    "top_pants_set": {"ten": "set áo quần", "mo_ta": "Áo và quần dài hoặc quần jean bán chung thành một bộ."}
+  },
+  "Sneaker": {
+    "casual_sneaker": {"ten": "sneaker thường ngày", "mo_ta": "Giày sneaker mang thường ngày cho cả nam và nữ."}
+  },
+  "Sweater": {
+    "hoodie": {"ten": "áo hoodie", "mo_ta": "Áo nỉ có mũ, kiểu chui đầu hoặc khoá kéo."},
+    "crewneck_sweatshirt": {"ten": "áo nỉ cổ tròn", "mo_ta": "Áo nỉ (sweatshirt) cổ tròn, không có mũ."}
+  },
+  "Thắt Lưng": {
+    "casual_belt": {"ten": "thắt lưng vải", "mo_ta": "Thắt lưng vải hoặc canvas phối đồ thường ngày."}
+  },
+  "Trang sức": {
+    "necklace": {"ten": "dây chuyền", "mo_ta": "Dây chuyền hoặc vòng đeo cổ."},
+    "wristwatch": {"ten": "đồng hồ đeo tay", "mo_ta": "Đồng hồ đeo tay thời trang."}
+  },
+  "Trang trí": {
+    "model_kit": {"ten": "mô hình trưng bày", "mo_ta": "Mô hình trưng bày hoặc mô hình lắp ráp (robot, Gundam, chiến binh) để trang trí, sưu tầm."},
+    "board_game": {"ten": "board game", "mo_ta": "Trò chơi bài hoặc board game chơi cùng bạn bè, gia đình."},
+    "tet_decoration": {"ten": "đồ trang trí Tết", "mo_ta": "Đồ treo hoặc dán cửa trang trí Tết Nguyên đán."}
+  },
+  "Tranh ảnh": {
+    "single_wall_art": {"ten": "tranh treo tường", "mo_ta": "Một bức tranh vẽ, tranh canvas hoặc tranh in có khung để treo tường."},
+    "multi_panel_wall_art": {"ten": "tranh bộ nhiều tấm", "mo_ta": "Bộ nhiều tấm canvas treo cạnh nhau thành một bức tranh."}
+  },
+  "Túi": {
+    "tote_bag": {"ten": "túi tote", "mo_ta": "Túi tote vải canvas hoặc túi đeo vai cỡ lớn, dùng hằng ngày, đi làm, đi chơi."},
+    "crossbody_bag": {"ten": "túi đeo chéo", "mo_ta": "Túi nhỏ đeo chéo qua người."}
+  },
+  "Váy Đầm": {
+    "skirt": {"ten": "chân váy", "mo_ta": "Chân váy bán riêng, mặc cùng một chiếc áo khác."},
+    "party_dress": {"ten": "đầm dự tiệc", "mo_ta": "Đầm thanh lịch hoặc gợi cảm để dự tiệc, sự kiện buổi tối, hẹn hò (đầm body, cúp ngực, hai dây, dạ hội)."},
+    "casual_dress": {"ten": "đầm dạo phố", "mo_ta": "Đầm nữ tính mặc hằng ngày đi làm, đi cà phê, đi chơi, chụp ảnh."}
+  },
+  "Vải len": {
+    "knit_sweater": {"ten": "áo len", "mo_ta": "Áo len đan chui đầu, mặc ngày lạnh."}
+  },
+  "phụ kiện điện thoại": {
+    "smartphone": {"ten": "điện thoại thông minh", "mo_ta": "Máy điện thoại thông minh."}
+  },
+  "Áo Lông": {
+    "faux_fur_jacket": {"ten": "áo khoác lông", "mo_ta": "Áo khoác lông nhân tạo hoặc lông cừu teddy, giữ ấm và lên đồ mùa đông."}
+  },
+  "Áo dài": {
+    "traditional_ao_dai": {"ten": "áo dài truyền thống", "mo_ta": "Áo dài truyền thống tà dài, cổ đứng, tay dài."},
+    "modern_ao_dai": {"ten": "áo dài cách tân", "mo_ta": "Áo dài cách tân, dáng rộng hơn hoặc tay áo, cổ áo kiểu mới."}
+  },
+  "Áo khoác": {
+    "faux_fur_jacket": {"ten": "áo khoác lông", "mo_ta": "Áo khoác lông nhân tạo hoặc lót lông cừu (sherpa) cho ngày lạnh."},
+    "puffer_jacket": {"ten": "áo phao", "mo_ta": "Áo khoác phao trần bông giữ ấm mùa đông."},
+    "knit_cardigan": {"ten": "áo cardigan len", "mo_ta": "Áo cardigan len cài nút, khoác nhẹ bên ngoài."},
+    "windbreaker": {"ten": "áo khoác gió", "mo_ta": "Áo khoác gió nylon mỏng hoặc áo khoác thể thao."},
+    "denim_jacket": {"ten": "áo khoác jean", "mo_ta": "Áo khoác jean (denim)."},
+    "zip_hoodie": {"ten": "hoodie khoá kéo", "mo_ta": "Áo khoác hoodie có khoá kéo."}
+  },
+  "Áo kiểu": {
+    "blouse_shirt": {"ten": "áo kiểu nữ", "mo_ta": "Áo kiểu hoặc sơ mi nữ điệu đà, mặc đi làm hoặc đi chơi."},
+    "graphic_hoodie": {"ten": "hoodie in hình", "mo_ta": "Áo hoodie có in hình."}
+  },
+  "Áo quần bóng đá": {
+    "club_jersey": {"ten": "áo đấu câu lạc bộ", "mo_ta": "Áo thi đấu câu lạc bộ bản sao (replica) cho người hâm mộ."},
+    "team_kit_set": {"ten": "bộ quần áo đá bóng", "mo_ta": "Bộ áo và quần bóng đá đồng bộ để ra sân đá bóng."},
+    "fan_tee": {"ten": "áo thun cổ động", "mo_ta": "Áo thun thường chủ đề bóng đá, in cầu thủ hoặc câu lạc bộ."}
+  },
+  "Áo thun": {
+    "plain": {"ten": "áo thun trơn", "mo_ta": "Áo thun cơ bản một màu, không in hình."},
+    "graphic_single": {"ten": "áo thun in hình", "mo_ta": "Một chiếc áo thun có in hình bất kỳ."},
+    "couple_set": {"ten": "áo cặp đôi", "mo_ta": "Áo thun giống nhau cho hai người yêu nhau."},
+    "family_set": {"ten": "áo gia đình", "mo_ta": "Áo thun giống nhau cho bố mẹ và con."},
+    "sports_fan": {"ten": "áo cổ động bóng đá", "mo_ta": "Áo thun cổ động bóng đá hoặc câu lạc bộ."}
+  },
+  "Điện Thoại": {
+    "smartphone": {"ten": "điện thoại thông minh", "mo_ta": "Máy điện thoại thông minh."}
+  },
+  "Đồ ngủ": {
+    "pajama_set": {"ten": "bộ đồ ngủ", "mo_ta": "Bộ đồ ngủ gồm áo và quần đồng bộ."}
+  }
+}
