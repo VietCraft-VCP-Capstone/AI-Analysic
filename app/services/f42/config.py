@@ -11,6 +11,13 @@ COST_MIN_SUGGEST_RATIO: float = float(os.getenv("F42_COST_MIN_SUGGEST_RATIO", 1.
 DEFAULT_TARGET_MARGIN: float = float(os.getenv("F42_DEFAULT_TARGET_MARGIN", 0.30))
 PRICE_ROUND_STEP: int = int(os.getenv("F42_PRICE_ROUND_STEP", 1000))
 
+# Etsy là nguồn tham khảo PHỤ (thị trường quốc tế, thường cao hơn trong nước): trọng số thấp và đối chiếu với giá trong nước
+ETSY_WEIGHT: float = float(os.getenv("F42_ETSY_WEIGHT", 0.4))
+ETSY_MAX_COMPARABLES: int = int(os.getenv("F42_ETSY_MAX_COMPARABLES", 8))
+ETSY_PRICE_BAND_LOW: float = float(os.getenv("F42_ETSY_PRICE_BAND_LOW", 0.4))     # × trung vị giá trong nước
+ETSY_PRICE_BAND_HIGH: float = float(os.getenv("F42_ETSY_PRICE_BAND_HIGH", 2.5))
+ETSY_MIN_FAVORERS: int = int(os.getenv("F42_ETSY_MIN_FAVORERS", 5))               # lượt yêu thích tối thiểu để coi là tin hợp lệ
+
 CATEGORY_MIN_SCORE: float = float(os.getenv("F42_CATEGORY_MIN_SCORE", 0.25))
 CATEGORY_TOP_K: int = int(os.getenv("F42_CATEGORY_TOP_K", 3))
 CATEGORY_AUTOCONFIRM_SCORE: float = float(os.getenv("F42_CATEGORY_AUTOCONFIRM_SCORE", 0.60))

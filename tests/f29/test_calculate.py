@@ -1,9 +1,12 @@
+from datetime import timedelta
+
 import pytest
 from bson import ObjectId
 
-from app.core.f29 import weights
+from app.core.f29 import image_check, weights
 from app.core.f29.constants import MODEL_VERSION
 from app.core.f29.factors import KEYS
+from app.core.listing_intel.embedder import MODEL_ID as SIGLIP_ID
 from tests.f29.fake_mongo import make_calculator
 from tests.f29.samples import NOW, PRODUCT_ID, base_product, with_id
 
@@ -58,18 +61,18 @@ class TestCalculateIntegration:
         assert isinstance(result["score"], float)
         assert result["status"] in ("good", "needs_improvement", "poor")
         assert set(result["axes"]) == set(KEYS)
-        assert result["axes_missing"] == ["review"]
-        assert [r["key"] for r in result["breakdown"]] == list(KEYS)
-        assert result["basis"]["weights"] == weights.load()["weights"]
+        assert result["axes_missing"] == ["review", "price"]
+        assert [f["key"] for f in result["factors"]] == list(KEYS)
+        assert result["coverage"] == {"evaluated": 3, "total": 5}
         assert result["model_version"] == MODEL_VERSION
         assert result["content_hash"] and result["inputs_hash"]
 
-    def test_missing_review_scores_zero(self):
+    def test_missing_review_is_not_applicable(self):
         product = with_id(base_product())
         calc = make_calculator(products=[product], product_variants=_priced(product))
-        result = calc.calculate(PRODUCT_ID)
-        assert result["axes"]["review"] == 0.0
-        assert "review" in result["axes_missing"]
+        review = next(f for f in calc.calculate(PRODUCT_ID)["factors"] if f["key"] == "review")
+        assert review["state"] == "not_applicable" and review["sub_score"] is None and review["points"] == 0.0
+        assert review["reason"] == "Chưa có đánh giá"
 
     def test_simulated_order_reviews_ignored(self):
         sim_order = ObjectId()
@@ -80,7 +83,7 @@ class TestCalculateIntegration:
             reviews=[_review(product["_id"], 5, order_id=sim_order)],
         )
         result = calc.calculate(PRODUCT_ID)
-        assert result["axes"]["review"] == 0.0
+        assert result["axes"]["review"] is None
         assert "review" in result["axes_missing"]
 
     def test_review_uses_platform_p0(self):
@@ -91,32 +94,23 @@ class TestCalculateIntegration:
                                orders=[{"_id": ORDER}], reviews=reviews)
         assert calc.calculate(PRODUCT_ID)["axes"]["review"] == pytest.approx(64.3, abs=0.05)
 
-    def test_no_active_variant_price_is_missing(self, fake_price_model):
+    def test_no_active_variant_price_is_missing(self):
         product = with_id(base_product())
         variants = _priced(product, [{"is_active": False, "retail_price": "150000", "base_cost": "80000"}])
         calc = make_calculator(products=[product], product_variants=variants)
         result = calc.calculate(PRODUCT_ID)
         assert result["axes"]["price"] == 0.0
         assert "price" in result["axes_missing"]
-        msg = "Chưa có giá bán cho biến thể nào · Tham khảo: 82.000đ–122.000đ"
-        assert any(t["field"] == "price" and t["message"] == msg for t in result["todos"])
+        assert [b["field"] for b in result["blockers"]] == ["variants.stock"]
 
-    def test_price_row_has_suggestion(self, fake_price_model):
-        product = with_id(base_product())
-        calc = make_calculator(products=[product], product_variants=_priced(product))
-        price = next(r for r in calc.calculate(PRODUCT_ID)["breakdown"] if r["key"] == "price")
-        assert price["suggestion"] == {"low": 82000.0, "high": 122000.0}
-        assert price["reference"]["source"] == "model" and price["reference"]["comparable"] is False
-
-    def test_price_not_penalized_without_same_material_peers(self, fake_price_model):
+    def test_price_not_penalized_without_peers(self):
         product = with_id(base_product())
         variants = _priced(product, [{"is_active": True, "retail_price": "400000", "base_cost": "80000"}])
         result = make_calculator(products=[product], product_variants=variants).calculate(PRODUCT_ID)
-        price = next(r for r in result["breakdown"] if r["key"] == "price")
-        assert result["axes"]["price"] is None and price["scored"] is False and price["points"] == 0.0
-        assert not any(t["field"] == "price" for t in result["todos"] + result["warnings"])
-        scored = [r for r in result["breakdown"] if r["scored"]]
-        assert result["score"] == round(sum(r["points"] for r in scored) * 100 / sum(r["weight"] for r in scored), 1)
+        price = next(f for f in result["factors"] if f["key"] == "price")
+        assert result["axes"]["price"] is None and price["state"] == "not_applicable" and price["points"] == 0.0
+        scored = [f for f in result["factors"] if f["state"] == "scored"]
+        assert result["score"] == round(sum(f["points"] for f in scored) * 100 / (20 * len(scored)), 1)
 
     def test_no_typo_check_against_rough_reference(self, fake_price_model):
         product = with_id(base_product())
@@ -125,33 +119,15 @@ class TestCalculateIntegration:
         assert not any(w["field"] == "price" for w in result["warnings"])
         assert result["axes"]["price"] is None
 
-    def test_cheap_price_vs_same_material_peers(self):
+    def test_cheap_price_is_not_penalised(self):
         result = _with_peers("Áo cotton mẫu", "50000")
-        price = next(r for r in result["breakdown"] if r["key"] == "price")
-        assert price["reference"]["comparable"] is True and price["reference"]["materials"] == ["cotton"]
-        assert result["axes"]["price"] < 100.0
-        msg = next(t["message"] for t in result["todos"] if t["field"] == "price")
-        assert msg == ("Giá thấp hơn 50% so với 8 sản phẩm cùng loại, cùng chất liệu cotton, "
-                       "kiểm tra lại chi phí để không bán lỗ · Tham khảo: 100.000đ–100.000đ")
+        price = next(f for f in result["factors"] if f["key"] == "price")
+        assert price["state"] == "scored" and price["evidence"]["n"] == 8 and result["axes"]["price"] == 100.0
+        assert any(r["id"] == "info:price_low" for r in result["recommendations"])
 
-    def test_full_band_matches_price_score(self):
-        price = next(r for r in _with_peers("Áo cotton mẫu", "50000")["breakdown"] if r["key"] == "price")
-        assert price["full"] == {"low": 70000, "high": 130000}
-        for value, full in ((70000, True), (130000, True), (69000, False), (131000, False)):
-            result = _with_peers("Áo cotton mẫu", str(value))
-            assert (result["axes"]["price"] == 100.0) is full
-
-    def test_price_typo_vs_same_material_is_urgent(self):
-        result = _with_peers("Áo cotton mẫu", "15000")
-        warning = next(w for w in result["warnings"] if w["field"] == "price")
-        assert warning["type"] == "warning" and warning["impact"] == 0
-        assert "thấp hơn khoảng 7 lần" in warning["message"]
-
-    def test_other_material_peers_do_not_penalize(self):
-        result = _with_peers("Áo len mẫu", "50000")
-        price = next(r for r in result["breakdown"] if r["key"] == "price")
-        assert price["reference"]["source"] == "category" and price["reference"]["comparable"] is False
-        assert result["axes"]["price"] is None and price["scored"] is False
+    def test_price_at_market_level_scores_full(self):
+        price = next(f for f in _with_peers("Áo cotton mẫu", "100000")["factors"] if f["key"] == "price")
+        assert price["sub_score"] == 100.0 and price["points"] == 20.0
 
     def test_junk_title_warns_with_cleaned_suggestion(self):
         product = with_id(base_product(title="icon arrow left bold Share: Favorite (48) Thắt lưng vải canvas nam"))
@@ -159,10 +135,13 @@ class TestCalculateIntegration:
         warning = next(w for w in result["warnings"] if w["field"] == "title")
         assert warning["type"] == "warning" and warning["target"] == "Thắt lưng vải canvas nam"
 
-    def test_description_junk_scores_zero(self):
+    def test_junk_description_fails_word_check(self):
         product = with_id(base_product(description="a " * 570))
-        result = make_calculator(products=[product], product_variants=_priced(product)).calculate(PRODUCT_ID)
-        assert result["axes"]["description"] == 0.0
+        real = "tu " + " ".join(f"chu{j}" for j in range(20))
+        peers = [{"_id": ObjectId(f"{i:024x}"), "categories": ["Thời trang"], "description": real} for i in range(1, 9)]
+        result = make_calculator(products=[product, *peers], product_variants=_priced(product)).calculate(PRODUCT_ID)
+        description = next(f for f in result["factors"] if f["key"] == "description")
+        assert description["evidence"]["checks"]["words"] is False and description["sub_score"] == 75.0
 
     def test_deterministic(self):
         product = with_id(base_product())
@@ -175,7 +154,7 @@ class TestCalculateIntegration:
         variants = _priced(product, [{"is_active": True, "retail_price": "50000", "base_cost": "80000"}])
         result = make_calculator(products=[product], product_variants=variants).calculate(PRODUCT_ID)
 
-        assert {w["field"] for w in result["warnings"]} == {"images", "variants.retail_price", "moderation_status"}
+        assert {w["field"] for w in result["warnings"]} == {"images", "variants.retail_price", "moderation_status", "variants.stock"}
         assert all(w["impact"] == 0 for w in result["warnings"])
         assert all(t["type"] == "todo" for t in result["todos"])
 
@@ -272,44 +251,108 @@ def test_tag_under_review_counts_as_pending():
                                            ("c", "active", "pending")], start=1)]
     product = with_id(base_product(tag_ids=[t["_id"] for t in tags]))
     calc = make_calculator(products=[product], product_variants=_priced(product), tags=tags)
-    row = next(r for r in calc.calculate(PRODUCT_ID)["breakdown"] if r["key"] == "tags")
-    assert row["value"] == 1 and row["pending"] == 2
+    row = next(f for f in calc.calculate(PRODUCT_ID)["factors"] if f["key"] == "tags")
+    assert row["evidence"]["approved"] == 1 and row["evidence"]["pending"] == 2
 
 
 RICH = {"images": [f"i{i}.jpg" for i in range(6)],
         "description": " ".join(f"chu{chr(97 + i % 26)}{i}" for i in range(130))}
 
 
-def test_missing_price_is_scored_zero_not_skipped():
+def test_missing_price_counts_as_zero():
     product = with_id(base_product())
     result = make_calculator(products=[product]).calculate(PRODUCT_ID)
-    price = next(r for r in result["breakdown"] if r["key"] == "price")
-    assert price["scored"] is True and price["points"] == 0.0
+    price = next(f for f in result["factors"] if f["key"] == "price")
+    assert price["state"] == "seller_missing" and price["points"] == 0.0
+    assert result["coverage"]["evaluated"] == 4
 
 
-def test_todo_impact_equals_real_gain_when_price_unscored():
-    before = with_id(base_product(**RICH, tags=["áo thun"]))
-    after = with_id(base_product(**RICH))
-    r1 = make_calculator(products=[before], product_variants=_priced(before)).calculate(PRODUCT_ID)
-    r2 = make_calculator(products=[after], product_variants=_priced(after)).calculate(PRODUCT_ID)
-    todo = next(t for t in r1["todos"] if t["code"] == "tags")
-    assert abs(round(r2["score"] - r1["score"], 1) - todo["impact"]) <= 0.2
 
-
-def test_blocking_warning_caps_score_below_good():
+def test_blocking_title_does_not_cap_score():
     product = with_id(base_product(**RICH, title="icon arrow left bold Share: Favorite (48) Áo thun cotton local brand unisex"))
     clean = with_id(base_product(**RICH))
     raw = make_calculator(products=[clean], product_variants=_priced(clean)).calculate(PRODUCT_ID)
     result = make_calculator(products=[product], product_variants=_priced(product)).calculate(PRODUCT_ID)
-    assert raw["score"] > 79 and raw["cap"] is None
-    assert result["score"] == 79.0 and result["status"] == "needs_improvement"
-    assert result["cap"] == {"score": 79.0, "raw": raw["score"], "fields": ["title"]}
+    assert result["score"] == raw["score"] and raw["blockers"] == []
+    assert [b["field"] for b in result["blockers"]] == ["title"]
 
 
-def test_more_specific_category_is_suggested():
-    product = with_id(base_product(title="Giày Sneaker Nam Êm Chân Đi Học", categories=["Giày dép"]))
-    cats = [{"name": n} for n in ("Giày dép", "Sneaker", "Áo thun", "quần")]
-    result = make_calculator(products=[product], product_variants=_priced(product), categories=cats).calculate(PRODUCT_ID)
-    hint = next(w for w in result["warnings"] if w["field"] == "categories")
-    assert hint["type"] == "info" and hint["target"] == "Sneaker"
-    assert result["cap"] is None
+CONTRACT_FIELDS = ("score", "status", "coverage", "factors", "blockers", "recommendations", "search", "versions",
+                   "content_snapshot", "axes", "axes_missing", "todos", "warnings", "content_hash", "inputs_hash",
+                   "computed_at", "model_version", "date", "title", "thumbnail")
+
+
+class TestStoredResult:
+    def _calc(self, **seed):
+        product = with_id(base_product())
+        return make_calculator(products=[product], product_variants=_priced(product), **seed)
+
+    def test_save_persists_contract_fields_without_readiness(self):
+        calc = self._calc()
+        calc.save(calc.calculate(PRODUCT_ID))
+        doc = calc.live_db["listing_health_scores"].docs[0]
+        assert all(k in doc for k in CONTRACT_FIELDS)
+        assert "readiness" not in doc
+
+    def test_stored_result_round_trips_calculate_shape(self):
+        calc = self._calc()
+        result = calc.calculate(PRODUCT_ID)
+        calc.save(result)
+        assert calc.stored_result(PRODUCT_ID) == result
+
+    def test_stored_result_misses_when_images_change(self):
+        calc = self._calc()
+        calc.save(calc.calculate(PRODUCT_ID))
+        calc.live_db["products"].docs[0]["images"] = ["new.jpg"]
+        assert calc.stored_result(PRODUCT_ID) is None
+
+    def test_stored_result_misses_on_other_model_version(self):
+        calc = self._calc()
+        calc.save(calc.calculate(PRODUCT_ID))
+        calc.live_db["listing_health_scores"].docs[0]["model_version"] = "health-2.2"
+        assert calc.stored_result(PRODUCT_ID) is None
+
+    def test_zero_result_queries_fill_search_block(self):
+        logs = [{"keyword": "áo thun oversize", "result_count": 0, "created_at": NOW - timedelta(days=1)}] * 2
+        result = self._calc(search_logs=logs).calculate(PRODUCT_ID)
+        assert result["search"]["zero_result"] == [{"query": "áo thun oversize", "searches": 2}]
+
+    def test_benchmark_is_vietnam_date_tag(self):
+        result = self._calc().calculate(PRODUCT_ID)
+        assert result["versions"]["benchmark"] == f"vc-{result['date']}"
+
+    def test_save_unsets_legacy_fields(self):
+        calc = self._calc()
+        calc.save(calc.calculate(PRODUCT_ID))
+        calc.live_db["listing_health_scores"].docs[0].update(
+            readiness={}, conversion_detail={}, content_changed_at=NOW, breakdown=[], basis={}, cap=79.0)
+        calc.save(calc.calculate(PRODUCT_ID))
+        doc = calc.live_db["listing_health_scores"].docs[0]
+        assert not {"readiness", "conversion_detail", "content_changed_at", "breakdown", "basis", "cap"} & set(doc)
+
+
+def test_image_budget_defaults_to_20_and_passes_through(monkeypatch):
+    seen = []
+
+    def spy(urls, title, group, fetch=None, budget=None):
+        seen.append(budget)
+        return {"state": "seller_missing", "useful": 0, "images": [], "method": "heuristic"}
+
+    monkeypatch.setattr(image_check, "analyze", spy)
+    product = with_id(base_product())
+    calc = make_calculator(products=[product], product_variants=_priced(product))
+    calc.calculate(PRODUCT_ID)
+    calc.calculate(PRODUCT_ID, image_budget=1.5)
+    assert seen == [20.0, 1.5]
+
+
+@pytest.mark.parametrize("method,expected", [("ml_unvalidated", SIGLIP_ID), ("heuristic", None)])
+def test_versions_siglip_follows_analysis_method(monkeypatch, method, expected):
+    def spy(urls, title, group, fetch=None, budget=None):
+        return {"state": "scored", "useful": 1, "unanalyzed": 0, "images": [], "method": method}
+
+    monkeypatch.setattr(image_check, "analyze", spy)
+    product = with_id(base_product())
+    result = make_calculator(products=[product], product_variants=_priced(product)).calculate(PRODUCT_ID)
+    assert result["versions"]["siglip"] == expected
+    assert result["factors"][0]["method"] == "heuristic"

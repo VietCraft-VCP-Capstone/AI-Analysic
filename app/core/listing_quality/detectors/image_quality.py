@@ -36,7 +36,7 @@ class ImageQualityDetector:
         preloaded_images = context.get("preloaded_images", {})
         checked = images[:self.MAX_IMAGES_TO_CHECK]
         urls = list(dict.fromkeys(i for i in checked if isinstance(i, str) and i and i not in preloaded_images))
-        external = [u for u in urls if not image_fetch.allowed(u)]
+        external = [u for u in urls if urlparse(u).hostname != image_fetch.CLOUDINARY or not image_fetch.allowed(u)]
         urls = [u for u in urls if u not in external]
         with ThreadPoolExecutor(max_workers=max(len(urls), 1)) as pool:
             fetched = dict(zip(urls, pool.map(lambda u: image_fetch.fetch(u, timeout=self.FETCH_TIMEOUT), urls)))

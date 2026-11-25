@@ -1,4 +1,4 @@
-from app.core.f29 import price_suggest
+from app.core.f29 import material, price_suggest
 from tests.f29.fake_price import FakePriceModel
 
 
@@ -38,7 +38,9 @@ def test_text_without_group_has_no_leading_space(monkeypatch):
     assert model.seen == [["Móc khóa"]]
 
 
-def test_suggest_with_fashion_material(fake_price_model):
+def test_suggest_with_fashion_material(fake_price_model, monkeypatch):
+    learned = {"cotton": 1.0, "lua": 1.8, "da that": 2.2, "da pu": 1.1}
+    monkeypatch.setattr(material, "price_params", lambda: {**material.DEFAULT_PARAMS, "materials": learned})
     cotton = price_suggest.suggest("Áo thời trang", "fashion", "cotton")
     silk = price_suggest.suggest("Áo thời trang", "fashion", "lụa")
     leather = price_suggest.suggest("Áo khoác", "fashion", "da thật")

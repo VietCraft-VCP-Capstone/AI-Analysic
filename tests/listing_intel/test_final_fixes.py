@@ -27,7 +27,7 @@ def test_no_image_fashion_listing_gets_add_images_impact(monkeypatch):
 
 def test_best_impact_advice_never_dropped():
     measured = AxisResult(issues=[{"code": c, "message": "m"} for c in
-                                  ("blurry", "too_dark", "low_resolution", "busy_background", "text_overlay", "bad_aspect")])
+                                  ("blurry", "too_dark", "too_bright", "low_resolution", "few_images", "desc_short")])
     res = {"image": measured, "text": AxisResult(issues=[{"code": "no_images", "message": "m"}])}
     out = advice.build(res, {}, {"image": "measured"}, {"no_images": 30.0, "blurry": 1.0})
     assert len(out) == advice.MAX_ITEMS and out[-1]["code"] == "no_images"

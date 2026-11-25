@@ -138,7 +138,7 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
         {**{"shop_id": oid}, **LOC_SP_THAT},
         {"title": 1, "tags": 1, "categories": 1, "images": 1, "description": 1,
          "average_rating": 1, "rating_count": 1, "created_at": 1, "listing_status": 1,
-         "status": 1, "is_hidden": 1},
+         "status": 1, "is_hidden": 1, "source_idea_id": 1},
     ).limit(gioi_han))
     if not products:
         return []
@@ -180,6 +180,7 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
             "product_type_id": doan["product_type_id"],
             "type_source": doan["source"],
             "handmade_hint": doan["handmade_hint"],
+            "source_idea_id": p.get("source_idea_id"),
         })
     return ra
 

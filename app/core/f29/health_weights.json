@@ -1,35 +1,61 @@
 {
-  "model_version": "health-2.2",
+  "model_version": "health-3.1",
   "weights": {
-    "image": 24,
-    "description": 11,
-    "tags": 10,
-    "material": 10,
-    "review": 5,
-    "price": 40
+    "image": 10,
+    "description": 12,
+    "tags": 20,
+    "review": 10,
+    "price": 48
   },
   "targets": {
     "image": 6,
     "description": 570,
-    "description_words": 115,
     "tags": 3
   },
   "review": {
     "m": 5,
     "p0": 0.7922
   },
-  "price": {
-    "low_full": 0.7,
-    "full_at": 1.3,
-    "zero_at": 2.0,
-    "floor_at": 0.4,
-    "min_peers": 8
-  },
+  "lambda": 0.711,
   "coefficients": {
-    "image": 0.2668,
-    "description": 0.1197,
-    "review": -0.0755,
-    "price": 0.4328
+    "image": 0.0772,
+    "description": 0.1209,
+    "price": 0.8018,
+    "review": 0.0
+  },
+  "market_coefficients": {
+    "olist": {
+      "image": 0.3676,
+      "description": -0.0368,
+      "review": -0.2997,
+      "price": 1.428
+    },
+    "tiki": {
+      "image": 0.1284,
+      "description": 1.5812,
+      "price": 3.0411
+    },
+    "shopee": {
+      "image": -0.4981,
+      "description": 0.1081,
+      "price": 3.5063
+    }
+  },
+  "controls": {
+    "olist": [
+      "log_seller_sales",
+      "log_seller_listings",
+      "seller_rating"
+    ],
+    "tiki": [
+      "log_seller_listings"
+    ],
+    "shopee": [
+      "log_seller_listings",
+      "log_followers",
+      "official",
+      "shop_rating"
+    ]
   },
   "trained_on": {
     "source": "Olist (Brazil)",
@@ -40,7 +66,8 @@
       "2017-10-01"
     ],
     "rows": 33198,
-    "label": "top25"
+    "label": "top25",
+    "blend": "shares averaged over Olist/Tiki/Shopee (review from Olist); lambda * learned + (1 - lambda) * equal, tags fixed 20, floor 10"
   },
   "rows": {
     "olist_train": 33198,
@@ -56,18 +83,18 @@
   },
   "metrics": {
     "olist_val": {
-      "Học (health-2.1)": {
-        "roc_auc": 0.542,
+      "Học (health-3.1)": {
+        "roc_auc": 0.533,
         "auc_ci95": [
-          0.513,
-          0.569
+          0.51,
+          0.555
         ]
       },
       "Chia đều": {
-        "roc_auc": 0.542,
+        "roc_auc": 0.525,
         "auc_ci95": [
-          0.515,
-          0.565
+          0.501,
+          0.551
         ]
       },
       "health-1.0 (luật hiện tại)": {
@@ -92,54 +119,54 @@
         ]
       },
       "HistGB trên điểm con": {
-        "roc_auc": 0.667,
+        "roc_auc": 0.663,
         "auc_ci95": [
-          0.654,
-          0.684
+          0.648,
+          0.678
         ]
       },
-      "Chỉ số ảnh": {
+      "Chỉ hình ảnh": {
         "roc_auc": 0.516,
         "auc_ci95": [
           0.49,
           0.541
         ]
       },
-      "Chỉ độ dài mô tả": {
+      "Chỉ mô tả": {
         "roc_auc": 0.512,
         "auc_ci95": [
           0.484,
           0.535
         ]
       },
-      "Chỉ tỉ lệ đánh giá tốt": {
+      "Chỉ đánh giá": {
         "roc_auc": 0.523,
         "auc_ci95": [
           0.511,
           0.536
         ]
       },
-      "Chỉ cạnh tranh giá": {
-        "roc_auc": 0.526,
+      "Chỉ giá bán": {
+        "roc_auc": 0.516,
         "auc_ci95": [
-          0.507,
-          0.544
+          0.508,
+          0.522
         ]
       }
     },
     "olist_test": {
-      "Học (health-2.1)": {
-        "roc_auc": 0.538,
+      "Học (health-3.1)": {
+        "roc_auc": 0.519,
         "auc_ci95": [
-          0.517,
-          0.562
+          0.499,
+          0.542
         ]
       },
       "Chia đều": {
-        "roc_auc": 0.529,
+        "roc_auc": 0.515,
         "auc_ci95": [
-          0.507,
-          0.552
+          0.494,
+          0.539
         ]
       },
       "health-1.0 (luật hiện tại)": {
@@ -164,54 +191,54 @@
         ]
       },
       "HistGB trên điểm con": {
-        "roc_auc": 0.653,
+        "roc_auc": 0.647,
         "auc_ci95": [
-          0.638,
-          0.668
+          0.633,
+          0.662
         ]
       },
-      "Chỉ số ảnh": {
+      "Chỉ hình ảnh": {
         "roc_auc": 0.532,
         "auc_ci95": [
           0.511,
           0.557
         ]
       },
-      "Chỉ độ dài mô tả": {
+      "Chỉ mô tả": {
         "roc_auc": 0.514,
         "auc_ci95": [
           0.495,
           0.531
         ]
       },
-      "Chỉ tỉ lệ đánh giá tốt": {
+      "Chỉ đánh giá": {
         "roc_auc": 0.492,
         "auc_ci95": [
           0.48,
           0.507
         ]
       },
-      "Chỉ cạnh tranh giá": {
-        "roc_auc": 0.523,
+      "Chỉ giá bán": {
+        "roc_auc": 0.509,
         "auc_ci95": [
-          0.508,
-          0.542
+          0.501,
+          0.517
         ]
       }
     },
     "tiki_test": {
-      "Học (health-2.1)": {
-        "roc_auc": 0.567,
+      "Học (health-3.1)": {
+        "roc_auc": 0.562,
         "auc_ci95": [
-          0.522,
-          0.602
+          0.523,
+          0.601
         ]
       },
       "Chia đều": {
-        "roc_auc": 0.566,
+        "roc_auc": 0.552,
         "auc_ci95": [
-          0.524,
-          0.599
+          0.514,
+          0.597
         ]
       },
       "health-1.0 (luật hiện tại)": {
@@ -229,47 +256,47 @@
         ]
       },
       "HistGB trên điểm con": {
-        "roc_auc": 0.608,
+        "roc_auc": 0.602,
         "auc_ci95": [
           0.571,
-          0.647
+          0.643
         ]
       },
-      "Chỉ số ảnh": {
+      "Chỉ hình ảnh": {
         "roc_auc": 0.513,
         "auc_ci95": [
           0.481,
           0.557
         ]
       },
-      "Chỉ độ dài mô tả": {
+      "Chỉ mô tả": {
         "roc_auc": 0.577,
         "auc_ci95": [
           0.536,
           0.622
         ]
       },
-      "Chỉ cạnh tranh giá": {
-        "roc_auc": 0.552,
+      "Chỉ giá bán": {
+        "roc_auc": 0.53,
         "auc_ci95": [
-          0.508,
-          0.591
+          0.513,
+          0.553
         ]
       }
     },
     "shopee_test": {
-      "Học (health-2.1)": {
-        "roc_auc": 0.576,
+      "Học (health-3.1)": {
+        "roc_auc": 0.533,
         "auc_ci95": [
-          0.546,
-          0.604
+          0.506,
+          0.562
         ]
       },
       "Chia đều": {
-        "roc_auc": 0.569,
+        "roc_auc": 0.524,
         "auc_ci95": [
-          0.539,
-          0.597
+          0.497,
+          0.553
         ]
       },
       "health-1.0 (luật hiện tại)": {
@@ -287,31 +314,31 @@
         ]
       },
       "HistGB trên điểm con": {
-        "roc_auc": 0.649,
+        "roc_auc": 0.607,
         "auc_ci95": [
-          0.623,
-          0.671
+          0.58,
+          0.63
         ]
       },
-      "Chỉ số ảnh": {
+      "Chỉ hình ảnh": {
         "roc_auc": 0.443,
         "auc_ci95": [
           0.42,
           0.468
         ]
       },
-      "Chỉ độ dài mô tả": {
+      "Chỉ mô tả": {
         "roc_auc": 0.563,
         "auc_ci95": [
           0.54,
           0.589
         ]
       },
-      "Chỉ cạnh tranh giá": {
-        "roc_auc": 0.589,
+      "Chỉ giá bán": {
+        "roc_auc": 0.517,
         "auc_ci95": [
-          0.565,
-          0.616
+          0.506,
+          0.527
         ]
       }
     }
@@ -319,70 +346,67 @@
   "gate": {
     "per_market": {
       "olist_test": {
-        "lift": 1.4322398010033583
+        "lift": 1.186035233425123
       },
       "tiki_test": {
-        "lift": 1.6290582578790478,
+        "lift": 1.813425688652824,
         "vs_equal_ci": [
-          -0.006,
-          0.009
+          0.001,
+          0.019
         ]
       },
       "shopee_test": {
-        "lift": 1.7598986285032798,
+        "lift": 1.1356657597887134,
         "vs_equal_ci": [
-          -0.004,
-          0.016
+          0.003,
+          0.017
         ]
       }
     },
-    "passed": true
+    "passed": false,
+    "accepted_by_owner": "Chủ dự án chấp nhận: trọng số học thắng chia đều về AUC ở Tiki và Shopee, chưa đạt mức lift 1,2 ở Olist và Shopee (chia đều cũng chưa đạt ở Olist)."
   },
   "lift": {
-    "olist_test": 1.4322398010033583,
-    "tiki_test": 1.6290582578790478,
-    "shopee_test": 1.7598986285032798
+    "olist_test": 1.186035233425123,
+    "tiki_test": 1.813425688652824,
+    "shopee_test": 1.1356657597887134
   },
   "ranges": {
     "image": [
-      14,
-      35
+      10,
+      13
     ],
     "description": [
-      5,
-      21
+      10,
+      10
     ],
     "tags": [
-      10,
-      10
-    ],
-    "material": [
-      10,
-      10
+      20,
+      20
     ],
     "review": [
-      5,
-      5
+      10,
+      10
     ],
     "price": [
-      31,
+      47,
       50
     ]
   },
   "tiki_check": {
     "tiki": {
-      "image": 31,
-      "price": 69
+      "image": 5,
+      "price": 95
     },
     "olist": {
-      "image": 40,
-      "price": 60
+      "image": 14,
+      "price": 86
     }
   },
   "material_rate": {
-    "share": 35.1,
-    "top25_with": 22.9,
-    "top25_without": 26.9
+    "share": 33.9,
+    "top25_with": 23.0,
+    "top25_without": 26.7
   },
-  "created_at": "2026-10-22T18:10:09+00:00"
+  "created_at": "2026-11-19T16:40:21+00:00"
 }

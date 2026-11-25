@@ -24,7 +24,7 @@ def test_weight_ranges_contain_point_estimate():
     ranges = evidence.weight_ranges(sub, y, np.arange(n) % 200)
     point = learn.to_weights(learn.fit_coefs(sub, y))
     assert all(lo <= point[k] <= hi for k, (lo, hi) in ranges.items())
-    assert ranges["tags"] == [10, 10]
+    assert ranges["tags"] == [20, 20]
 
 
 def test_pair_share():

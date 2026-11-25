@@ -119,6 +119,11 @@ async def lifespan(app: FastAPI):
         stop_scheduler()
     except Exception:
         pass
+    try:
+        from app.core.seasonal_dl_scheduler import stop as stop_seasonal_scheduler
+        stop_seasonal_scheduler()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -204,8 +209,7 @@ def read_ready():
     body: dict[str, Any] = {"status": "ok"}
 
     try:
-        mart_db = db()
-        latest = mart_db["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
+        latest = db_live()["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
         if latest and latest.get("computed_at"):
             raw = latest["computed_at"]
             computed_at = None

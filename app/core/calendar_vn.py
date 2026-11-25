@@ -334,6 +334,7 @@ def upcoming_events(d: date, weeks: int = 12) -> list:
                 "key": ev["key"],
                 "name": ev["name"],
                 "date": ev_date,
+                "prep_start": date.fromisoformat(win["rd_start"]),
                 "window": win,
                 "groups": list(ev["groups"]),
                 "icon": ev.get("icon", "calendar"),

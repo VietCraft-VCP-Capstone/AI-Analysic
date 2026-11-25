@@ -5,17 +5,12 @@ from typing import Any
 from app.core.f29.factors import KEYS
 
 WEIGHTS_PATH = Path(__file__).parent / "health_weights.json"
-TARGET_KEYS = ("image", "description", "tags")
-PRICE_KEYS = ("low_full", "full_at", "zero_at", "floor_at", "min_peers")
 _cache: dict[Path, dict] = {}
 
 
 def _valid(data: Any) -> bool:
     try:
-        return (sum(data["weights"][k] for k in KEYS) == 100
-                and all(k in data["targets"] for k in TARGET_KEYS)
-                and "m" in data["review"]
-                and all(k in data["price"] for k in PRICE_KEYS))
+        return sum(data["weights"][k] for k in KEYS) == 100 and "m" in data["review"]
     except (KeyError, TypeError):
         return False
 

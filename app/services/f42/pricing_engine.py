@@ -204,6 +204,7 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
     n_live = sum(1 for c in est.comparables if c.source == "vietcraft")
     n_sold = sum(1 for c in est.comparables if c.source == "vietcraft_sold" or (c.source == "vietcraft" and c.sold > 0))
     n_fresh = sum(1 for c in est.comparables if c.source == "tiki_fresh")
+    n_etsy = sum(1 for c in est.comparables if c.source == "etsy")
     source_note = f"{est.n_used} sản phẩm tương tự"
     notes = []
     if n_live:
@@ -212,6 +213,8 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
         notes.append(f"{n_sold} sản phẩm đã bán thành công trên sàn")
     if n_fresh:
         notes.append(f"{n_fresh} sản phẩm Tiki giá cập nhật trong 14 ngày, đã có người mua")
+    if n_etsy:
+        notes.append(f"{n_etsy} sản phẩm Etsy (quốc tế, đã quy đổi VND, trọng số thấp)")
     sold_total = sum(c.sold for c in est.comparables)
     if sold_total:
         notes.append(f"tổng đã bán {sold_total:,}".replace(",", "."))
@@ -235,7 +238,8 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
             price=int(round(c.price)),
             similarity=round(c.similarity, 3),
             source={"vietcraft": "Sàn VietCraft", "vietcraft_sold": "Sàn VietCraft (giá đã bán)",
-                    "tiki_fresh": "Tiki (giá mới cập nhật)"}.get(c.source, "Thị trường TMĐT")
+                    "tiki_fresh": "Tiki (giá mới cập nhật)",
+                    "etsy": "Etsy (quốc tế, đã quy đổi VND)"}.get(c.source, "Thị trường TMĐT")
         )
         for c in est.comparables[:8]
     ]
