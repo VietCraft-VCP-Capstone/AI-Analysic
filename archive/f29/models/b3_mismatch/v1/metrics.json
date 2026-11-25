@@ -1,0 +1,133 @@
+{
+  "rows": {
+    "train": 3473,
+    "val": 745,
+    "test": 744
+  },
+  "clusters": 3942,
+  "seeds": {
+    "train": 0,
+    "test": 1
+  },
+  "C": 1,
+  "val_pr_auc_by_C": {
+    "0.1": 0.9703,
+    "1": 0.9719,
+    "10": 0.9719
+  },
+  "prevalence": {
+    "0.01": {
+      "n_pos": 8,
+      "n_neg": 744,
+      "b3": {
+        "pr_auc": 0.5987,
+        "precision_at_5": 0.1842,
+        "recall_at_5": 0.875
+      },
+      "baselines": {
+        "checklist": {
+          "pr_auc": 0.0106,
+          "precision_at_5": 0.0,
+          "recall_at_5": 0.0
+        },
+        "cosine": {
+          "pr_auc": 0.4072,
+          "precision_at_5": 0.1053,
+          "recall_at_5": 0.5
+        },
+        "b1_untrained": {
+          "pr_auc": 0.1082,
+          "precision_at_5": 0.0789,
+          "recall_at_5": 0.375
+        }
+      },
+      "best_baseline": "cosine",
+      "delta_ci95": [
+        0.0,
+        0.4306
+      ],
+      "live": false
+    },
+    "0.03": {
+      "n_pos": 23,
+      "n_neg": 744,
+      "b3": {
+        "pr_auc": 0.6462,
+        "precision_at_5": 0.4615,
+        "recall_at_5": 0.7826
+      },
+      "baselines": {
+        "checklist": {
+          "pr_auc": 0.03,
+          "precision_at_5": 0.0,
+          "recall_at_5": 0.0
+        },
+        "cosine": {
+          "pr_auc": 0.3392,
+          "precision_at_5": 0.2564,
+          "recall_at_5": 0.4348
+        },
+        "b1_untrained": {
+          "pr_auc": 0.2785,
+          "precision_at_5": 0.2308,
+          "recall_at_5": 0.3913
+        }
+      },
+      "best_baseline": "cosine",
+      "delta_ci95": [
+        0.1587,
+        0.4713
+      ],
+      "live": true
+    },
+    "0.05": {
+      "n_pos": 39,
+      "n_neg": 744,
+      "b3": {
+        "pr_auc": 0.7279,
+        "precision_at_5": 0.7,
+        "recall_at_5": 0.7179
+      },
+      "baselines": {
+        "checklist": {
+          "pr_auc": 0.0498,
+          "precision_at_5": 0.0,
+          "recall_at_5": 0.0
+        },
+        "cosine": {
+          "pr_auc": 0.3529,
+          "precision_at_5": 0.4,
+          "recall_at_5": 0.4103
+        },
+        "b1_untrained": {
+          "pr_auc": 0.4353,
+          "precision_at_5": 0.45,
+          "recall_at_5": 0.4615
+        }
+      },
+      "best_baseline": "b1_untrained",
+      "delta_ci95": [
+        0.0927,
+        0.4803
+      ],
+      "live": true
+    }
+  },
+  "false_alarm": {
+    "warn": {
+      "alpha": 0.02,
+      "threshold": 0.915679378136716,
+      "rate": 0.0188,
+      "n_clean": 744
+    },
+    "block": {
+      "alpha": 0.005,
+      "threshold": 0.9699502023031434,
+      "rate": 0.0108,
+      "n_clean": 744
+    }
+  },
+  "b1_probs": "train: out-of-fold GroupKFold(5) theo cụm; val, test: B1 đầy đủ",
+  "mode": "shadow",
+  "mode_rule": "live khi PR-AUC B3 > baseline tốt nhất và CI95 cụm của chênh lệch > 0 ở cả 3 tỉ lệ"
+}

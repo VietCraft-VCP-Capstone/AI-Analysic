@@ -2,51 +2,46 @@ from pathlib import Path
 
 import pytest
 
-from app.core.f29 import image_check, material, price_ref, price_suggest, review_stats, weights
-from app.core.f29.scoring import normalize_image
-from tests.f29.fake_price import FakePriceModel
+from app.core.f29.score import image_check
+from app.core.f29 import constants
+from app.core.f29.score import peers
+from app.core.f29.score import price
+from app.core.f29.score import text_rules
+from app.core.f29.checks import run
+from app.core.f29.score.scoring import normalize_image
+from tests.f29.fake_mongo import _FakeDB
 
 FIXTURE = Path(__file__).parent / "weights_fixture.json"
 
 
 @pytest.fixture(autouse=True)
 def health_weights(monkeypatch):
-    monkeypatch.setattr(weights, "WEIGHTS_PATH", FIXTURE)
-    weights.clear_cache()
+    monkeypatch.setattr(constants, "WEIGHTS_PATH", FIXTURE)
+    constants.clear_cache()
     yield
-    weights.clear_cache()
+    constants.clear_cache()
 
 
 @pytest.fixture(autouse=True)
 def fixed_price_params(monkeypatch):
-    monkeypatch.setattr(material, "price_params", lambda: material.DEFAULT_PARAMS)
+    monkeypatch.setattr(text_rules, "price_params", lambda: text_rules.DEFAULT_PARAMS)
 
 
 @pytest.fixture(autouse=True)
 def fresh_p0():
-    review_stats.clear_p0_cache()
+    peers.clear_p0_cache()
     yield
-    review_stats.clear_p0_cache()
+    peers.clear_p0_cache()
 
 
 @pytest.fixture(autouse=True)
 def fresh_price_index():
-    price_ref.clear_index_cache()
+    price.clear_index_cache()
     yield
-    price_ref.clear_index_cache()
+    price.clear_index_cache()
 
 
-@pytest.fixture(autouse=True)
-def no_price_model(monkeypatch, tmp_path):
-    monkeypatch.setattr(price_suggest, "MODEL_PATH", tmp_path / "price_model.joblib")
-
-
-@pytest.fixture
-def fake_price_model(monkeypatch):
-    monkeypatch.setattr(price_suggest, "_load", lambda path: (FakePriceModel(), -0.2, 0.2))
-
-
-def fake_analyze(urls, title, group, fetch=None, budget=None):
+def fake_analyze(urls, fetch=None, budget=None):
     uniq = {normalize_image(u) for u in urls} - {""}
     return {"state": "scored" if uniq else "seller_missing", "useful": len(uniq), "images": [],
             "method": "heuristic"}
@@ -55,3 +50,13 @@ def fake_analyze(urls, title, group, fetch=None, budget=None):
 @pytest.fixture(autouse=True)
 def no_image_io(monkeypatch):
     monkeypatch.setattr(image_check, "analyze", fake_analyze)
+
+
+@pytest.fixture(autouse=True)
+def fake_store(monkeypatch):
+    db = _FakeDB()
+    monkeypatch.setattr(constants, "store_db", lambda: db)
+    monkeypatch.setattr(run, "rgba", lambda url: None)
+    monkeypatch.setattr(run, "embed", lambda img: None)
+    monkeypatch.setattr(run, "txt", lambda title: None)
+    return db

@@ -1,0 +1,369 @@
+{
+  "rows": {
+    "total": 8997,
+    "train": 6320,
+    "val": 1373,
+    "test": 1304,
+    "sources": {
+      "tiki26": 3997,
+      "tikifashion": 5000
+    }
+  },
+  "groups_total": 5214,
+  "seeds": {
+    "split": 0,
+    "pairs": 1
+  },
+  "alpha": 0.02,
+  "t_warn": 0.5286545157432556,
+  "n_cal": 455,
+  "fit": {
+    "pattern": {
+      "C": 10,
+      "val_macro_f1_by_C": {
+        "0.1": 0.3777,
+        "1": 0.5549,
+        "10": 0.7213
+      },
+      "n_train": 394,
+      "n_val": 87,
+      "classes": [
+        "caro",
+        "hoa",
+        "in_hinh",
+        "ke_soc",
+        "tron"
+      ],
+      "dropped": []
+    },
+    "color": {
+      "C": 10,
+      "val_macro_f1_by_C": {
+        "0.1": 0.3542,
+        "1": 0.454,
+        "10": 0.5688
+      },
+      "n_train": 683,
+      "n_val": 192,
+      "classes": [
+        "be",
+        "den",
+        "do",
+        "hong",
+        "kem",
+        "nau",
+        "tim",
+        "trang",
+        "vang",
+        "xam",
+        "xanh"
+      ],
+      "dropped": [
+        "cam"
+      ]
+    },
+    "sleeve": {
+      "C": 10,
+      "val_macro_f1_by_C": {
+        "0.1": 0.5837,
+        "1": 0.5969,
+        "10": 0.615
+      },
+      "n_train": 429,
+      "n_val": 148,
+      "classes": [
+        "dai",
+        "ngan",
+        "sat_nach"
+      ],
+      "dropped": []
+    },
+    "material_vis": {
+      "C": 10,
+      "val_macro_f1_by_C": {
+        "0.1": 0.6883,
+        "1": 0.8178,
+        "10": 0.8363
+      },
+      "n_train": 989,
+      "n_val": 130,
+      "classes": [
+        "da",
+        "go",
+        "gom_su",
+        "jean",
+        "kim_loai",
+        "len"
+      ],
+      "dropped": [
+        "canvas"
+      ]
+    },
+    "set": {
+      "skip": "748 mẫu train có nhãn, 1 lớp đủ 10 mẫu"
+    }
+  },
+  "selection": {
+    "rule": "phương pháp cố định 'blend' (chọn trên val ở fix round 1, không chọn lại)",
+    "chosen": "blend",
+    "val_pr_auc_current_pairs": {
+      "probe": {
+        "0.03": 0.4029,
+        "0.05": 0.385,
+        "mean": 0.394
+      },
+      "zero_shot": {
+        "0.03": 0.3877,
+        "0.05": 0.3566,
+        "mean": 0.3721
+      },
+      "blend": {
+        "0.03": 0.5272,
+        "0.05": 0.4716,
+        "mean": 0.4994
+      }
+    },
+    "val_pairs": {
+      "0.03": {
+        "n_pos": 18,
+        "n_neg": 586
+      },
+      "0.05": {
+        "n_pos": 31,
+        "n_neg": 586
+      }
+    }
+  },
+  "pairs_test": {
+    "0.03": {
+      "n_pos": 20,
+      "n_neg": 661,
+      "n_pool": 808
+    },
+    "0.05": {
+      "n_pos": 35,
+      "n_neg": 661,
+      "n_pool": 808
+    }
+  },
+  "prevalence": {
+    "0.03": {
+      "n_pos": 20,
+      "n_neg": 546,
+      "pr_auc": {
+        "probe": 0.3095,
+        "zero_shot": 0.3529,
+        "blend": 0.3766,
+        "cosine": 0.2403,
+        "b3_v1": 0.0611
+      },
+      "best_baseline": "cosine",
+      "delta_ci95": [
+        -0.1241,
+        0.3774
+      ],
+      "live": false,
+      "false_alarm_clean": 0.0238,
+      "n_pair_anchors": 303
+    },
+    "0.05": {
+      "n_pos": 35,
+      "n_neg": 546,
+      "pr_auc": {
+        "probe": 0.4285,
+        "zero_shot": 0.4894,
+        "blend": 0.5112,
+        "cosine": 0.4706,
+        "b3_v1": 0.1321
+      },
+      "best_baseline": "cosine",
+      "delta_ci95": [
+        -0.1855,
+        0.2776
+      ],
+      "live": false,
+      "false_alarm_clean": 0.0238,
+      "n_pair_anchors": 303
+    }
+  },
+  "prevalence_false_alarm": {
+    "0.03": 0.0238,
+    "0.05": 0.0238
+  },
+  "per_attribute": {
+    "pattern": {
+      "method": "probe",
+      "n": 70,
+      "macro_f1": 0.5675,
+      "macro_f1_zero_shot": 0.6329,
+      "acc": 0.6857,
+      "acc_zero_shot": 0.7,
+      "mcnemar_p_vs_zero_shot": 1.0,
+      "prevalence": {
+        "0.03": {
+          "n_pos": 2,
+          "n_neg": 70,
+          "pr_auc": {
+            "blend": 0.1944,
+            "cosine": 0.6111,
+            "b3_v1": 0.0317
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            -0.9167,
+            0.2143
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 61
+        },
+        "0.05": {
+          "n_pos": 4,
+          "n_neg": 70,
+          "pr_auc": {
+            "blend": 0.5597,
+            "cosine": 0.7159,
+            "b3_v1": 0.0712
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            -0.7143,
+            0.2222
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 61
+        }
+      }
+    },
+    "color": {
+      "method": "probe",
+      "n": 132,
+      "macro_f1": 0.6193,
+      "macro_f1_zero_shot": 0.6414,
+      "acc": 0.697,
+      "acc_zero_shot": 0.7121,
+      "mcnemar_p_vs_zero_shot": 0.8506,
+      "prevalence": {
+        "0.03": {
+          "n_pos": 4,
+          "n_neg": 132,
+          "pr_auc": {
+            "blend": 0.217,
+            "cosine": 0.6576,
+            "b3_v1": 0.1674
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            -0.9091,
+            0.0
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 130
+        },
+        "0.05": {
+          "n_pos": 7,
+          "n_neg": 132,
+          "pr_auc": {
+            "blend": 0.3146,
+            "cosine": 0.5991,
+            "b3_v1": 0.1358
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            -0.5315,
+            0.1461
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 130
+        }
+      }
+    },
+    "sleeve": {
+      "method": "probe",
+      "n": 54,
+      "macro_f1": 0.8585,
+      "macro_f1_zero_shot": 0.8942,
+      "acc": 0.8889,
+      "acc_zero_shot": 0.8889,
+      "mcnemar_p_vs_zero_shot": 1.0,
+      "prevalence": {
+        "0.03": {
+          "n_pos": 2,
+          "n_neg": 54,
+          "pr_auc": {
+            "blend": 1.0,
+            "cosine": 0.75,
+            "b3_v1": 0.1714
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            0.0,
+            0.75
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 47
+        },
+        "0.05": {
+          "n_pos": 3,
+          "n_neg": 54,
+          "pr_auc": {
+            "blend": 1.0,
+            "cosine": 0.8667,
+            "b3_v1": 0.2
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            0.0,
+            0.6667
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 47
+        }
+      }
+    },
+    "material_vis": {
+      "method": "probe",
+      "n": 353,
+      "macro_f1": 0.6901,
+      "macro_f1_zero_shot": 0.6877,
+      "acc": 0.9462,
+      "acc_zero_shot": 0.949,
+      "mcnemar_p_vs_zero_shot": 1.0,
+      "prevalence": {
+        "0.03": {
+          "n_pos": 11,
+          "n_neg": 353,
+          "pr_auc": {
+            "blend": 0.4001,
+            "cosine": 0.4343,
+            "b3_v1": 0.0752
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            -0.3975,
+            0.3444
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 110
+        },
+        "0.05": {
+          "n_pos": 19,
+          "n_neg": 353,
+          "pr_auc": {
+            "blend": 0.5649,
+            "cosine": 0.4915,
+            "b3_v1": 0.1301
+          },
+          "best_baseline": "cosine",
+          "delta_ci95": [
+            -0.2293,
+            0.4195
+          ],
+          "false_alarm_clean": null,
+          "n_pair_anchors": 110
+        }
+      }
+    }
+  },
+  "mode": "hint",
+  "mode_rule": "live khi phương pháp đã chọn > baseline tốt nhất (1−cos, B3 v1) ở cả 3% và 5%, CI95 bootstrap theo group_id của chênh lệch > 0"
+}

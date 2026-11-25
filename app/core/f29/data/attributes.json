@@ -1,0 +1,104 @@
+{
+  "pattern": {
+    "names": {"tron": "trơn", "in_hinh": "in hình", "ke_soc": "kẻ sọc", "hoa": "họa tiết hoa", "caro": "caro"},
+    "values": {
+      "tron": ["(?<!chống )\\btrơn\\b(?! trượt| tru)", "một màu", "không họa tiết"],
+      "in_hinh": ["in hình", "in họa tiết", "in logo"],
+      "ke_soc": ["kẻ sọc", "\\bsọc\\b"],
+      "hoa": ["họa tiết hoa", "hoa nhí", "hoa lá", "hoa văn"],
+      "caro": ["\\bcaro\\b", "ca rô", "kẻ ô"]
+    },
+    "conflicts": {
+      "tron": ["in_hinh", "hoa", "ke_soc", "caro"],
+      "in_hinh": ["tron"], "hoa": ["tron"], "ke_soc": ["tron"], "caro": ["tron"]
+    },
+    "applies_to": ["*"],
+    "prompts": {
+      "tron": ["áo trơn một màu", "a plain solid-color top"],
+      "in_hinh": ["áo in hình họa", "a top with a printed graphic"],
+      "ke_soc": ["áo kẻ sọc", "a striped top"],
+      "hoa": ["áo họa tiết hoa", "a top with a floral print"],
+      "caro": ["áo caro", "a plaid checkered top"]
+    }
+  },
+  "color": {
+    "names": {"den": "đen", "trang": "trắng", "do": "đỏ", "xanh": "xanh", "vang": "vàng", "hong": "hồng",
+              "tim": "tím", "xam": "xám", "nau": "nâu", "be": "be", "cam": "cam", "kem": "kem"},
+    "values": {
+      "den": ["\\bđen\\b"],
+      "trang": ["\\btrắng\\b"],
+      "do": ["\\bđỏ\\b"],
+      "xanh": ["\\bxanh\\b"],
+      "vang": ["\\bvàng\\b"],
+      "hong": ["\\bhồng\\b"],
+      "tim": ["\\btím\\b"],
+      "xam": ["\\bxám\\b"],
+      "nau": ["\\bnâu\\b"],
+      "be": ["\\bbe\\b"],
+      "cam": ["màu cam", "\\bcam\\b(?! kết| đoan)"],
+      "kem": ["màu kem", "\\bkem\\b(?! dưỡng| chống| nền| trị)"]
+    },
+    "exclusive": true,
+    "applies_to": ["*"],
+    "prompts": {
+      "den": ["sản phẩm màu đen", "a black product"],
+      "trang": ["sản phẩm màu trắng", "a white product"],
+      "do": ["sản phẩm màu đỏ", "a red product"],
+      "xanh": ["sản phẩm màu xanh", "a blue or green product"],
+      "vang": ["sản phẩm màu vàng", "a yellow product"],
+      "hong": ["sản phẩm màu hồng", "a pink product"],
+      "tim": ["sản phẩm màu tím", "a purple product"],
+      "xam": ["sản phẩm màu xám", "a grey product"],
+      "nau": ["sản phẩm màu nâu", "a brown product"],
+      "be": ["sản phẩm màu be", "a beige product"],
+      "cam": ["sản phẩm màu cam", "an orange product"],
+      "kem": ["sản phẩm màu kem", "a cream-colored product"]
+    }
+  },
+  "sleeve": {
+    "names": {"ngan": "tay ngắn", "dai": "tay dài", "sat_nach": "sát nách"},
+    "values": {
+      "ngan": ["tay ngắn", "cộc tay", "ngắn tay"],
+      "dai": ["tay dài", "dài tay"],
+      "sat_nach": ["sát nách"]
+    },
+    "exclusive": true,
+    "applies_to": ["ao_thun", "ao_so_mi_kieu", "ao_khoac_vest", "sweater_hoodie", "dam_vay", "ao_dai"],
+    "prompts": {
+      "ngan": ["áo tay ngắn", "a short-sleeve top"],
+      "dai": ["áo tay dài", "a long-sleeve top"],
+      "sat_nach": ["áo sát nách", "a sleeveless tank top"]
+    }
+  },
+  "material_vis": {
+    "names": {"da": "da", "len": "len", "canvas": "canvas", "jean": "jean", "kim_loai": "kim loại",
+              "go": "gỗ", "gom_su": "gốm sứ"},
+    "values": {
+      "da": ["(?<!dưỡng )(?<!làn )(?<!chăm sóc )\\bda\\b", "da bò", "da thật"],
+      "len": ["\\blen\\b"],
+      "canvas": ["canvas"],
+      "jean": ["\\bjeans?\\b", "denim", "vải bò"],
+      "kim_loai": ["kim loại", "inox", "thép", "hợp kim"],
+      "go": ["\\bgỗ\\b(?! ghề)"],
+      "gom_su": ["gốm", "\\bsứ\\b(?! mệnh)"]
+    },
+    "exclusive": true,
+    "applies_to": ["*"],
+    "prompts": {
+      "da": ["túi da thật", "a leather product"],
+      "len": ["áo len đan", "a knitted wool sweater"],
+      "canvas": ["túi vải canvas", "a canvas bag"],
+      "jean": ["quần jean denim", "a denim fabric product"],
+      "kim_loai": ["đồ kim loại", "a metal product"],
+      "go": ["đồ gỗ", "a wooden product"],
+      "gom_su": ["đồ gốm sứ", "a ceramic product"]
+    }
+  },
+  "set": {
+    "names": {"set": "bộ nhiều món", "don": "một món"},
+    "values": {"set": ["\\bset\\b", "\\bbộ\\b", "combo"]},
+    "conflicts": {"set": ["don"]},
+    "applies_to": ["*"],
+    "prompts": {"set": ["bộ nhiều món", "a set of several items"]}
+  }
+}

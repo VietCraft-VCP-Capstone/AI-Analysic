@@ -1,0 +1,22 @@
+# C1 · Chất lượng ảnh v2 (train trên ảnh sản phẩm làm hỏng có kiểm soát)
+
+- Dữ liệu: 1599 ảnh sản phẩm Tiki, mỗi ảnh 17 mẫu: 1 gốc + 8 kiểu × 2 mức (0,5 và 1,0). Chia theo ảnh gốc seed 0: train 19023, val 4080, test 4080 mẫu.
+- Trọng số KonIQ KHÔNG được dùng để train. KonIQ chỉ dùng để kiểm phụ (giấy phép sạch hơn).
+- Nhãn: mức hỏng 0 / 0,5 / 1,0. Điểm = 100 × (1 − dự đoán), kẹp trong 0..100.
+- Đặc trưng: SigLIP2 của ảnh thu nhỏ (như lúc chạy thật: 256 px, JPEG 85) 768 + đặc trưng thủ công cột [0, 1, 2, 3, 4, 5, 6, 7, 8, 11]. Không dùng 5 vùng cắt.
+- MLP (256,), alpha 0.01. Chọn cấu hình theo SRCC val trung vị 3 seed. model.joblib là seed 6, có SRCC val cao nhất trong 10 seed.
+- Tham số làm hỏng, theo thứ tự mức 0,5 / mức 1,0:
+  - mờ: Gauss bán kính 2 / 4 px; rung: vệt ngang 15 / 30 px; nhiễu: độ lệch chuẩn 30 / 60 (thang 0–255);
+  - nén: JPEG chất lượng 60 / 20; tối: nhân 0,65 / 0,30; sáng: nhân 1,75 / 2,50, cắt ở 255;
+  - độ phân giải thấp: thu cạnh còn 62,5% / 25% rồi phóng lại; chữ đè: 'WATERMARK', độ mờ 0,5 / 1,0.
+- Test Tiki, median [p2,5–p97,5] qua 10 seed: SRCC 0.602 [0.581, 0.612]; PLCC 0.598; KRCC 0.496.
+- Ngưỡng warn 13 (điểm 0..100) = phân vị 2% điểm ảnh gốc val: bắt 0.643 ảnh mức 1,0, báo nhầm 0.021 ảnh gốc. Test: bắt 0.606, báo nhầm 0.013.
+- Bắt theo kiểu (test, mức 1,0): blur 0.838, motion 0.708, noise 0.683, jpeg 0.683, dark 0.725, bright 0.346, lowres 0.342, overlay 0.521.
+- VietCraft: 298 ảnh, n_bad 46 ảnh không đạt, 124 sản phẩm.
+- AUC: v2 0.607 [0.489, 0.738]; v1 0.656 [0.566, 0.746]; cờ cũ 0.535 [0.434, 0.644].
+- Chênh lệch: v2 - cờ cũ 0.072 [0.001, 0.150]; v2 - v1 -0.048 [-0.182, 0.140].
+- Theo lý do (đủ 10 ảnh không đạt trở lên): cluttered (4 ảnh, quá ít mẫu); not_product (18 ảnh): v2 0.561, cờ cũ 0.484; text_overlay (14 ảnh): v2 0.413, cờ cũ 0.425; watermark (10 ảnh): v2 0.944, cờ cũ 0.767.
+- Ở ngưỡng 13: cờ 30 ảnh, đúng 10; bắt 0.217 ảnh xấu, cờ oan 0.079 ảnh tốt.
+- KonIQ test (kiểm phụ, cùng chia với bản 1): SRCC v2 0.550; bản 1 0.751.
+- Chế độ: shadow (ở ngưỡng 13, 10/30 ảnh bị cờ là ảnh xấu, cần ít nhất 60%).
+- Model học trên ảnh gần 750 px. Đặc trưng thủ công tính trên ảnh gốc; ảnh rất lớn chưa kiểm.

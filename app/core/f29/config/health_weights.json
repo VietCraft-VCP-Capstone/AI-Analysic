@@ -1,0 +1,37 @@
+{
+  "model_version": "health-5.0",
+  "weights": {
+    "image": 14.5,
+    "description": 23.0,
+    "tags": 12.3,
+    "review": 26.4,
+    "price": 23.8
+  },
+  "targets": {
+    "image": 6,
+    "description": 570,
+    "tags": 3
+  },
+  "review": {
+    "m": 5,
+    "p0": 0.7922
+  },
+  "learned": {
+    "date": "2026-11-21",
+    "source": {
+      "image": "tiki",
+      "description": "tiki",
+      "price": "tiki",
+      "tags": "synthetic",
+      "review": "synthetic"
+    },
+    "protocol": "notes/f29/PROTOCOL.md mục 8",
+    "metrics": "notes/f29/register/metrics.json",
+    "r_test_synthetic": 0.649,
+    "tiki_auc_test": 0.576,
+    "gates": {
+      "R3 r ≥ 0,65": false,
+      "AI hơn đặt tay trên Tiki (cận dưới > 0)": false
+    }
+  }
+}
