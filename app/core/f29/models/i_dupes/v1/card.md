@@ -1,0 +1,22 @@
+# I · Ảnh trùng và vector hoá ảnh (v3)
+
+- Việc làm: tìm ảnh của sản phẩm trùng hoặc gần giống ảnh của sản phẩm khác (cùng shop hoặc shop khác), và cờ ảnh lấy link từ sàn khác.
+- Dấu vân: SHA-256 điểm ảnh, pHash 64 bit (ảnh gốc, bản lật, bản cắt giữa 80%), dHash, vector SigLIP2 768 chiều chuẩn hoá L2.
+- Mức khớp: exact khi trùng SHA, tức giống hệt từng byte sau render. near khi pHash lệch ≤ 12 bit. similar khi chỉ cosine ≥ 0,903.
+- Chỉ exact và near ra warn. similar chỉ ra info, kèm cos. h dùng cho warn, c dùng cho info.
+- Hình có viền mờ: SHA có thể lệch, rơi về near (vẫn warn).
+- Chọn ngưỡng trên nhóm A: 100 trong 200 ảnh VietCraft gốc, chia cố định seed 0. Cặp âm chỉ ghép ảnh trong cùng nhóm.
+- Báo cáo trên nhóm B: 100 ảnh gốc, 800 bản sao, 339 cặp âm khó.
+- Báo nhầm trên nhóm B: warn 0,29%, info 0,29% (1 cặp trên 339). Khoảng Wilson 95%: 0,05% đến 1,65%.
+- Điểm ước lượng đạt mục tiêu ≤ 1%. Cận trên 1,65% vượt 1%, nên 339 cặp chưa chứng minh được dưới 1%.
+- Bắt bản sao trên nhóm B (warn / info): xoay 75% / 98%; cắt 89% / 97%; chữ 94% / 99%; viền 89% / 100%; nén, đổi cỡ, lật, độ sáng 100% / 100%.
+- Cắt quá 10% mỗi cạnh: pHash không còn đáng tin trên ảnh thật (43% ở mức cắt 15%). Khi đó chỉ vector bắt được, ở mức info.
+- Ngưỡng: h = 12 (pHash), c = 0,903 (cosine, chọn để báo nhầm của hợp pHash hoặc cos ≤ 1% trên nhóm A).
+- c' = 0,8273 lưu để tham khảo, không dùng để khớp.
+- Cặp dùng chung thật, kiểm bằng smoke ngày 21/11: "Áo Thun Oversize Unisex In Hình Chợ Bến Thành" (6ad423e8…) và "Áo Thun Trơn Cotton 100%…" (6ad329c6…), cùng shop, cùng một ảnh (dHash lệch 0), ra duplicate_same_shop mức warn. Chỉ kiểm 1 cặp; cặp còn lại trong notes chưa kiểm lại.
+- Ảnh từ host ngoài Cloudinary: luôn ra duplicate_external mức warn. duplicate_other_shop luôn là info.
+- index_images xoá dòng của ảnh đã gỡ (cùng product_id, url không còn trong danh sách).
+- Giới hạn: bản sao là ảnh VietCraft tự sinh, chưa có nhãn thật do shop gắn.
+- Giới hạn: sản phẩm khác nhưng giống nhau chỉ ra info, trừ khi pHash khớp.
+- Giới hạn: precision đo trên tập cân bằng 1:1, không phải tỉ lệ thật.
+- Chạy lại: .venv/bin/python -m scripts.f29.eval_dupes từ AI-Analysic, khoảng 5 phút khi có cache. Chỉ đọc DB.

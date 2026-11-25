@@ -14,7 +14,7 @@ from app.config import settings
 MONGO_URI = os.environ.get("LI_TREND_MONGO_URI") or settings.MONGO_URI or "mongodb://127.0.0.1:27017"
 MONGO_DB = os.environ.get("LI_TREND_DB", "data-collection")
 PARQUET = Path(__file__).resolve().parents[4] / "vc-data" / "trends" / "trend_interest.parquet"
-SNAPSHOT = Path(__file__).parent / "model" / "reference" / "trend_weekly.json"
+SNAPSHOT = Path(__file__).parent / "data" / "trend_weekly.json"
 TTL = 3600
 COLS = ["keyword", "observed_on", "scaled"]
 log = logging.getLogger(__name__)

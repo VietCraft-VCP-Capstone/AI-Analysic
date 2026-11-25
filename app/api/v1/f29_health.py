@@ -1,11 +1,4 @@
-import sys
-from pathlib import Path
-
-ROOT_DIR = Path(__file__).resolve().parents[3]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter
 from bson import ObjectId
@@ -13,10 +6,10 @@ from pydantic import BaseModel, Field
 
 from app.api.v1._live import db_live, la_shop_live
 from app.api.v1._template import CurrentShop, forbidden, insufficient, not_found, ok, build_meta
-from app.core.f29.calculator import HealthScoreCalculator
+from app.core.f29.score.calculator import HealthScoreCalculator
 from app.core.f29.constants import MODEL_VERSION
-from app.core.f29.ml.scorer import load_model, score_listing
-from app.core.f29.preview import preview_health
+from app.core.f29.score import draft
+from app.core.f29.score.preview import preview_health
 
 router = APIRouter()
 NO_SHOP = "Cần cấu hình gian hàng trước khi xem độ hoàn thiện trang sản phẩm"
@@ -37,6 +30,19 @@ def _kiem_quyen_listing(id: str, shop_id: str) -> None:
         forbidden()
     if product.get("shop_id") != shop_oid:
         forbidden()
+
+
+DRAFT_IMAGE_BUDGET = 8.0
+
+
+class HealthDraftBody(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=5000)
+    tags: List[str] = Field(default_factory=list, max_length=20)
+    materials: List[str] = Field(default_factory=list, max_length=20)
+    category: str = Field(default="", max_length=80)
+    price: Optional[float] = Field(default=None, ge=0, le=1e10)
+    image_urls: List[str] = Field(default_factory=list, max_length=8)
 
 
 class HealthPreviewBody(BaseModel):
@@ -99,30 +105,6 @@ def health_preview(id: str, body: HealthPreviewBody, shop_id: str = CurrentShop)
     return ok(result, meta)
 
 
-@router.get("/api/analytics/listings/{id}/health/ml", tags=["F29 · Hạt"])
-def health_ml(id: str, shop_id: str = CurrentShop):
-    meta_args = dict(scope="listing", scope_id=id, database="vietcraft", mode="live")
-    if not la_shop_live(shop_id):
-        return insufficient("Cần cấu hình gian hàng trước khi xem độ sẵn sàng chuyển đổi của sản phẩm", build_meta(**meta_args))
-
-    _kiem_quyen_listing(id, shop_id)
-
-    result = score_listing(id)
-    version = load_model()[1]["model_version"]
-    if isinstance(result, str):
-        from app.core.f29.ml.cold_start import estimate_cold_start_propensity
-        cold_res = estimate_cold_start_propensity(id, db_live())
-        if cold_res:
-            result = cold_res
-        else:
-            return insufficient(result, build_meta(model_version=version, collection="orders", **meta_args))
-
-    meta = build_meta(model_version=version, collection="orders", attributed_to_live_shop=True,
-                      sample_size=result["peer_group"]["size"],
-                      confidence="medium" if result["peer_group"]["type"] == "category" else "low", **meta_args)
-    return ok(result, meta)
-
-
 @router.post("/api/analytics/listings/{id}/sync", tags=["F29 · Hạt"])
 def sync_listing_health(id: str, shop_id: str = CurrentShop):
     meta_args = dict(scope="listing", scope_id=id, database="vietcraft", mode="live")
@@ -152,3 +134,21 @@ def sync_listing_health(id: str, shop_id: str = CurrentShop):
         return insufficient(NO_WEIGHTS, build_meta(**meta_args))
     return insufficient("Không thể tính độ hoàn thiện trang sản phẩm", build_meta(**meta_args))
 
+
+@router.post("/api/analytics/listings/health/draft", tags=["F29 · Hạt"])
+def health_draft(body: HealthDraftBody, shop_id: str = CurrentShop):
+    meta_args = dict(scope="draft", scope_id=None, database="vietcraft", mode="live")
+    if not la_shop_live(shop_id):
+        return insufficient(NO_SHOP, build_meta(**meta_args))
+    product = draft.product(body.title, body.description, body.tags, body.materials, body.category,
+                            body.image_urls, shop_id)
+    try:
+        result = HealthScoreCalculator().calculate_draft(product, draft.variants(body.price), DRAFT_IMAGE_BUDGET)
+    except Exception as e:
+        print(f"[f29_health draft] {type(e).__name__}: {e}", flush=True)
+        return insufficient("Hệ thống chưa thể chấm thử bản nháp, vui lòng thử lại sau.", build_meta(**meta_args))
+    if "error" in result:
+        return insufficient(NO_WEIGHTS, build_meta(**meta_args))
+    meta = build_meta(model_version=result["model_version"], collection="products",
+                      attributed_to_live_shop=True, **meta_args)
+    return ok(result, meta)

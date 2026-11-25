@@ -1,19 +1,14 @@
-import pytest
-
-from app.core.f29 import factors_v3 as f3, query_relevance as qr
-from app.core.f29.recommend import BLOCKER_TITLES, METHOD_RANK, build, sort_recs
-from app.core.f29.todos import todos_of, warnings_of
+from app.core.f29.score import factors as f3
+from app.core.f29.score import price as qr
+from app.core.f29.score import scoring
+from app.core.f29.score.recommend import BLOCKER_TITLES, METHOD_RANK, build, sort_recs
+from app.core.f29.score.recommend import todos_of, warnings_of
 from tests.f29.fake_mongo import make_calculator
 from tests.f29.samples import PRODUCT_ID, base_product, with_id
 
-LEXICAL = {"version": "lexical-1", "enabled": False}
 PRICED = [{"is_active": True, "stock_quantity": 10, "retail_price": "150000", "base_cost": "80000"}]
-MISMATCH = "AI nhận diện, chưa kiểm chứng trên VietCraft"
-
-
-@pytest.fixture(autouse=True)
-def lexical_relevance(monkeypatch):
-    monkeypatch.setattr(qr, "load_model", lambda path=None: LEXICAL)
+PEERS = {"level": "category", "image": [1, 2, 3, 4, 5, 6], "description": [10, 20, 30, 40, 50, 60],
+         "tags": [0, 1, 1, 2, 3, 4], "review": [40, 50, 60, 70, 80, 90]}
 
 
 def _run(monkeypatch, queries=(), **overrides):
@@ -24,20 +19,20 @@ def _run(monkeypatch, queries=(), **overrides):
 
 
 def _factors(queries=(), approved=1, pending=0, image=None, median=0, price=None, desc=None, review=None):
-    return [
+    return scoring.rescore_all([
         f3.image_row(image or {"state": "seller_missing", "useful": 0, "method": "heuristic"}, median),
         desc or f3.description_row({"title": "Áo", "description": "Áo thun cotton mềm giặt máy"}, 0),
         f3.tags_row(approved, pending, list(queries), "rule"),
         review or f3.review_row(0, 0, 1.0, 5.0),
         f3.price_row(price or {"state": "not_applicable", "n": 0}),
-    ]
+    ], PEERS)
 
 
-def _build(queries=(), blockers=(), factors=None, zero=(), category_hint=None):
+def _build(queries=(), blockers=(), factors=None, zero=()):
     factors = factors or _factors(queries)
     result = {"factors": factors, "blockers": list(blockers), "content_snapshot": {"title": "Áo thun"},
               "search": {"category": "Thời trang", "queries": list(queries), "zero_result": list(zero)}}
-    return build(result, factors[0], list(queries), list(zero), category_hint)
+    return build(result, factors[0], list(queries), list(zero))
 
 
 def _q(query, searches, covered=False):
@@ -68,7 +63,7 @@ def test_search_rec_cites_real_count_and_exact_gain(monkeypatch):
     result = _run(monkeypatch, queries=[{"query": "áo thun nữ", "searches": 12}])
     rec = next(r for r in result["recommendations"] if r["kind"] == "search")
     assert rec["why"] == '30 ngày qua khách hay tìm trong danh mục Thời trang: "áo thun nữ" (12 lần). Tên và tag của bạn chưa có các từ này'
-    assert rec["field"] == "tags" and rec["gain_points"] == 10.0
+    assert rec["field"] == "tags" and rec["gain_points"] == 0.0
 
 
 def test_no_review_rec_when_not_applicable(monkeypatch):
@@ -79,7 +74,7 @@ def test_no_review_rec_when_not_applicable(monkeypatch):
 
 def test_every_rec_has_text_field_and_method():
     image = {"state": "scored", "useful": 1, "method": "ml_unvalidated", "images": [
-        {"url": "a", "duplicate": True, "issues": ["blurry"], "category_match": False}]}
+        {"url": "a", "duplicate": True, "issues": ["blurry"]}]}
     price = {"state": "scored", "pct": 5, "n": 8, "factor": 1.0, "confidence": 1.0, "p10": 50000, "p90": 120000}
     queries = [_q("áo nữ", 3)]
     recs = _build(queries=queries, blockers=[{"field": "title", "message": "Tên có chữ thừa"}],
@@ -92,27 +87,19 @@ def test_every_rec_has_text_field_and_method():
 
 def test_image_quality_rec_cites_index_and_gain():
     image = {"state": "scored", "useful": 1, "method": "heuristic", "images": [
-        {"url": "a", "duplicate": False, "issues": [], "category_match": None},
-        {"url": "b", "duplicate": True, "issues": ["blurry"], "category_match": None}]}
-    rec = next(r for r in _build(factors=_factors(image=image, median=4)) if r["id"] == "image:2")
+        {"url": "a", "duplicate": False, "issues": []},
+        {"url": "b", "duplicate": True, "issues": ["blurry"]}]}
+    factors = _factors(image=image, median=4)
+    rec = next(r for r in _build(factors=factors) if r["id"] == "image:2")
     assert rec["why"] == "Ảnh số 2: trùng, mờ"
-    assert rec["gain_points"] == 5.0 and rec["method"] == "heuristic"
-
-
-def test_image_mismatch_is_ml_unvalidated_and_gains_nothing():
-    image = {"state": "scored", "useful": 1, "method": "ml_unvalidated", "images": [
-        {"url": "a", "duplicate": False, "issues": [], "category_match": True},
-        {"url": "b", "duplicate": False, "issues": [], "category_match": False}]}
-    rec = next(r for r in _build(factors=_factors(image=image, median=4)) if r["id"] == "image:2")
-    assert rec["why"] == f"Ảnh số 2: có thể không đúng sản phẩm ({MISMATCH})"
-    assert rec["gain_points"] == 0.0 and rec["method"] == "ml_unvalidated"
+    assert rec["gain_points"] == scoring.gain(factors[0], 2) > 0 and rec["method"] == "heuristic"
 
 
 def test_high_price_asks_for_reasons_never_to_cut_price():
     price = {**{"state": "scored", "pct": 5, "n": 8, "factor": 1.0, "confidence": 1.0, "p10": 50000, "p90": 120000}, "pct": 95}
     rec = next(r for r in _build(factors=_factors(price=price)) if r["kind"] == "price")
     assert rec["why"] == "Giá cao hơn vùng phổ biến 50.000–120.000 đ của 8 sản phẩm tương đồng"
-    assert rec["gain_points"] == 5.0 and "hạ giá" not in rec["action"] and "giảm giá" not in rec["action"]
+    assert rec["gain_points"] == 0.0 and "hạ giá" not in rec["action"] and "giảm giá" not in rec["action"]
 
 
 def test_low_price_only_asks_to_check():
@@ -126,7 +113,7 @@ def test_missing_size_material_care_are_info(monkeypatch):
     info = {r["id"]: r for r in result["recommendations"] if r["kind"] == "info"}
     assert set(info) == {"info:size", "info:material", "info:care"}
     assert info["info:size"]["why"] == "Kích thước đang là giá trị mặc định 10×10×10 cm / 500 g"
-    assert info["info:size"]["gain_points"] == 5.0 and info["info:care"]["gain_points"] == 0.0
+    assert info["info:size"]["gain_points"] == 0.0 and info["info:care"]["gain_points"] == 0.0
 
 
 def test_todos_and_warnings_derive_from_recs(monkeypatch):
@@ -160,22 +147,24 @@ def _by_id(recs, rec_id):
 
 def test_short_description_cites_word_count_and_median():
     desc = f3.description_row({"title": "Áo", "description": "Áo thun cotton mềm"}, 40, True)
-    rec = _by_id(_build(factors=_factors(desc=desc)), "info:words")
+    factors = _factors(desc=desc)
+    rec = _by_id(_build(factors=factors), "info:words")
     assert rec["why"] == "Mô tả có 4 từ, mặt bằng danh mục Thời trang là 40 từ"
-    assert rec["field"] == "description" and rec["gain_points"] == 5.0
+    assert rec["field"] == "description" and rec["gain_points"] == scoring.gain(factors[1], 40) > 0
 
 
 def test_description_equal_to_title_rec():
     desc = f3.description_row({"title": "Áo thun", "description": "Áo thun"}, 0)
     rec = _by_id(_build(factors=_factors(desc=desc)), "info:not_title")
-    assert rec["why"] == "Mô tả đang giống hệt tên sản phẩm" and rec["gain_points"] == 5.0
+    assert rec["why"] == "Mô tả đang giống hệt tên sản phẩm" and rec["gain_points"] == 0.0
 
 
-def test_empty_description_rec_is_worth_full_factor():
+def test_empty_description_rec_gains_what_median_length_would_score():
     desc = f3.description_row({"title": "Áo", "description": ""}, 40, True)
-    rec = _by_id(_build(factors=_factors(desc=desc)), "info:empty")
-    assert rec["why"] == "Chưa có mô tả, mặt bằng danh mục Thời trang là 40 từ. Mô tả đủ 4 tiêu chí sẽ được 20 điểm"
-    assert rec["field"] == "description" and rec["gain_points"] == 20.0
+    factors = _factors(desc=desc)
+    rec = _by_id(_build(factors=factors), "info:empty")
+    assert rec["why"] == "Chưa có mô tả, mặt bằng danh mục Thời trang là 40 từ. Mô tả đủ dài sẽ được cộng điểm"
+    assert rec["field"] == "description" and rec["gain_points"] == scoring.gain(factors[1], 40) > 0
 
 
 def test_missing_price_rec():
@@ -188,15 +177,16 @@ def test_no_approved_tag_rec_mentions_pending():
     rec = _by_id(_build(factors=_factors(approved=0, pending=2)), "info:tags")
     assert rec["why"] == "Chưa có tag đã duyệt, còn 2 tag đang chờ duyệt"
     assert rec["action"].startswith("Chọn ít nhất 1 tag có sẵn của sàn") and rec["field"] == "tags"
-    assert rec["gain_points"] == 20.0
+    assert rec["gain_points"] > 0
 
 
 def test_image_coverage_rec_when_below_median():
     image = {"state": "scored", "useful": 1, "method": "heuristic", "images": [
-        {"url": "a", "duplicate": False, "issues": [], "category_match": None}]}
-    rec = _by_id(_build(factors=_factors(image=image, median=4)), "image:coverage")
+        {"url": "a", "duplicate": False, "issues": []}]}
+    factors = _factors(image=image, median=4)
+    rec = _by_id(_build(factors=factors), "image:coverage")
     assert rec["why"] == "Thêm ảnh khác góc: bạn có 1 ảnh đạt, sản phẩm toàn sàn thường có 4 ảnh"
-    assert rec["field"] == "images" and rec["gain_points"] == 5.0
+    assert rec["field"] == "images" and rec["gain_points"] == scoring.gain(factors[0], 2) > 0
 
 
 def test_scored_review_below_full_gets_rec():
@@ -206,21 +196,8 @@ def test_scored_review_below_full_gets_rec():
     assert rec["field"] == "review" and rec["gain_points"] > 0
 
 
-def test_category_hint_becomes_info_rec_with_zero_gain():
-    hint = {"type": "info", "field": "categories", "current_value": "Giày dép", "target": "Sneaker", "impact": 0,
-            "message": "Có danh mục “Sneaker” khớp với tên sản phẩm hơn “Giày dép”"}
-    rec = _by_id(_build(category_hint=hint), "info:categories")
-    assert rec["kind"] == "info" and rec["field"] == "categories" and rec["gain_points"] == 0.0
-    assert rec["why"] == hint["message"] and rec["action"] == "Đổi danh mục sang “Sneaker”"
 
 
-def test_category_hint_flows_from_calculator():
-    product = with_id(base_product(title="Giày Sneaker Nam Êm Chân Đi Học", categories=["Giày dép"]))
-    cats = [{"name": n} for n in ("Giày dép", "Sneaker", "Áo thun", "quần")]
-    variants = [{**v, "product_id": product["_id"]} for v in PRICED]
-    result = make_calculator(products=[product], product_variants=variants, categories=cats).calculate(PRODUCT_ID)
-    assert _by_id(result["recommendations"], "info:categories")["why"].startswith("Có danh mục “Sneaker”")
-    assert not any(w["field"] == "categories" for w in result["warnings"])
 
 
 def test_blocker_titles_name_the_problem_per_field():

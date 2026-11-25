@@ -1,0 +1,84 @@
+{
+  "rows": {
+    "train": 3752,
+    "val": 797,
+    "test": 804
+  },
+  "classes": [
+    "canvas",
+    "cotton",
+    "da_that",
+    "da_tong_hop",
+    "go_tre",
+    "gom_su",
+    "kaki",
+    "khac",
+    "kim_loai",
+    "lua_satin",
+    "nhua",
+    "ni_len",
+    "nylon_du",
+    "polyester"
+  ],
+  "C": 8,
+  "majority": "da_that",
+  "val_macro_f1_by_C": {
+    "0.5": 0.5699,
+    "2": 0.5916,
+    "8": 0.6119
+  },
+  "test": {
+    "A": {
+      "model": {
+        "macro_f1": 0.6112,
+        "top3": 0.9266
+      },
+      "baseline_current": {
+        "macro_f1": 0.2889
+      },
+      "baseline_text_vi": {
+        "macro_f1": 0.4167
+      },
+      "baseline_majority": {
+        "macro_f1": 0.0337
+      }
+    },
+    "B": {
+      "model": {
+        "macro_f1": 0.5155,
+        "top3": 0.898
+      },
+      "baseline_current": {
+        "macro_f1": 0.0
+      },
+      "baseline_text_vi": {
+        "macro_f1": 0.0
+      },
+      "baseline_majority": {
+        "macro_f1": 0.0337
+      }
+    }
+  },
+  "gate_A": {
+    "best_baseline": "baseline_text_vi",
+    "delta_ci95": [
+      0.0492,
+      0.2854
+    ],
+    "ci_pass": true
+  },
+  "test_unaccented": {
+    "A": {
+      "model": {
+        "macro_f1": 0.2664,
+        "top3": 0.7052
+      }
+    },
+    "B": {
+      "model": {
+        "macro_f1": 0.1894,
+        "top3": 0.6393
+      }
+    }
+  }
+}

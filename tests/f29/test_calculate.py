@@ -3,15 +3,23 @@ from datetime import timedelta
 import pytest
 from bson import ObjectId
 
-from app.core.f29 import image_check, weights
-from app.core.f29.constants import MODEL_VERSION
-from app.core.f29.factors import KEYS
-from app.core.listing_intel.embedder import MODEL_ID as SIGLIP_ID
+from app.core.f29 import constants
+from app.core.f29.score import image_check
+from app.core.f29.checks import run
+from app.core.f29.constants import KEYS, MODEL_VERSION
+from app.core.f29.score.preview import preview_health
+from app.core.f29.score.scoring import content_hints, normalize_image
+from app.core.f29.shared.embedder import MODEL_ID as SIGLIP_ID
 from tests.f29.fake_mongo import make_calculator
-from tests.f29.samples import NOW, PRODUCT_ID, base_product, with_id
+from tests.f29.samples import base_product, NOW, PRODUCT_ID, with_id
+
 
 ORDER = ObjectId()
+
+
 OTHER = ObjectId("507f1f77bcf86cd799439012")
+
+
 PRICED = [{"is_active": True, "stock_quantity": 10, "retail_price": "150000", "base_cost": "80000"}]
 
 
@@ -47,8 +55,8 @@ class TestCalculateIntegration:
         assert calc.calculate(PRODUCT_ID) is None
 
     def test_weights_missing_returns_error(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(weights, "WEIGHTS_PATH", tmp_path / "none.json")
-        weights.clear_cache()
+        monkeypatch.setattr(constants, "WEIGHTS_PATH", tmp_path / "none.json")
+        constants.clear_cache()
         calc = make_calculator(products=[with_id(base_product())])
         assert calc.calculate(PRODUCT_ID) == {"error": "no_weights"}
 
@@ -92,7 +100,9 @@ class TestCalculateIntegration:
                    _review(OTHER, 1), _review(OTHER, 1)]
         calc = make_calculator(products=[product], product_variants=_priced(product),
                                orders=[{"_id": ORDER}], reviews=reviews)
-        assert calc.calculate(PRODUCT_ID)["axes"]["review"] == pytest.approx(64.3, abs=0.05)
+        review = next(f for f in calc.calculate(PRODUCT_ID)["factors"] if f["key"] == "review")
+        assert review["evidence"]["p0"] == pytest.approx(0.5) and review["state"] == "not_applicable"
+        assert "chưa đủ tin có đánh giá để so" in review["reason"]
 
     def test_no_active_variant_price_is_missing(self):
         product = with_id(base_product())
@@ -112,7 +122,7 @@ class TestCalculateIntegration:
         scored = [f for f in result["factors"] if f["state"] == "scored"]
         assert result["score"] == round(sum(f["points"] for f in scored) * 100 / (20 * len(scored)), 1)
 
-    def test_no_typo_check_against_rough_reference(self, fake_price_model):
+    def test_no_typo_check_against_rough_reference(self):
         product = with_id(base_product())
         variants = _priced(product, [{"is_active": True, "retail_price": "15000", "base_cost": "8000"}])
         result = make_calculator(products=[product], product_variants=variants).calculate(PRODUCT_ID)
@@ -125,9 +135,9 @@ class TestCalculateIntegration:
         assert price["state"] == "scored" and price["evidence"]["n"] == 8 and result["axes"]["price"] == 100.0
         assert any(r["id"] == "info:price_low" for r in result["recommendations"])
 
-    def test_price_at_market_level_scores_full(self):
+    def test_price_at_market_level_scores_half(self):
         price = next(f for f in _with_peers("Áo cotton mẫu", "100000")["factors"] if f["key"] == "price")
-        assert price["sub_score"] == 100.0 and price["points"] == 20.0
+        assert price["sub_score"] == 100 - price["evidence"]["pct"] == 50.0 and price["points"] == 10.0
 
     def test_junk_title_warns_with_cleaned_suggestion(self):
         product = with_id(base_product(title="icon arrow left bold Share: Favorite (48) Thắt lưng vải canvas nam"))
@@ -141,7 +151,8 @@ class TestCalculateIntegration:
         peers = [{"_id": ObjectId(f"{i:024x}"), "categories": ["Thời trang"], "description": real} for i in range(1, 9)]
         result = make_calculator(products=[product, *peers], product_variants=_priced(product)).calculate(PRODUCT_ID)
         description = next(f for f in result["factors"] if f["key"] == "description")
-        assert description["evidence"]["checks"]["words"] is False and description["sub_score"] == 75.0
+        assert description["evidence"]["checks"]["words"] is False and description["sub_score"] == 0.0
+        assert description["evidence"]["level"] == "all" and description["method"] == "learned"
 
     def test_deterministic(self):
         product = with_id(base_product())
@@ -179,7 +190,7 @@ class TestSaveIdempotency:
         calc = make_calculator()
         calc.save(self._sample_result(date="2026-10-15", score=50.0))
         calc.save(self._sample_result(date="2026-10-16", score=75.0))
-        docs = calc.live_db["listing_health_scores"].docs
+        docs = constants.store_db()["listing_health_scores"].docs
         assert len(docs) == 2
         scores = {d["score"] for d in docs}
         assert scores == {50.0, 75.0}
@@ -188,7 +199,7 @@ class TestSaveIdempotency:
         from pymongo.errors import DuplicateKeyError
         calc = make_calculator()
         calc.save(self._sample_result(date="2026-10-15", score=50.0))
-        coll = calc.live_db["listing_health_scores"]
+        coll = constants.store_db()["listing_health_scores"]
         plain_update = coll.update_one
 
         def unique_product(filt, update, upsert=False):
@@ -204,7 +215,7 @@ class TestSaveIdempotency:
         calc = make_calculator()
         calc.save(self._sample_result())
         calc.save(self._sample_result())
-        docs = calc.live_db["listing_health_scores"].docs
+        docs = constants.store_db()["listing_health_scores"].docs
         assert len(docs) == 1
         assert docs[0]["score"] == 72.5
 
@@ -212,7 +223,7 @@ class TestSaveIdempotency:
         calc = make_calculator()
         calc.save(self._sample_result(score=50.0))
         calc.save(self._sample_result(score=90.0))
-        docs = calc.live_db["listing_health_scores"].docs
+        docs = constants.store_db()["listing_health_scores"].docs
         assert len(docs) == 1
         assert docs[0]["score"] == 90.0
 
@@ -225,7 +236,7 @@ class TestSaveIdempotency:
         result2 = calc.calculate(PRODUCT_ID)
         calc.save(result2)
 
-        docs = calc.live_db["listing_health_scores"].docs
+        docs = constants.store_db()["listing_health_scores"].docs
         assert len(docs) == 1
         assert docs[0]["score"] == result1["score"] == result2["score"]
         assert docs[0]["content_hash"] == result1["content_hash"]
@@ -235,7 +246,7 @@ class TestSaveIdempotency:
         calc = make_calculator(products=[product], product_variants=_priced(product))
         result = calc.calculate(PRODUCT_ID)
         calc.save(result)
-        doc = calc.live_db["listing_health_scores"].docs[0]
+        doc = constants.store_db()["listing_health_scores"].docs[0]
         assert "breakdown" not in doc and "basis" not in doc
         assert doc["todos"] == result["warnings"] + result["todos"]
 
@@ -267,7 +278,6 @@ def test_missing_price_counts_as_zero():
     assert result["coverage"]["evaluated"] == 4
 
 
-
 def test_blocking_title_does_not_cap_score():
     product = with_id(base_product(**RICH, title="icon arrow left bold Share: Favorite (48) Áo thun cotton local brand unisex"))
     clean = with_id(base_product(**RICH))
@@ -290,7 +300,7 @@ class TestStoredResult:
     def test_save_persists_contract_fields_without_readiness(self):
         calc = self._calc()
         calc.save(calc.calculate(PRODUCT_ID))
-        doc = calc.live_db["listing_health_scores"].docs[0]
+        doc = constants.store_db()["listing_health_scores"].docs[0]
         assert all(k in doc for k in CONTRACT_FIELDS)
         assert "readiness" not in doc
 
@@ -309,7 +319,7 @@ class TestStoredResult:
     def test_stored_result_misses_on_other_model_version(self):
         calc = self._calc()
         calc.save(calc.calculate(PRODUCT_ID))
-        calc.live_db["listing_health_scores"].docs[0]["model_version"] = "health-2.2"
+        constants.store_db()["listing_health_scores"].docs[0]["model_version"] = "health-2.2"
         assert calc.stored_result(PRODUCT_ID) is None
 
     def test_zero_result_queries_fill_search_block(self):
@@ -324,21 +334,16 @@ class TestStoredResult:
     def test_save_unsets_legacy_fields(self):
         calc = self._calc()
         calc.save(calc.calculate(PRODUCT_ID))
-        calc.live_db["listing_health_scores"].docs[0].update(
+        constants.store_db()["listing_health_scores"].docs[0].update(
             readiness={}, conversion_detail={}, content_changed_at=NOW, breakdown=[], basis={}, cap=79.0)
         calc.save(calc.calculate(PRODUCT_ID))
-        doc = calc.live_db["listing_health_scores"].docs[0]
+        doc = constants.store_db()["listing_health_scores"].docs[0]
         assert not {"readiness", "conversion_detail", "content_changed_at", "breakdown", "basis", "cap"} & set(doc)
 
 
 def test_image_budget_defaults_to_20_and_passes_through(monkeypatch):
     seen = []
-
-    def spy(urls, title, group, fetch=None, budget=None):
-        seen.append(budget)
-        return {"state": "seller_missing", "useful": 0, "images": [], "method": "heuristic"}
-
-    monkeypatch.setattr(image_check, "analyze", spy)
+    monkeypatch.setattr(run, "fetch_all", lambda urls, budget, vec_urls=frozenset(): seen.append(budget) or {})
     product = with_id(base_product())
     calc = make_calculator(products=[product], product_variants=_priced(product))
     calc.calculate(PRODUCT_ID)
@@ -348,11 +353,115 @@ def test_image_budget_defaults_to_20_and_passes_through(monkeypatch):
 
 @pytest.mark.parametrize("method,expected", [("ml_unvalidated", SIGLIP_ID), ("heuristic", None)])
 def test_versions_siglip_follows_analysis_method(monkeypatch, method, expected):
-    def spy(urls, title, group, fetch=None, budget=None):
+    def spy(urls, fetch=None, budget=None):
         return {"state": "scored", "useful": 1, "unanalyzed": 0, "images": [], "method": method}
 
     monkeypatch.setattr(image_check, "analyze", spy)
     product = with_id(base_product())
     result = make_calculator(products=[product], product_variants=_priced(product)).calculate(PRODUCT_ID)
     assert result["versions"]["siglip"] == expected
-    assert result["factors"][0]["method"] == "heuristic"
+    assert result["factors"][0]["method"] == "learned"
+
+
+NONE = {"n_images": None, "description_length": None, "n_tags": None, "price": None}
+
+
+LONG = " ".join(f"chu{i}" for i in range(130))
+
+
+JUNK_TITLE = "icon arrow left bold Share: Favorite (48) Áo thun cotton local brand unisex"
+
+
+def _calc(**product):
+    p = with_id(base_product(**product))
+    variants = [{"product_id": p["_id"], "is_active": True, "stock_quantity": 10,
+                 "retail_price": "150000", "base_cost": "80000"}]
+    peers = [{"_id": ObjectId(f"{i:024x}"), "categories": ["Thời trang"], "description": LONG} for i in range(1, 9)]
+    variants += [{"product_id": p["_id"], "is_active": True, "retail_price": "100000"} for p in peers]
+    return make_calculator(products=[p, *peers], product_variants=variants)
+
+
+def _others_unchanged(preview, current, key):
+    return all(preview["axes"][k] == current["axes"][k] for k in KEYS if k != key)
+
+
+def test_no_override_matches_current():
+    calc = _calc()
+    current = calc.calculate(PRODUCT_ID)
+    preview = preview_health(calc, PRODUCT_ID, NONE)
+    assert preview["score"] == current["score"] and preview["axes"] == current["axes"]
+    assert preview["delta_vs_current"] == 0.0 and preview["ignored"] == []
+
+
+@pytest.mark.parametrize("override,key,expected", [
+    ({"n_tags": 0}, "tags", 0.0),
+    ({"n_images": 0}, "image", 0.0),
+    ({"description_length": 0}, "description", 0.0),
+])
+def test_override_changes_only_its_factor(override, key, expected):
+    calc = _calc()
+    current = calc.calculate(PRODUCT_ID)
+    preview = preview_health(calc, PRODUCT_ID, {**NONE, **override})
+    assert preview["axes"][key] == expected
+    assert _others_unchanged(preview, current, key)
+
+
+def test_price_override_recomputes_price_axis():
+    calc = _calc()
+    current = calc.calculate(PRODUCT_ID)
+    preview = preview_health(calc, PRODUCT_ID, {**NONE, "price": 100000})
+    assert preview["axes"]["price"] == 50.0 and preview["inputs"]["price"] == 100000
+    assert _others_unchanged(preview, current, "price")
+
+
+def test_preview_blockers_never_cap_score():
+    product = with_id(base_product(title=JUNK_TITLE))
+    variants = [{"product_id": product["_id"], "is_active": True, "stock_quantity": 10,
+                 "retail_price": "150000", "base_cost": "80000"}]
+    calc = make_calculator(products=[product], product_variants=variants)
+    current = calc.calculate(PRODUCT_ID)
+    assert any(b["field"] == "title" for b in current["blockers"]) and current["score"] == 50.0
+    assert preview_health(calc, PRODUCT_ID, NONE)["score"] == current["score"]
+
+
+def test_description_override_on_empty_description_scores_words():
+    calc = _calc(description="")
+    assert calc.calculate(PRODUCT_ID)["axes"]["description"] == 0.0
+    preview = preview_health(calc, PRODUCT_ID, {**NONE, "description_length": 130})
+    assert preview["axes"]["description"] == 50.0
+
+
+def _fields(hints):
+    return [h["field"] for h in hints]
+
+
+def test_content_hints_non_string_description():
+    hints = content_hints({"description": 123, "title": "x", "images": []})
+    assert isinstance(hints, list)
+
+
+def test_content_hints_string_image_no_duplicate_hint():
+    hints = content_hints(base_product(images="https://a/x.jpg"))
+    assert "images" not in _fields(hints)
+
+
+def test_content_hints_int_images():
+    content_hints(base_product(images=5))
+
+
+def test_cloudinary_image_dedupe():
+    u1 = "https://res.cloudinary.com/demo/image/upload/v1570979139/sample.jpg"
+    u2 = "https://res.cloudinary.com/demo/image/upload/w_200,h_200/v1570979139/sample.png"
+    assert normalize_image(u1) == normalize_image(u2) == "sample"
+    hints = content_hints(base_product(images=[u1, u2]))
+    assert "images" in _fields(hints)
+
+
+def test_preview_uses_stored_result_without_recalculating():
+    calc = _calc()
+    stored = calc.calculate(PRODUCT_ID)
+    calls = []
+    calc.stored_result = lambda pid: stored
+    calc.calculate = lambda pid: calls.append(pid)
+    preview = preview_health(calc, PRODUCT_ID, NONE)
+    assert calls == [] and preview["score"] == stored["score"]

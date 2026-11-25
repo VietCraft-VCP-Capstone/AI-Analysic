@@ -21,7 +21,6 @@ from app.api.v1.cccd_ocr import router as cccd_ocr_router
 from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
 from app.api.v1.f30_internal import router as f30_internal_router
 from app.api.v1.llm_internal import router as llm_internal_router
-from app.api.v1.listing_quality import router as listing_quality_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -71,22 +70,15 @@ async def lifespan(app: FastAPI):
     else:
         ra("  [!]  Gateway BE san: TAT. Dat AI_GATEWAY_SECRET giong ben BE de san goi duoc.")
     try:
-        from app.core.listing_intel import embedder
+        from app.core.f29.shared import embedder
         if embedder.available():
-            ra(f"  [OK] Listing Intel: model ONNX san sang o {embedder.MODEL_DIR}")
+            ra(f"  [OK] F29: model SigLIP san sang o {embedder.MODEL_DIR}")
         else:
-            ra(f"  [!!] Listing Intel: THIEU model ONNX o {embedder.MODEL_DIR} (LI_MODEL_DIR).")
-            ra("       Truc anh, thi truong va khop tu khoa chay rut gon. Tai: python -m scripts.li.fetch_models")
+            ra(f"  [!!] F29: THIEU model SigLIP o {embedder.MODEL_DIR} (LI_MODEL_DIR).")
+            ra("       Cac check anh cua F29 tam tat. Tai: python -m scripts.siglip.fetch_models")
     except Exception as e:
         ra(f"  [!] Listing Intel: khong kiem duoc model ONNX: {type(e).__name__}")
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
-
-    try:
-        from app.core.f29.price_suggest import MODEL_PATH, _load
-        _load(MODEL_PATH)
-        ra("  [OK] F29 price model: da nap san vao bo nho (warm-up).")
-    except Exception as e:
-        ra(f"  [!] F29 price model khong warm-up duoc: {type(e).__name__}: {e}")
 
     try:
         from app.services.f42.comparable_pricing import ComparableIndex
@@ -95,9 +87,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         ra(f"  [!] F42 comparable index khong warm-up duoc: {type(e).__name__}: {e}")
 
+    def warm_f29():
+        try:
+            from PIL import Image
+
+            from app.core.f29.shared import embedder
+            from app.core.listing_intel import trend_store
+            trend_store.weekly_series()
+            embedder.embed_texts(["warm"])
+            embedder.embed_images([Image.new("RGB", (32, 32))])
+            ra("  [OK] F29: da warm-up model SigLIP va du lieu xu huong.")
+        except Exception as e:
+            ra(f"  [!] F29 warm-up loi: {type(e).__name__}: {e}")
+
+    import threading
+    threading.Thread(target=warm_f29, daemon=True).start()
+
     if settings.ENABLE_INPROCESS_SCHEDULER:
         try:
-            from app.core.f29_scheduler import start_scheduler
+            from app.core.f29.scheduler import start_scheduler
             start_scheduler()
             ra("  [OK] F29 scheduler: da bat (in-process).")
         except Exception as e:
@@ -115,7 +123,7 @@ async def lifespan(app: FastAPI):
     yield
 
     try:
-        from app.core.f29_scheduler import stop_scheduler
+        from app.core.f29.scheduler import stop_scheduler
         stop_scheduler()
     except Exception:
         pass
@@ -209,7 +217,8 @@ def read_ready():
     body: dict[str, Any] = {"status": "ok"}
 
     try:
-        latest = db_live()["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
+        from app.core.f29.constants import store_db
+        latest = store_db()["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
         if latest and latest.get("computed_at"):
             raw = latest["computed_at"]
             computed_at = None
@@ -235,7 +244,6 @@ app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", ta
 app.include_router(smart_suggestion_router)
 app.include_router(f30_internal_router)
 app.include_router(llm_internal_router)
-app.include_router(listing_quality_router)
 
 
 
