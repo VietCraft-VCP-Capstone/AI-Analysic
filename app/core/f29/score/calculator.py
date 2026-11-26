@@ -9,7 +9,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.api.v1._live import LOC_SP_THAT, db_live
 from app.config import settings
-from app.core.f29.score import image_check, recommend
+from app.core.f29.score import ai_summary, image_check, recommend
 from app.core.f29 import constants
 from app.core.f29.score import factors
 from app.core.f29.score import peers
@@ -69,7 +69,7 @@ def _from_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
     result = {k: doc.get(k) for k in SAVED_FIELDS}
     result["todos"] = [t for t in doc.get("todos") or [] if t.get("type") == "todo"]
     result.update(product_id=str(doc["product_id"]), date=doc["date"].date().isoformat(),
-                  computed_at=_iso(doc["computed_at"]))
+                  computed_at=_iso(doc["computed_at"]), ai=ai_summary.build(doc.get("checks") or [], doc.get("factors") or []))
     return result
 
 
@@ -216,6 +216,7 @@ class HealthScoreCalculator:
             "versions": {"score": MODEL_VERSION, "siglip": siglip, "relevance": "lexical",
                          "benchmark": f"vc-{today}", **check_versions},
             "checks": checks,
+            "ai": ai_summary.build(checks, rows),
             "confidence": scoring.confidence(rows, values["n"]),
             "content_snapshot": _snapshot(product, variants),
             "axes": {r["key"]: r["sub_score"] for r in rows},
