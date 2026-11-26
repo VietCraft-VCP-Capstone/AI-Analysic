@@ -90,6 +90,7 @@ VC_NAME: dict[str, str] = {}
 for _name, _t in TREE["vc_category"].items():
     VC_NAME.setdefault(_t, _name)
 CAT_ID = "description_category:top3"
+B1_VERSION = "b1_type/v1"
 NA_ACTION = "Chưa đánh giá được ảnh hoặc chữ để so khớp với danh mục."
 PASS_ACTION = "Ảnh, chữ và danh mục khớp nhau."
 
@@ -140,6 +141,7 @@ def category_checks(product: dict, img, txt) -> list[dict]:
         return [make_check(CAT_ID, "description", "na", {}, NA_ACTION)]
     evidence = {"declared": t, "top3": [[k, round(p, 4)] for k, p in top3]}
     if t in names:
-        return [make_check(CAT_ID, "description", "pass", evidence, PASS_ACTION)]
+        return [make_check(CAT_ID, "description", "pass", evidence, PASS_ACTION, model_version=B1_VERSION)]
     sev = "warn" if _allowed(t, img, txt) else "info"
-    return [make_check(CAT_ID, "description", sev, evidence, f"Danh mục chưa khớp ảnh và mô tả. {_suggest(names[0])}")]
+    return [make_check(CAT_ID, "description", sev, evidence, f"Danh mục chưa khớp ảnh và mô tả. {_suggest(names[0])}",
+                       model_version=B1_VERSION)]
