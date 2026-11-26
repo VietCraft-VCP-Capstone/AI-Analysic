@@ -116,6 +116,29 @@ def buoc_2_venv(chi_kiem):
     return True
 
 
+def buoc_2b_model_tach_nen(chi_kiem):
+    """Model tách nền phôi cho mockup POD (~224MB, MIT). Không đưa vào git: mỗi máy tự tải một lần.
+    Thiếu model không chặn server, chỉ là mockup đổi màu sẽ dùng cách ước lượng kém chính xác hơn."""
+    muc("2b", "Model tach nen phoi (mockup POD)")
+    ma = ("import sys; sys.path.insert(0,'.');"
+          "from app.services.segment_service import available, model_path;"
+          "print(model_path()); sys.exit(0 if available() else 3)")
+    r = chay([PY_VENV, "-c", ma], capture_output=True, text=True)
+    duong_dan = (r.stdout or '').strip().splitlines()[-1] if r.stdout else ''
+    if r.returncode == 0:
+        bo(f"Da co: {duong_dan}")
+        return
+    if chi_kiem:
+        loi("Chua tai model tach nen — chay: python -m scripts.seg.fetch_model")
+        return
+    lam("Dang tai model tach nen ~224MB (chi lan dau) ...")
+    r = chay([PY_VENV, "-m", "scripts.seg.fetch_model"])
+    if r.returncode == 0:
+        ok("Da tai xong model tach nen")
+    else:
+        loi("Tai model that bai (mockup van chay bang cach uoc luong). Thu lai: python -m scripts.seg.fetch_model")
+
+
 def buoc_3_env(chi_kiem):
     muc(3, "File cau hinh app/.env")
     env, mau = GOC / "app" / ".env", GOC / ".env.example"
@@ -223,6 +246,7 @@ def main():
 
     buoc_1_python()
     if not buoc_2_venv(x.check): sys.exit(1)
+    buoc_2b_model_tach_nen(x.check)
     if not buoc_3_env(x.check):  sys.exit(1)
     if not buoc_4_mart(x.check, x.rebuild): sys.exit(1)
     tot = buoc_5_kiem()

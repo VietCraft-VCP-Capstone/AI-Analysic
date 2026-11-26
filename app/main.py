@@ -22,6 +22,7 @@ from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
 from app.api.v1.f30_internal import router as f30_internal_router
 from app.api.v1.llm_internal import router as llm_internal_router
 from app.api.v1.listing_quality import router as listing_quality_router
+from app.api.v1.vision_segment import router as vision_segment_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -236,6 +237,7 @@ app.include_router(smart_suggestion_router)
 app.include_router(f30_internal_router)
 app.include_router(llm_internal_router)
 app.include_router(listing_quality_router)
+app.include_router(vision_segment_router)
 
 
 

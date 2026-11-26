@@ -19,6 +19,12 @@ COPY app/core/listing_intel/embedder.py app/core/listing_intel/
 COPY scripts/li/fetch_models.py scripts/li/
 RUN python -m scripts.li.fetch_models
 
+# Model tách nền phôi cho mockup POD (BiRefNet-lite, MIT)
+ENV SEG_MODEL_DIR=/opt/vietcraft-seg
+COPY app/services/segment_service.py app/services/
+COPY scripts/seg/ scripts/seg/
+RUN python -m scripts.seg.fetch_model
+
 COPY . .
 
 EXPOSE 8000
