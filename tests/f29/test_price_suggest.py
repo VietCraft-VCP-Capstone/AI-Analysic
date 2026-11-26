@@ -1,0 +1,52 @@
+from app.core.f29 import material, price_suggest
+from tests.f29.fake_price import FakePriceModel
+
+
+def test_suggest_none_without_model(monkeypatch, tmp_path):
+    monkeypatch.setattr(price_suggest, "MODEL_PATH", tmp_path / "missing.joblib")
+    assert price_suggest.suggest("Áo thun cotton", "fashion") is None
+
+
+def test_suggest_none_for_broken_model(monkeypatch, tmp_path):
+    (tmp_path / "broken.joblib").write_bytes(b"not a model")
+    (tmp_path / "broken.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(price_suggest, "MODEL_PATH", tmp_path / "broken.joblib")
+    assert price_suggest.suggest("Áo thun cotton", "fashion") is None
+
+
+def test_suggest_none_when_predict_fails(monkeypatch):
+    model = FakePriceModel(error=RuntimeError("boom"))
+    monkeypatch.setattr(price_suggest, "_load", lambda path: (model, -0.2, 0.2))
+    assert price_suggest.suggest("Áo thun cotton", "fashion") is None
+
+
+def test_suggest_orders_low_mid_high(fake_price_model):
+    out = price_suggest.suggest("Áo thun cotton", "fashion")
+    assert out["low"] < out["mid"] < out["high"]
+    assert out["mid"] == 100000
+
+
+def test_suggest_floors_at_1000(monkeypatch):
+    monkeypatch.setattr(price_suggest, "_load", lambda path: (FakePriceModel(price=100), -0.2, 0.2))
+    assert price_suggest.suggest("Móc khóa", None) == {"low": 1000.0, "mid": 1000.0, "high": 1000.0}
+
+
+def test_text_without_group_has_no_leading_space(monkeypatch):
+    model = FakePriceModel()
+    monkeypatch.setattr(price_suggest, "_load", lambda path: (model, -0.2, 0.2))
+    price_suggest.suggest("  Móc khóa ", None)
+    assert model.seen == [["Móc khóa"]]
+
+
+def test_suggest_with_fashion_material(fake_price_model, monkeypatch):
+    learned = {"cotton": 1.0, "lua": 1.8, "da that": 2.2, "da pu": 1.1}
+    monkeypatch.setattr(material, "price_params", lambda: {**material.DEFAULT_PARAMS, "materials": learned})
+    cotton = price_suggest.suggest("Áo thời trang", "fashion", "cotton")
+    silk = price_suggest.suggest("Áo thời trang", "fashion", "lụa")
+    leather = price_suggest.suggest("Áo khoác", "fashion", "da thật")
+    pu = price_suggest.suggest("Áo khoác", "fashion", "da pu")
+    assert silk["mid"] > cotton["mid"]
+    assert leather["mid"] > pu["mid"]
+    assert silk["material_factor"] == 1.8
+    assert leather["material_factor"] == 2.2
+

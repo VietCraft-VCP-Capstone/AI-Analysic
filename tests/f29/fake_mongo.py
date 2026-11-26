@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
-from app.core.f29.score.calculator import HealthScoreCalculator
+from app.core.f29.calculator import HealthScoreCalculator
 
 _MISSING = object()
 
@@ -52,9 +52,6 @@ def _match_one(doc: Dict[str, Any], query: Dict[str, Any]) -> bool:
                         return False
                 elif op == "$in":
                     if not (any(v in arg for v in val) if isinstance(val, list) else val in arg):
-                        return False
-                elif op == "$nin":
-                    if val in arg:
                         return False
                 else:
                     raise NotImplementedError(f"operator chưa hỗ trợ trong fake mongo: {op}")
@@ -127,12 +124,6 @@ class _FakeCollection:
     def insert_one(self, doc):
         self.docs.append(dict(doc))
         return SimpleNamespace(inserted_id=doc.get("_id"))
-
-    def delete_many(self, filt):
-        kept = [d for d in self.docs if not _match_one(d, filt)]
-        deleted = len(self.docs) - len(kept)
-        self.docs = kept
-        return SimpleNamespace(deleted_count=deleted)
 
     def count_documents(self, query=None):
         return len(list(self.find(query or {})))

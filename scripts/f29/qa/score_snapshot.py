@@ -4,7 +4,7 @@ import sys
 
 from app.core.f29 import constants
 from app.core.f29.score.calculator import LOC_SP_THAT, HealthScoreCalculator
-from tests.f29.fake_mongo import _FakeDB
+from scripts.f29.qa.memory_store import _FakeDB
 
 
 def main(argv: list[str]) -> int:
