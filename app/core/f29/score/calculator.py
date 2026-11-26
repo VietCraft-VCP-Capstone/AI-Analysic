@@ -168,7 +168,14 @@ class HealthScoreCalculator:
             cfg = constants.load()
         except RuntimeError:
             return {"error": "no_weights"}
-        return self._score(None, product, variants, (0, 0), cfg, image_budget, False)
+        return self._score(None, self._with_tag_ids(product), variants, (0, 0), cfg, image_budget, False)
+
+    def _with_tag_ids(self, product: Dict[str, Any]) -> Dict[str, Any]:
+        wanted = {t.strip().lower() for t in product.get("tags") or [] if isinstance(t, str)}
+        found = [t for t in self.live_db["tags"].find({}, {"name": 1, "status": 1})
+                 if str(t.get("name") or "").strip().lower() in wanted and t.get("status") in ("active", "pending")]
+        return {**product, "tag_ids": [t["_id"] for t in found],
+                "tags": [t["name"] for t in found if t.get("status") == "active"]}
 
     def _score(self, product_id: Optional[str], product: Dict[str, Any], variants: List[Dict[str, Any]],
                reviews: Tuple[int, int], cfg: Dict[str, Any], image_budget: float, index: bool) -> Dict[str, Any]:
