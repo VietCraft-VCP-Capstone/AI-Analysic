@@ -91,12 +91,16 @@ async def lifespan(app: FastAPI):
         try:
             from PIL import Image
 
+            from app.core.f29.checks import category, describe
             from app.core.f29.shared import embedder
             from app.core.listing_intel import trend_store
             trend_store.weekly_series()
             embedder.embed_texts(["warm"])
             embedder.embed_images([Image.new("RGB", (32, 32))])
-            ra("  [OK] F29: da warm-up model SigLIP va du lieu xu huong.")
+            category._model()
+            describe._model()
+            describe._bundle()
+            ra("  [OK] F29: da warm-up SigLIP, B1, B2, B3 va du lieu xu huong.")
         except Exception as e:
             ra(f"  [!] F29 warm-up loi: {type(e).__name__}: {e}")
 
