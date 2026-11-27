@@ -48,6 +48,9 @@ _GENERIC_LATIN = {
     "set", "combo", "cao", "cap", "basic", "style", "form", "oversize", "hang", "chinh",
     "ml", "cm", "mm", "kg", "gr", "lit", "the", "and", "for", "with", "big", "full",
     "ban", "loai", "mau", "kem", "tui", "vi", "ao", "quan", "giay", "dep", "mu", "non",
+    # tên chất liệu và từ tiếng Anh chung, từng bị nhận là hãng ("thương hiệu Polyester")
+    "polyester", "melamine", "silicone", "acrylic", "carbon", "canvas", "linen", "denim", "spandex",
+    "chiffon", "cashmere", "simili", "parafin", "titan", "mica", "game", "gaming", "bluetooth", "wireless",
 }
 # Hư từ không được đứng đầu/cuối một thẻ
 _EDGE_STOP = {"cho", "danh", "va", "voi", "cua", "la", "cac", "nhung", "tu", "den", "the", "kem", "co", "khong"}
@@ -71,6 +74,21 @@ class Comparable:
     sold: int = 0
     group: str = ""
     category_ids: List[str] = field(default_factory=list)
+    url: Optional[str] = None
+
+
+def tiki_url(listing_id: Any, title: str) -> Optional[str]:
+    """Link Tiki dạng <slug>-p<id>.html như Tiki tự đặt (Tiki tìm sản phẩm theo mã, slug chỉ để đọc)."""
+    try:
+        pid = int(listing_id)
+    except (TypeError, ValueError):
+        return None
+    slug = re.sub(r"[^a-z0-9]+", "-", strip_accents(title or "").lower()).strip("-")[:80] or "san-pham"
+    return f"https://tiki.vn/{slug}-p{pid}.html"
+
+
+def vietcraft_url(product_id: Any) -> str:
+    return f"/product/{product_id}"
 
 
 @dataclass
@@ -115,6 +133,12 @@ def _prep(text: str) -> str:
 _MODEL_QUALIFIERS = {"pro", "max", "plus", "mini", "ultra", "lite", "se", "fe", "air", "note", "neo"}
 _UNIT_RE = re.compile(r"^\d+(gb|tb|mb|ml|l|cm|mm|m|kg|g|gr|w|mah|inch|hz|k)$")
 _CODE_RE = re.compile(r"^(?=.{2,})[a-z]{0,3}\d{1,4}[a-z]{0,2}$")   # 18, s25, a17, c85, 14t — không lấy "2" (áo 2 dây)
+# Âm tiết tiếng Việt viết không dấu (tinh, nhan, gon...): "thủy tinh" không phải thương hiệu "tinh"
+_VI_SYLLABLE = re.compile(r"(?:ngh|ng|nh|ch|gh|gi|kh|ph|qu|th|tr|[bcdghklmnpqrstvx])?[aeiouy]{1,3}(?:ng|nh|ch|[cmnpt])?")
+# Chất liệu làm giá chênh hàng chục lần: không lấy giá sản phẩm khác chất liệu để thay
+_PRICE_DEFINING_MATERIALS = ("vàng", "bạc", "ngọc", "đá mã não", "đá thạch anh", "pha lê", "trầm hương",
+                             "lụa", "tơ tằm", "da bò", "da cừu", "da cá sấu", "da thật", "cashmere",
+                             "gỗ óc chó", "gỗ hương", "gỗ mun", "gỗ trắc", "gỗ lim", "gỗ nghiến", "gỗ walnut")
 EXACT_MIN_SOLD = 20      # 1 tin ĐÚNG mẫu đã bán >= 20 cái là đủ căn cứ (Tiki gộp mọi người bán vào 1 tin)
 
 
@@ -124,6 +148,8 @@ def _contains(text_prepped: str, phrase_prepped: str) -> bool:
 
 # Từ đầu quá chung, không đủ để coi là cùng loại ("Bộ ấm chén" ≠ "Bộ quần áo",
 # "Áo quần" ≠ "Áo dài", "Giày thể thao" ≠ "Giày tây", "Máy lọc nước" ≠ "Máy sấy tóc")
+_STYLE_WORDS = {"kieu", "dang", "mau", "phong", "cach", "thoi", "trang", "don", "gian", "dep", "xinh",
+                "basic", "sang", "chanh", "cao", "cap", "hot", "moi"}
 _GENERIC_HEAD = {
     "bo", "do", "phu", "san", "hop", "ao", "quan", "giay", "dep", "tui", "vi",
     "mu", "non", "may", "den", "binh", "vay", "dam", "khan",
@@ -140,7 +166,12 @@ def _type_head(prep: str) -> List[str]:
     ("bộ", "áo", "giày"...) vì từ thứ 2 vẫn chưa đủ phân biệt ("bộ áo quần" vs "bộ áo dài",
     "giày thể thao" vs "giày tây"), ngược lại 2 từ là đủ."""
     head2 = _head_tokens(prep, 2)
-    return _head_tokens(prep, 3) if head2 and head2[0] in _GENERIC_HEAD else head2
+    if not head2 or head2[0] not in _GENERIC_HEAD:
+        return head2
+    head3 = _head_tokens(prep, 3)
+    # Từ thứ 3 là mô tả kiểu dáng ("váy đầm KIỂU dáng đơn giản") thì không phải loại sản phẩm:
+    # giữ lại từ đó làm mọi tin "váy đầm ..." trên Tiki bị loại vì không bắt đầu bằng "váy đầm kiểu"
+    return head3[:2] if len(head3) == 3 and head3[2] in _STYLE_WORDS else head3
 
 
 def _same_product_type(q_head: List[str], c_prep: str) -> bool:
@@ -215,33 +246,35 @@ def load_market_rows(db_data: Any, days: int = MARKET_FRESH_DAYS) -> List[Dict[s
     rows: Dict[str, Dict[str, Any]] = {}
 
     def _add(key: str, title: str, price: float, sold: float, source: Optional[str] = None,
-             match: Optional[str] = None) -> None:
+             match: Optional[str] = None, url: Optional[str] = None) -> None:
         if not (PRICE_MIN <= price <= PRICE_MAX):
             return
         prep = _prep(match or title)
         if len(prep) < 3:
             return
-        rows[key] = {"title": normalize_nfc(title), "prep": prep, "price": price, "sold": int(sold)}
+        rows[key] = {"title": normalize_nfc(title), "prep": prep, "price": price, "sold": int(sold), "url": url}
         if source:
             rows[key]["source"] = source
 
     for d in db_data["external_market_products"].find(
-        {}, {"external_id": 1, "title": 1, "price_vnd": 1, "sold_count": 1, "review_count": 1}
+        {}, {"external_id": 1, "title": 1, "price_vnd": 1, "sold_count": 1, "review_count": 1, "product_url": 1}
     ):
         sold, reviews = _num(d.get("sold_count")), _num(d.get("review_count"))
         if sold >= 1 or reviews >= 1:
-            _add(str(d.get("external_id") or d["_id"]), str(d.get("title") or ""), _num(d.get("price_vnd")), sold)
+            _add(str(d.get("external_id") or d["_id"]), str(d.get("title") or ""), _num(d.get("price_vnd")), sold,
+                 url=d.get("product_url") or None)
     # Bản mới cào ghi đè cùng sản phẩm (cùng khoá tiki_<id>) vì giá mới hơn
     for d in db_data["market_price_listing"].find(
         {"is_valid": True, "last_seen_at": {"$gte": since}},
-        {"title": 1, "price": 1, "sold": 1, "source": 1, "match_title": 1},
+        {"title": 1, "price": 1, "sold": 1, "source": 1, "match_title": 1, "url": 1},
     ):
         if d.get("source") == "etsy":
             # Tiêu đề Etsy là tiếng Anh nên không khớp được câu tiếng Việt: khớp bằng từ khóa tiếng Việt đã cào
             if d.get("match_title"):
-                _add(str(d["_id"]), str(d.get("title") or ""), _num(d.get("price")), 0, "etsy", str(d["match_title"]))
+                _add(str(d["_id"]), str(d.get("title") or ""), _num(d.get("price")), 0, "etsy", str(d["match_title"]),
+                     url=d.get("url") or None)
             continue
-        _add(str(d["_id"]), str(d.get("title") or ""), _num(d.get("price")), _num(d.get("sold")))
+        _add(str(d["_id"]), str(d.get("title") or ""), _num(d.get("price")), _num(d.get("sold")), url=d.get("url") or None)
     return list(rows.values())
 
 
@@ -275,6 +308,8 @@ class ComparableIndex:
         self.prices = df["price"].to_numpy(dtype=float)
         self.sold = df["sold"].to_numpy(dtype=int)
         self.groups: List[str] = df["group"].astype(str).tolist() if "group" in df else [""] * len(df)
+        ids = df["listing_id"].tolist() if "listing_id" in df else [None] * len(df)
+        self.urls: List[Optional[str]] = [tiki_url(i, t) for i, t in zip(ids, self.titles)]
 
         self.vectorizer = TfidfVectorizer(
             ngram_range=(1, 2), min_df=2, max_df=0.4, sublinear_tf=True, dtype=np.float32
@@ -314,7 +349,7 @@ class ComparableIndex:
         frames = []
         for path in (TIKI23_PATH, TIKI26_PATH):
             if path.exists():
-                cols = ["group", "title", "price", "sold"]
+                cols = ["listing_id", "group", "title", "price", "sold"]
                 frames.append(pd.read_parquet(path, columns=cols))
         if not frames:
             return None
@@ -349,6 +384,7 @@ class ComparableIndex:
             s_info = sold.get(r["_id"])
             live_price[r["_id"]] = r["price"]
             rows.append({"title": r["title"], "prep": prep, "price": r["price"], "category_ids": r["category_ids"],
+                         "url": vietcraft_url(r["_id"]),
                          # đã bán được ở đúng giá đang niêm yết → nặng ký hơn khi so giá
                          "sold": s_info["qty"] if s_info and _close(s_info["price"], r["price"]) else 0})
         # Giá đã bán thật nhưng khác giá đang niêm yết (đổi giá) hoặc sản phẩm đã ngừng bán: thêm dòng riêng
@@ -360,7 +396,7 @@ class ComparableIndex:
             if len(prep) < 3 or not (PRICE_MIN <= s_info["price"] <= PRICE_MAX):
                 continue
             rows.append({"title": s_info["title"], "prep": prep, "price": s_info["price"], "category_ids": [],
-                         "sold": s_info["qty"], "source": "vietcraft_sold"})
+                         "sold": s_info["qty"], "source": "vietcraft_sold", "url": vietcraft_url(pid)})
 
         matrix = self.vectorizer.transform([r["prep"] for r in rows]) if rows else None
         self._live = (rows, matrix)
@@ -394,6 +430,8 @@ class ComparableIndex:
     def _is_brandish(self, tok: str) -> bool:
         """Từ Latin hiếm trong toàn tập (hãng/dòng máy: iphone, galaxy, redmi...), không phải từ chung."""
         if not re.fullmatch(r"[a-z]{3,}", tok) or tok in _GENERIC_LATIN or tok in _MODEL_QUALIFIERS:
+            return False
+        if _VI_SYLLABLE.fullmatch(tok):  # "nghe" (tai nghe), "tinh" (thủy tinh) viết không dấu
             return False
         col = self.vocab.get(tok)
         return col is None or self.doc_freq[col] <= 0.005 * self.n_docs
@@ -450,7 +488,7 @@ class ComparableIndex:
                 continue
             out.append(Comparable(
                 title=r["title"], price=r["price"], similarity=float(sims[i]), source=r.get("source", source),
-                sold=int(r.get("sold") or 0), category_ids=r.get("category_ids") or [],
+                sold=int(r.get("sold") or 0), category_ids=r.get("category_ids") or [], url=r.get("url"),
             ))
             if len(out) >= limit:
                 break
@@ -497,9 +535,14 @@ class ComparableIndex:
         q_head = _type_head(prep)
         type_strict = (lambda c: _head_tokens(c, len(q_head)) == q_head) if len(q_head) >= 2 else (lambda c: _same_product_type(q_head, c))
         type_loose = lambda c: _same_product_type(q_head, c)  # noqa: E731
-        collect = lambda m: self._collect(q, m, q_is_acc, top_k, exclude_idx)  # noqa: E731
-
         sig = self.model_signature(query)
+        # Seller không ghi hãng/mẫu: mỗi thương hiệu tối đa 2 tin, để một hãng đắt (Yankee Candle 0,9–1,2 triệu)
+        # không chiếm hết kết quả "nến thơm sáp đậu nành"
+        q_toks = set(prep.split())
+        cap = not sig and not self.query_brand(query)
+        collect = lambda m: (self._cap_brands(self._collect(q, m, q_is_acc, top_k, exclude_idx), q_toks) if cap  # noqa: E731
+                             else self._collect(q, m, q_is_acc, top_k, exclude_idx))
+
         if sig:
             need, q_quals = set(sig), self._quals_after_model(prep.split())
             exact = collect(lambda c: need <= set(c.split()) and self._quals_after_model(c.split()) == q_quals)
@@ -522,11 +565,18 @@ class ComparableIndex:
             attrs.append((f"chất liệu {material.lower()}", lambda c, m=mp: _contains(c, m)))
         # Thử từ đủ điều kiện nhất tới lỏng nhất; mỗi mức thử loại khớp 2 chữ đầu trước, 1 chữ đầu sau
         combos = [attrs] + ([[a] for a in attrs] if len(attrs) > 1 else []) + ([[]] if attrs else [])
+        if material and material.lower().startswith(_PRICE_DEFINING_MATERIALS):
+            # Chất liệu quyết định giá: nhẫn vàng 18k từng lấy giá nhẫn hợp kim 24.000đ. Thiếu thì báo thiếu.
+            combos = [c for c in combos if any(n.startswith("chất liệu") for n, _ in c)]
         last: List[Comparable] = []
         for combo in combos or [[]]:
             for typ in (type_strict, type_loose):
                 hits = collect(lambda c, cb=combo, t=typ: t(c) and all(f(c) for _, f in cb))
-                if len(hits) >= MIN_COMPARABLES:
+                # Seller không ghi hãng: mức lọc phải có đủ MIN_COMPARABLES thương hiệu khác nhau — 2 hãng nến
+                # cao cấp không đủ đại diện cho "nến sáp đậu nành"
+                enough = len(hits) >= MIN_COMPARABLES and (
+                    not cap or len({self._brand_of(c, q_toks) for c in hits}) >= MIN_COMPARABLES)
+                if enough:
                     missing = [name for name, _ in attrs if all(name != n for n, _ in combo)]
                     note = (f"Chưa đủ dữ liệu đúng {', '.join(missing)} — đang tham khảo sản phẩm cùng loại khác "
                             f"{'thương hiệu' if any(m.startswith('thương hiệu') for m in missing) else 'chất liệu'}, "
@@ -562,6 +612,29 @@ class ComparableIndex:
                 out.append(c)
         return out
 
+    def _brand_of(self, c: Comparable, q_toks: set) -> str:
+        """
+        Thương hiệu = từ Latin hiếm đầu tiên trong tiêu đề (không có trong tên seller gõ); không có thì mỗi tin một nhóm.
+        Chỉ xét từ KHÔNG DẤU ngay trong tiêu đề gốc, dài >= 4, có trong từ điển và không phải âm tiết tiếng Việt —
+        "men", "thu công" bỏ dấu, "tinh" (thủy tinh) không phải hãng.
+        """
+        for t in clean_tokens(c.title):
+            low = strip_accents(t)
+            if (t == low and len(low) >= 4 and low not in q_toks and self.vocab.get(low) is not None
+                    and not _VI_SYLLABLE.fullmatch(low) and self._is_brandish(low)):
+                return low
+        return _prep(c.title)
+
+    def _cap_brands(self, comps: List[Comparable], q_toks: set, per_brand: int = 2) -> List[Comparable]:
+        seen: Counter = Counter()
+        out = []
+        for c in comps:
+            b = self._brand_of(c, q_toks)
+            if seen[b] < per_brand:
+                seen[b] += 1
+                out.append(c)
+        return out
+
     def _collect(self, q, match, q_is_acc: bool, top_k: int, exclude_idx: Optional[int]) -> List[Comparable]:
         out: List[Comparable] = []
         sims = (self.matrix @ q.T).toarray().ravel()
@@ -586,7 +659,7 @@ class ComparableIndex:
 
             out.append(Comparable(
                 title=self.titles[i], price=float(self.prices[i]), similarity=float(sims[i]),
-                source="tiki", sold=int(self.sold[i]), group=self.groups[i],
+                source="tiki", sold=int(self.sold[i]), group=self.groups[i], url=self.urls[i],
             ))
             if len(out) >= top_k:
                 break
@@ -602,7 +675,9 @@ class ComparableIndex:
         out += self._snapshot_hits(self._live, q, match, q_is_acc, "vietcraft", top_k)
 
         out.sort(key=lambda c: c.similarity, reverse=True)
-        return self._diversify(out)[:top_k]
+        # Etsy khớp theo từ khóa đã cào nên điểm giống luôn ~1: tính chỗ riêng, không chiếm top_k của tin trong nước
+        local = self._diversify([c for c in out if c.source != "etsy"])[:top_k]
+        return local + [c for c in out if c.source == "etsy"][:config.ETSY_MAX_COMPARABLES]
 
     @staticmethod
     def _vet_etsy(comps: List[Comparable]) -> List[Comparable]:
@@ -634,9 +709,13 @@ class ComparableIndex:
         sig = self.model_signature(query)
         is_exact = exact_tier
         exact = is_exact and sum(c.sold for c in comps) >= EXACT_MIN_SOLD
-        if len(comps) < MIN_COMPARABLES and not exact:
-            return ComparableEstimate(comparables=comps, n_used=len(comps),
-                                      detected_product=self._detect_product(query, comps or cands[:5]))
+        # Tin Etsy khớp theo TỪ KHÓA đã cào (không theo tiêu đề) nên luôn "giống" truy vấn: không đủ giá trong nước
+        # thì Etsy chỉ để xem, không tính giá (thử thật: iPhone 17 Pro Max 745.000đ, bàn gỗ óc chó 23 triệu)
+        if sum(1 for c in comps if c.source != "etsy") < MIN_COMPARABLES:
+            if not exact:
+                return ComparableEstimate(comparables=comps, n_used=len(comps),
+                                          detected_product=self._detect_product(query, comps or cands[:5]))
+            comps = [c for c in comps if c.source != "etsy"]
 
         logp = np.log(np.array([c.price for c in comps]))
         sims = np.array([c.similarity for c in comps])
@@ -672,9 +751,6 @@ class ComparableIndex:
             # Đúng mẫu máy và đã bán thật nhiều: căn cứ mạnh dù số tin ít (Tiki gộp người bán vào 1 tin)
             confidence = "medium"
         match_note = note
-        if any(c.source == "etsy" for c in comps) and sum(1 for c in comps if c.source != "etsy") < MIN_COMPARABLES:
-            etsy_note = "Chưa đủ giá trong nước, đang tham khảo Etsy (thị trường quốc tế, thường cao hơn trong nước)."
-            match_note = f"{note} {etsy_note}" if note else etsy_note
         if match_note:  # phải nới điều kiện (khác mẫu / thương hiệu / chất liệu) → căn cứ yếu
             confidence = "low"
 
