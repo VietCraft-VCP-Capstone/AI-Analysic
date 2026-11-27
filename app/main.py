@@ -21,6 +21,7 @@ from app.api.v1.cccd_ocr import router as cccd_ocr_router
 from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
 from app.api.v1.f30_internal import router as f30_internal_router
 from app.api.v1.llm_internal import router as llm_internal_router
+from app.api.v1.vision_segment import router as vision_segment_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -248,6 +249,7 @@ app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", ta
 app.include_router(smart_suggestion_router)
 app.include_router(f30_internal_router)
 app.include_router(llm_internal_router)
+app.include_router(vision_segment_router)
 
 
 

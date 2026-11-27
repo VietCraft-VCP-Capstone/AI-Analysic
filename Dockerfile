@@ -20,6 +20,12 @@ COPY app/core/f29/shared/embedder.py app/core/f29/shared/
 COPY scripts/siglip/fetch_models.py scripts/siglip/
 RUN python -m scripts.siglip.fetch_models
 
+# Model tách nền phôi cho mockup POD (BiRefNet-lite, MIT)
+ENV SEG_MODEL_DIR=/opt/vietcraft-seg
+COPY app/services/segment_service.py app/services/
+COPY scripts/seg/ scripts/seg/
+RUN python -m scripts.seg.fetch_model
+
 COPY . .
 
 EXPOSE 8000
