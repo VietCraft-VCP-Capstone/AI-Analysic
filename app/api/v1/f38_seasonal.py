@@ -249,19 +249,21 @@ def seasonal(
     )
 
     events_payload: List[Dict[str, Any]] = []
-    for kw in active_camp["search_keywords"][:5]:
+    for idx, kw in enumerate(active_camp["search_keywords"][:5]):
         kw_pts = _lay_chuoi_trend_cho_tu_khoa(kw)
-        recent_vals = [p[1] for p in kw_pts[-8:]] if kw_pts else [40.0]
-        events_payload.append(
-            {
-                "name": kw,
-                "peak_week_of_year": target_ev_d.isocalendar()[1],
-                "amplitude": round((sum(recent_vals) / len(recent_vals)) / 100.0, 2),
-                "launch_window": active_camp["launch_window"],
-                "ready_to_ship_ideas": ready_ideas,
-                "pod_blanks": pod_blanks,
-            }
-        )
+        recent_vals = [p[1] for p in kw_pts[-8:]]
+        ev_item: Dict[str, Any] = {
+            "name": kw,
+            "peak_week_of_year": target_ev_d.isocalendar()[1],
+            # mức quan tâm 8 tuần gần nhất (0–1); không có chuỗi thì để trống thay vì giả 0.4
+            "amplitude": round((sum(recent_vals) / len(recent_vals)) / 100.0, 2) if recent_vals else None,
+            "launch_window": active_camp["launch_window"],
+        }
+        if idx == 0:
+            # Chỉ từ khóa chính mang danh sách ý tưởng/phôi (bảng điều khiển seller đọc events[0]); tránh lặp 5 lần
+            ev_item["ready_to_ship_ideas"] = ready_ideas
+            ev_item["pod_blanks"] = pod_blanks
+        events_payload.append(ev_item)
 
     # 7. Sản phẩm thật của shop & độ sẵn sàng đón dịp
     shop_products, matching_shop_products = load_and_audit_shop_products(shop_id, active_camp, spending_growth_pct, hom_nay=hom_nay)

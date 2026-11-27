@@ -183,3 +183,22 @@ def stop() -> None:
         _thread.join(timeout=2.0)
     _thread = None
 
+
+
+if __name__ == "__main__":
+    # Chạy một lần từ cron/worker riêng (khuyến nghị cho production thay vì luồng nền trong process API):
+    #   python -m app.core.seasonal_dl_scheduler --market        # thu thập dữ liệu sàn khác
+    #   python -m app.core.seasonal_dl_scheduler --retrain [--force]
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seasonal: chạy collector hoặc huấn luyện lại một lần")
+    parser.add_argument("--market", action="store_true", help="chạy collector sản phẩm sàn khác")
+    parser.add_argument("--retrain", action="store_true", help="huấn luyện lại model DL (qua cổng kiểm định)")
+    parser.add_argument("--force", action="store_true", help="bỏ qua khóa phân tán/lịch")
+    args = parser.parse_args()
+    if not (args.market or args.retrain):
+        parser.error("cần --market hoặc --retrain")
+    if args.market:
+        print(json.dumps(run_market_collector_once(force=args.force), ensure_ascii=False, default=str))
+    if args.retrain:
+        print(json.dumps(run_once(force=args.force), ensure_ascii=False, default=str))
