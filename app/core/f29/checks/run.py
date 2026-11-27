@@ -14,7 +14,7 @@ from app.api.v1._mart import client_dung_chung
 from app.core.f29.score import image_check
 from app.core.f29 import constants
 from app.core.f29.score import factors
-from app.core.f29.checks import describe, duplicates, make_check, print_check
+from app.core.f29.checks import describe, duplicates, image_match, make_check, print_check
 from app.core.f29.checks.duplicates import fingerprint
 from app.core.f29.paths import MODELS
 from app.core.f29.shared import embedder, image_fetch, image_load, vision
@@ -82,7 +82,7 @@ def txt(title: str | None):
         return None
 
 
-IMAGE_FLAGS = ("duplicate_same_shop",)
+IMAGE_FLAGS = ("duplicate_same_shop", "image_match")
 
 
 def _live(checks: list[dict]) -> list[dict]:
@@ -113,7 +113,7 @@ def apply(rows: list[dict], checks: list[dict]) -> list[dict]:
 
 DEFAULT_BUDGET = 25.0
 THRESHOLDS = MODELS / "i_dupes" / "v1" / "thresholds.json"
-ARTIFACTS = {"b1": "b1_type/v1", "b2": "b2_material/v1", "i": "i_dupes/v1"}
+ARTIFACTS = {"b1": "b1_type/v1", "b2": "b2_material/v1", "i": "i_dupes/v1", "im": image_match.VERSION}
 NA_ACTION = "Chưa kiểm được mục này do lỗi hệ thống."
 
 
@@ -187,10 +187,12 @@ def _checks(product: dict, variants: list, live_db, image_urls: list[str], image
     imgs = {u: p[0] for u, p in loaded.items()}
     vecs = [loaded.get(u, (None, None))[1] for u in image_urls]
     colors = [v["color"] for v in variants if v.get("is_active") and v.get("color")]
+    title_vec = txt(product.get("title"))
     checks = [
         *_safe("print", "print", lambda: _print({**product, "active_colors": colors}, designs, imgs)),
         *_safe("describe", "description",
-               lambda: describe.check_listing(product, _mean(vecs), txt(product.get("title")), vecs)),
+               lambda: describe.check_listing(product, _mean(vecs), title_vec, vecs)),
+        *_safe("image_match", "image", lambda: image_match.image_checks(vecs, title_vec)),
         *_safe("duplicates", "duplicate", lambda: _duplicates(product, image_urls, imgs, vecs, index)),
     ]
     return _plain(checks)

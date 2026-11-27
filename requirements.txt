@@ -29,3 +29,4 @@ tokenizers==0.23.3
 # --- chi dung de chay test, khong can luc chay that ---
 httpx>=0.24.0          # TestClient cua FastAPI can; tests/test_api_contract.py
 pytest>=7.4.0          # tests/test_f29_engine.py
+pytest-cov>=5.0        # test coverage (R6)
