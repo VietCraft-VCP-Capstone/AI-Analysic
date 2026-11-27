@@ -1,9 +1,14 @@
 import logging
 import re
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.api.v1._live import db_live, la_shop_live, san_pham_live
 from app.api.v1._mart import db
+from app.core.platform_fees import commission_rate
+from app.core.stock_plan import stock_plan
+from app.services.f38.f38_constants import TZ_VN, VC_ORDER_WINDOW_DAYS as SOLD_LOOKBACK_DAYS
+from app.services.f38.f38_trends_stl import load_vietcraft_real_sold_map
 
 log = logging.getLogger("f38_seasonal")
 
@@ -147,12 +152,15 @@ def load_and_audit_shop_products(
     shop_id: str,
     active_camp: Dict[str, Any],
     spending_growth_pct: Optional[int],
+    hom_nay: Optional[date] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Lấy danh sách sản phẩm THẬT của shop & rà soát sản phẩm khớp với dịp."""
+    """Lấy danh sách sản phẩm THẬT của shop & rà soát sản phẩm khớp với dịp (kèm gợi ý số lượng chuẩn bị)."""
     shop_products: List[Dict[str, Any]] = []
+    sold_90d: Dict[str, int] = {}
     try:
         if la_shop_live(shop_id):
             raw_sp = san_pham_live(shop_id, gioi_han=100)
+            sold_90d = load_vietcraft_real_sold_map() or {}
             for p in raw_sp:
                 imgs = p.get("images") or []
                 if not imgs and p.get("image_url"):
@@ -162,6 +170,8 @@ def load_and_audit_shop_products(
                         "_id": p["product_id"],
                         "title": p["title"],
                         "price_vnd": p.get("price_vnd") or 0,
+                        "cost_vnd": p.get("cost_vnd"),
+                        "product_type": p.get("product_type"),
                         "stock": p.get("stock") or 0,
                         "images": imgs,
                         "thumbnail": imgs[0] if imgs else None,
@@ -169,7 +179,7 @@ def load_and_audit_shop_products(
                         "tags": p.get("tags") or [],
                         "categories": p.get("categories") or [],
                         "source_idea_id": p.get("source_idea_id"),
-                        "orders": 0,
+                        "orders": int(sold_90d.get(p["product_id"], 0)),  # số cái bán được 90 ngày gần nhất
                         "revenue_vnd": 0,
                     }
                 )
@@ -211,15 +221,15 @@ def load_and_audit_shop_products(
                     {
                         "_id": str(p["_id"]),
                         "title": p.get("title") or "",
-                        "price_vnd": int(p.get("price") or p.get("retail_price") or 150000),
-                        "stock": int(p.get("stock") or 25),
+                        "price_vnd": int(p.get("price") or p.get("retail_price") or 0),
+                        "stock": int(p.get("stock") or 0),
                         "images": imgs,
                         "thumbnail": imgs[0] if imgs else None,
                         "image_url": imgs[0] if imgs else None,
                         "tags": p.get("tags") or [],
                         "categories": p.get("categories") or [],
                         "orders": int(p.get("sold_count") or 0),
-                        "revenue_vnd": int(p.get("sold_count") or 0) * int(p.get("price") or 150000),
+                        "revenue_vnd": int(p.get("sold_count") or 0) * int(p.get("price") or 0),
                     }
                 )
     except Exception as exc:
@@ -230,11 +240,31 @@ def load_and_audit_shop_products(
         active_camp.get("name", "").lower(),
         active_camp.get("id", "").lower(),
     ]
+    # Số ngày còn bán của dịp: từ hôm nay (hoặc ngày mở bán nếu chưa tới) tới ngày lễ
+    today = hom_nay or datetime.now(TZ_VN).date()
+    lw = active_camp.get("launch_window") or {}
+    sell_start = max(today, date.fromisoformat(lw["traction_start"])) if lw.get("traction_start") else today
+    selling_days = (
+        max(1, (date.fromisoformat(lw["peak_date"]) - sell_start).days) if lw.get("peak_date") else 30
+    )
+    fee_rate: Optional[float] = None
     matching_shop_products: List[Dict[str, Any]] = []
     for p in shop_products:
         text_to_check = f"{p.get('title') or ''} {' '.join(p.get('tags') or [])} {' '.join(p.get('categories') or [])}".lower()
         if any(term in text_to_check for term in search_terms if len(term) >= 3):
             p["readiness_analysis"] = analyze_product_seasonal_readiness(p, active_camp, spending_growth_pct)
+            if fee_rate is None:
+                fee_rate = commission_rate()
+            sold = int(sold_90d.get(str(p.get("_id")), 0))
+            p["stock_plan"] = stock_plan(
+                units_per_day=(sold / SOLD_LOOKBACK_DAYS) if sold > 0 else None,
+                window_days=selling_days,
+                price=p.get("price_vnd") or None,
+                cost=p.get("cost_vnd") or None,
+                fee_rate=fee_rate,
+                current_stock=int(p.get("stock") or 0),
+                product_type=p.get("product_type"),
+            )
             matching_shop_products.append(p)
 
     return shop_products, matching_shop_products

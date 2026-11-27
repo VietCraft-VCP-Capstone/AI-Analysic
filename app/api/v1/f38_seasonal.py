@@ -264,7 +264,7 @@ def seasonal(
         )
 
     # 7. Sản phẩm thật của shop & độ sẵn sàng đón dịp
-    shop_products, matching_shop_products = load_and_audit_shop_products(shop_id, active_camp, spending_growth_pct)
+    shop_products, matching_shop_products = load_and_audit_shop_products(shop_id, active_camp, spending_growth_pct, hom_nay=hom_nay)
     for idea in ready_ideas:
         idea["shop_coverage"] = keyword_shop_coverage(idea.get("keyword") or idea["title"], shop_products)
 
