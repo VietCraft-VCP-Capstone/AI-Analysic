@@ -1,10 +1,10 @@
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.api.v1._live import db_live, la_shop_live
 from app.core.redis_cache import cache_get_json, cache_set_json
-from app.services.f38.f38_constants import cutoff_utc_dt
+from app.services.f38.f38_constants import TZ_VN, VALID_ORDER_FILTER, cutoff_utc_dt
 
 log = logging.getLogger("f38_seasonal")
 
@@ -26,8 +26,8 @@ def tinh_campaign_funnel_va_kenh(
     cat_slug: str,
     baseline_spending: int,
     occasion_spending: int,
-    orders_growth_pct: int,
-    spending_growth_pct: int,
+    orders_growth_pct: Optional[int],
+    spending_growth_pct: Optional[int],
     hom_nay: date,
     base_orders: int,
     actual_camp_orders: int = 0,
@@ -41,8 +41,11 @@ def tinh_campaign_funnel_va_kenh(
     """
     camp_id = (active_camp.get("id") or "").lower()
 
-    multiplier = max(1.0, 1.0 + orders_growth_pct / 100.0)
-    target_orders = max(1, int(round(base_orders * multiplier))) if base_orders > 0 else 0
+    # Chưa đo được tăng trưởng thì không đặt mục tiêu; cầu giảm thì mục tiêu giảm theo
+    if orders_growth_pct is None or base_orders <= 0:
+        target_orders = 0
+    else:
+        target_orders = max(1, int(round(base_orders * (1.0 + orders_growth_pct / 100.0))))
 
     real_cart_rate_pct = round((actual_cart_adds / actual_views) * 100.0, 1) if actual_views > 0 else None
     real_order_rate_pct = round((actual_camp_orders / actual_cart_adds) * 100.0, 1) if actual_cart_adds > 0 else None
@@ -376,18 +379,18 @@ def count_shop_orders_for_funnel(
 
             real_order_flt = {
                 "shop_id": ObjectId(shop_id),
-                "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
-                "is_simulated": {"$ne": True},
+                **VALID_ORDER_FILTER,
                 "seed_ref": {"$exists": False},
             }
             shop_base_orders = db_live()["orders"].count_documents(real_order_flt)
 
             launch_w = active_camp.get("launch_window") or {}
-            c_start = launch_w.get("start") or launch_w.get("traction_start")
+            c_start = launch_w.get("traction_start") or launch_w.get("start")  # kỳ đo = từ ngày mở bán
             c_end = launch_w.get("peak_date") or launch_w.get("end")
             if c_start and c_end:
-                d_start = datetime.fromisoformat(c_start + "T00:00:00")
-                d_end = datetime.fromisoformat(c_end + "T23:59:59")
+                # mốc ngày theo giờ VN rồi đổi sang UTC (Mongo lưu UTC)
+                d_start = datetime.fromisoformat(c_start + "T00:00:00").replace(tzinfo=TZ_VN).astimezone(timezone.utc)
+                d_end = datetime.fromisoformat(c_end + "T23:59:59").replace(tzinfo=TZ_VN).astimezone(timezone.utc)
                 actual_camp_orders = db_live()["orders"].count_documents(
                     {**real_order_flt, "created_at": {"$gte": d_start, "$lte": d_end}}
                 )

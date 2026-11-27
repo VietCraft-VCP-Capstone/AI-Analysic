@@ -88,9 +88,43 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
         },
     )
 
+    lead_days = int(win.get("lead_time_days") or ev.get("lead_time_days") or 14)
+    cutoff_basis = f"Hạn chốt {cut_str} = Ngày lễ ({ev_str}) − {lead_days} ngày (thời gian làm hàng và giao hàng)."
+    phase = win.get("current_phase")
+
+    if phase == "post_event":
+        return {
+            "action_type": "post_event_review",
+            "badge_text": f"Đã qua lễ {win.get('days_since_event', 0)} ngày",
+            "badge_variant": "blue",
+            "title": f"Xem kết quả {ev_name} và rút kinh nghiệm",
+            "advice": "So số đơn thực tế với mục tiêu, ghi lại sản phẩm bán tốt/bán chậm và đánh giá dịp này để kế hoạch năm sau chính xác hơn.",
+            "calculation_basis": f"Giữ dịp ở pha sau lễ tới {win.get('post_event_end', '')} để seller kịp đánh giá.",
+            "cta_label": "Xem kết quả dịp",
+            "target_tab": "performance",
+            "is_urgent": False,
+        }
+
+    if phase == "last_call":
+        days_to_event = int(win.get("days_to_event") or 0)
+        return {
+            "action_type": "last_call",
+            "badge_text": f"Còn {days_to_event} ngày tới lễ",
+            "badge_variant": "amber",
+            "title": f"Sát lễ {ev_name}: chỉ bán hàng có sẵn",
+            "advice": (
+                f"Đã qua hạn chốt đơn thường ({cut_str}). Ngừng nhận mẫu làm theo yêu cầu; chỉ mở bán hàng có sẵn, "
+                f"bật giao nhanh/hỏa tốc và ghi rõ thời gian giao để khách nhận trước {ev_str}."
+            ),
+            "calculation_basis": cutoff_basis,
+            "cta_label": "Xem sản phẩm shop & tồn kho",
+            "target_tab": "readiness",
+            "is_urgent": True,
+        }
+
     if days_to_cutoff <= 3 or hom_nay >= peak_d:
         if days_to_cutoff <= 1:
-            badge_text = f"Hạn chốt {days_to_cutoff} ngày" if days_to_cutoff > 0 else "Đã qua hạn chốt"
+            badge_text = f"Hạn chốt {days_to_cutoff} ngày" if days_to_cutoff > 0 else "Hạn chốt hôm nay"
         else:
             badge_text = f"Hạn chốt còn {days_to_cutoff} ngày"
 
@@ -100,7 +134,7 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
             "badge_variant": "amber",
             "title": f"Chốt đơn & Giao hàng kịp {ev_name}",
             "advice": f"Hạn chốt còn {days_to_cutoff} ngày ({cut_str}). Ngừng nhận mẫu đặt trước, tập trung đóng gói hàng sẵn có để kịp giao trước {ev_str}.",
-            "calculation_basis": f"Hạn chốt {cut_str} = Ngày sự kiện ({ev_str}) − 10 ngày (đóng gói & giao hàng an toàn).",
+            "calculation_basis": cutoff_basis,
             "cta_label": "Xem sản phẩm shop & tồn kho",
             "target_tab": "readiness",
             "is_urgent": True,
@@ -113,7 +147,7 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
             "badge_variant": "blue",
             "title": prof["traction_title"],
             "advice": prof["traction_advice"],
-            "calculation_basis": f"Bắt đầu mở bán {trac_str} = Trước cao điểm 10 ngày để kịp index từ khóa.",
+            "calculation_basis": f"Bắt đầu mở bán {trac_str}, trước hạn chốt đơn ({cut_str}) {(cut_off_d - traction_d).days} ngày để sàn kịp index từ khóa và gom đánh giá.",
             "cta_label": "Xem xu hướng & sức mua",
             "target_tab": "traits",
             "is_urgent": False,
@@ -129,7 +163,7 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
         "badge_variant": "emerald",
         "title": prof["prep_title"],
         "advice": prof["prep_advice"],
-        "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Ngày sự kiện ({ev_str}) − 38 ngày (thời gian làm hàng & đón sóng).",
+        "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Hạn chốt đơn ({cut_str}) − {int(ev.get('prep_days', 30))} ngày chuẩn bị của dịp.",
         "cta_label": "Xem gợi ý sản phẩm đón dịp",
         "target_tab": "potential",
         "is_urgent": False,
@@ -140,13 +174,17 @@ def build_all_campaigns(
     hom_nay: date,
     cat_slug: str,
     target_camp_id: Optional[str],
+    shop_lead_days: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Xây dựng danh sách toàn bộ dịp mua sắm trong năm và chọn chiến dịch đang xem."""
+    """Xây dựng danh sách toàn bộ dịp mua sắm trong năm và chọn chiến dịch đang xem.
+
+    `shop_lead_days`: lead time đo từ đơn thật của shop (p90 + dự phòng); None = dùng mặc định của dịp.
+    """
     all_campaigns: List[Dict[str, Any]] = []
     weekday_names = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ nhật"]
 
     for ev in calendar_vn.SHOPPING_EVENTS:
-        win = calendar_vn.calculate_occasion_window(ev, hom_nay)
+        win = calendar_vn.calculate_occasion_window(ev, hom_nay, shop_lead_days=shop_lead_days)
         if not win:
             continue
 
@@ -166,8 +204,17 @@ def build_all_campaigns(
             "days_to_peak": win["days_to_event"],
             "days_to_cutoff": win["days_to_cut_off"],
             "status": win["status"],
-            "is_safe_to_launch": win["days_to_cut_off"] > 0,
-            "timing_warning": None if win["days_to_cut_off"] > 0 else "Đã quá hạn chốt đơn dịp này (nguy cơ giao hàng trễ sau lễ)",
+            "is_safe_to_launch": win["days_to_cut_off"] >= 0,
+            "timing_warning": (
+                None if win["days_to_cut_off"] >= 0
+                else "Đã qua lễ, dịp này đang ở pha xem kết quả" if win["current_phase"] == "post_event"
+                else "Đã qua hạn chốt đơn thường: chỉ nhận hàng có sẵn và giao nhanh"
+            ),
+            "days_since_event": win.get("days_since_event", 0),
+            "cut_off_note": win.get("cut_off_note"),
+            "lead_time_source": win.get("lead_time_source"),
+            "default_lead_time_days": win.get("default_lead_time_days"),
+            "post_event_end": win.get("post_event_end"),
             "cut_off_formula": win["cut_off_formula"],
         }
 
@@ -198,9 +245,10 @@ def build_all_campaigns(
             next_deadline_days_left = (ev_d - hom_nay).days
             next_deadline_is_urgent = False
         else:
-            next_deadline_title = "Đã qua hạn chốt đơn"
-            next_deadline_date_text = ev_d.strftime("%d/%m")
-            next_deadline_days_left = 0
+            pe_d = date.fromisoformat(win["post_event_end"])
+            next_deadline_title = f"Đánh giá kết quả trước {pe_d.strftime('%d/%m')}"
+            next_deadline_date_text = pe_d.strftime("%d/%m")
+            next_deadline_days_left = max(0, (pe_d - hom_nay).days)
             next_deadline_is_urgent = False
 
         if ev_d.year != hom_nay.year:
@@ -329,10 +377,7 @@ def attach_expected_orders(
                 if not isinstance(cand_up, dict):
                     ev_by_yr: Dict[int, date] = {}
                     if ev_info_c:
-                        for yr in range(2021, hom_nay.year + 2):
-                            tw_c = calendar_vn.calculate_occasion_window(ev_info_c, date(yr, 6, 1))
-                            if tw_c and tw_c.get("event_date"):
-                                ev_by_yr[yr] = date.fromisoformat(tw_c["event_date"])
+                        ev_by_yr = calendar_vn.event_dates_by_year(ev_info_c, range(2021, hom_nay.year + 2))
                     cand_up = event_demand_uplift(
                         series=s_obj, event_dates=ev_by_yr, event_date=ev_d, window_days=win_d, today=hom_nay
                     )

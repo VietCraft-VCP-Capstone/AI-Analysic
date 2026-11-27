@@ -16,6 +16,7 @@ from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, build_meta, ok
 from app.core import calendar_vn
 from app.core.redis_cache import cache_get_json, cache_set_json
+from app.core.shop_lead_time import load_shop_lead_time
 from app.core.seasonal_intel import keyword_shop_coverage, summarize_industry_orders
 from app.services.f38.f38_campaigns import (
     attach_expected_orders,
@@ -28,6 +29,7 @@ from app.services.f38.f38_constants import (
     CAT_LABELS,
     CAT_OCCASION_KEYWORDS,
     EXTERNAL_FRESHNESS_DAYS,
+    VALID_ORDER_FILTER,
     LUI_SAN_XUAT,
     MART,
     TZ_VN,
@@ -107,8 +109,7 @@ def _compute_platform_order_rates(shop_id: str, cat_slug: Optional[str], camp_id
         return cached
 
     query: Dict[str, Any] = {
-        "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
-        "is_simulated": {"$ne": True},
+        **VALID_ORDER_FILTER,
         "seed_ref": {"$exists": False},
     }
     if la_shop_live(shop_id):
@@ -163,24 +164,23 @@ def seasonal(
         cache_set_json("seasonal:all_competitors:v1", all_competitors, ttl_seconds=1800)
 
     # 2. Lịch toàn bộ dịp mua sắm trong năm & chọn chiến dịch đang xem
-    all_campaigns, active_camp = build_all_campaigns(hom_nay, cat_slug, target_camp_id)
+    # Lead time đo từ đơn đã giao của shop (p90 + dự phòng); thiếu mẫu thì dùng mặc định của từng dịp
+    shop_lead = load_shop_lead_time(shop_id)
+    shop_lead_days = shop_lead.get("lead_days") if shop_lead else None
+    all_campaigns, active_camp = build_all_campaigns(hom_nay, cat_slug, target_camp_id, shop_lead_days=shop_lead_days)
     primary_kw = active_camp["search_keywords"][0] if active_camp["search_keywords"] else "quà tặng"
     trend_series = _lay_chuoi_trend_cho_tu_khoa(primary_kw)
     stl = _tinh_stl_that(trend_series, chu_ky=52)
 
     ev_info = next(e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == active_camp["id"])
-    ev_win = calendar_vn.calculate_occasion_window(ev_info, hom_nay) or {
+    ev_win = calendar_vn.calculate_occasion_window(ev_info, hom_nay, shop_lead_days=shop_lead_days) or {
         "event_date": hom_nay.isoformat(),
         "cut_off_date": (hom_nay + timedelta(days=21)).isoformat(),
     }
     target_ev_d = date.fromisoformat(ev_win["event_date"])
     cut_off_d = date.fromisoformat(ev_win["cut_off_date"])
 
-    event_dates_by_year: Dict[int, date] = {}
-    for yr in range(2021, hom_nay.year + 2):
-        tw = calendar_vn.calculate_occasion_window(ev_info, date(yr, 6, 1))
-        if tw and tw.get("event_date"):
-            event_dates_by_year[yr] = date.fromisoformat(tw["event_date"])
+    event_dates_by_year: Dict[int, date] = calendar_vn.event_dates_by_year(ev_info, range(2021, hom_nay.year + 2))
     past_ev = {y: d for y, d in event_dates_by_year.items() if d < hom_nay}
 
     # 3. Đơn hàng lịch sử của shop & tổng hợp đơn toàn sàn (cache Redis 30 phút)
@@ -361,6 +361,9 @@ def seasonal(
             "sample_size_n": measured_sample_size,
             "measured_cycles": measured_cycles,
             "route_risks": route_risks,
+            "shop_lead_time": shop_lead,
+            # % tăng LƯỢT TÌM KIẾM của dịp (Google Trends), không phải % tăng đơn
+            "search_uplift_pct": traits_bundle.get("search_uplift_pct"),
             "scorecard_metrics": scorecard_metrics,
             "opportunity_keywords": opportunity_keywords,
             "campaign_funnel": funnel_data.get("campaign_funnel"),

@@ -17,8 +17,10 @@ from statistics import median
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
+from scipy.stats import poisson
 
-COMPLETED = {"DELIVERED", "COMPLETED", "PAID"}
+from app.core.order_validity import is_valid_demand_order
+
 MIN_WINDOW_ORDERS = 15      # tối thiểu đơn trong các cửa sổ dịp để coi là "đo được"
 MIN_SHOPS_FOR_RANK = 5      # tối thiểu shop ngành để xếp hạng percentile
 
@@ -105,7 +107,7 @@ def order_amount(o: Dict[str, Any]) -> float:
 def _completed(orders: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out = []
     for o in orders:
-        if (o.get("order_status") or "").upper() in COMPLETED and _dt(o.get("created_at")):
+        if is_valid_demand_order(o) and _dt(o.get("created_at")):
             out.append(o)
     return out
 
@@ -304,12 +306,24 @@ def keyword_shop_coverage(keyword: str, shop_products: List[Dict[str, Any]]) -> 
 
 
 # ----------------------------------------------------------------------------- Counterfactual impact (Thành quả)
+def normal_day_orders(rate_per_day: float, days: float) -> Dict[str, float]:
+    """Số đơn nếu bán như ngày thường: kỳ vọng = nhịp nền × số ngày, khoảng 80% theo phân phối Poisson.
+
+    Không nhân với độ nâng lượt tìm kiếm: lượt tìm (Google Trends) không phải số đơn.
+    """
+    lam = max(0.0, float(rate_per_day) * float(days))
+    return {"p10": int(poisson.ppf(0.1, lam)) if lam > 0 else 0,
+            "p50": round(lam, 1),
+            "p90": int(poisson.ppf(0.9, lam)) if lam > 0 else 0}
+
+
 def impact_report(shop_orders: List[Dict[str, Any]], event: date, win_days: int, today: date,
                   adopted_keywords: List[str], market_uplift: Optional[Dict[str, Any]],
                   prev_event: Optional[date]) -> Dict[str, Any]:
-    """Thành quả = thực tế − phản thực (không áp dụng).
+    """Thành quả = thực tế so với kịch bản "bán như ngày thường".
 
-    Phản thực = nhịp đơn nền 8 tuần × uplift thị trường (QuantileForecaster P10/P50/P90).
+    Kịch bản ngày thường = nhịp đơn nền 8 tuần × số ngày (khoảng 80% Poisson). Độ nâng lượt tìm kiếm
+    (`market_uplift`) chỉ trả kèm để tham khảo, không nhân vào số đơn.
     Nhóm "áp dụng" = đơn có sản phẩm khớp từ khóa gợi ý đã chọn. So thêm với mùa trước (YoY).
     """
     done = _completed(shop_orders)
@@ -339,18 +353,18 @@ def impact_report(shop_orders: List[Dict[str, Any]], event: date, win_days: int,
     res: Dict[str, Any] = {"phase": phase, "window": [ws.date().isoformat(), event.isoformat()],
                            "elapsed_days": elapsed, "adopted_keywords": adopted_keywords,
                            "baseline_orders_per_day": None if base_rate is None else round(base_rate, 3),
-                           "baseline_n": len(base)}
-    if phase == "upcoming" or base_rate is None or not market_uplift:
+                           "baseline_n": len(base),
+                           "search_uplift_p50": (market_uplift or {}).get("uplift_p50")}
+    if phase == "upcoming" or base_rate is None:
         res["status"] = "insufficient" if base_rate is None else "projected"
-        if base_rate is not None and market_uplift:
-            days = win_days
-            for q in ("p10", "p50", "p90"):
-                res[f"expected_orders_{q}"] = round(base_rate * days * float(market_uplift.get(f"uplift_{q}", 1.0)), 1)
+        if base_rate is not None:
+            for q, v in normal_day_orders(base_rate, win_days).items():
+                res[f"expected_orders_{q}"] = v
             if base_amt:
                 res["expected_gmv_p50"] = round(res["expected_orders_p50"] * base_amt)
         return res
 
-    cf = {q: base_rate * elapsed * float(market_uplift.get(f"uplift_{q}", 1.0)) for q in ("p10", "p50", "p90")}
+    cf = normal_day_orders(base_rate, elapsed)
     actual = len(win)
     adopted = [o for o in win if _hits(o)]
     res.update({
@@ -404,9 +418,10 @@ def build_playbook(idea: Dict[str, Any], cut_off: date, event: date, today: date
     _add("Hạn chốt nhận đơn an toàn", cut_off, "Đóng nhận đơn giao kịp lễ", "Sau mốc này giao trễ rủi ro cao.")
 
     exp = None
-    if uplift and base_orders_per_day is not None:
+    if base_orders_per_day is not None:
+        # Mức ngày thường (không nhân độ nâng lượt tìm kiếm, vì lượt tìm không phải số đơn)
         days = max(1, (event - max(today, event - timedelta(days=30))).days)
-        exp = {q: round(base_orders_per_day * days * float(uplift.get(f"uplift_{q}", 1.0)), 1) for q in ("p10", "p50", "p90")}
+        exp = normal_day_orders(base_orders_per_day, days)
     return {"idea": idea.get("title"), "steps": sorted(steps, key=lambda s: s["date"]),
             "expected_orders_next_30d": exp, "feasible": total_days >= shop_lead_days + ship_days,
             "days_left_to_cut_off": total_days}

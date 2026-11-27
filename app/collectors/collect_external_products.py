@@ -30,6 +30,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from app.config import settings
+from app.core.order_validity import VALID_ORDER_FILTER
 
 COLLECTION_NAME = "external_market_products"
 
@@ -799,8 +800,7 @@ def fetch_vietcraft_live_products(client: MongoClient, order_window_days: int = 
             sold_agg = live_db["orders"].aggregate([
                 {
                     "$match": {
-                        "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
-                        "is_simulated": {"$ne": True},
+                        **VALID_ORDER_FILTER,
                         "created_at": {"$gte": order_since},
                         "items.product_id": {"$in": pids},
                     }

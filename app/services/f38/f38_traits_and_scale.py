@@ -11,7 +11,7 @@ from app.core.redis_cache import cache_get_json, cache_set_json
 from app.core.seasonal_dl.forecaster import calibrate_shop_uplift, event_demand_uplift, method_info
 from app.core.seasonal_intel import compare_shop_vs_industry_summary
 from app.core.seasonal_opportunity import canonical_seller_key, dedupe_external_docs
-from app.services.f38.f38_constants import EXTERNAL_FRESHNESS_DAYS, cutoff_utc_dt
+from app.services.f38.f38_constants import EXTERNAL_FRESHNESS_DAYS, cutoff_utc_dt, is_valid_demand_order
 
 log = logging.getLogger("f38_seasonal")
 
@@ -319,6 +319,24 @@ def compute_industry_scale(cat_slug: str, active_camp: Dict[str, Any], hom_nay: 
         }
 
 
+def search_uplift_pct(uplift_res: Optional[Dict[str, Any]]) -> Optional[int]:
+    """% tăng LƯỢT TÌM KIẾM của dịp so với ngày thường (P50 từ chuỗi Google Trends). Không phải % tăng đơn."""
+    p50 = (uplift_res or {}).get("uplift_p50")
+    if not p50:
+        return None
+    return round((float(p50) - 1.0) * 100)
+
+
+def resolve_orders_growth_pct(traits_cmp: Dict[str, Any]) -> Optional[int]:
+    """% tăng ĐƠN của dịp, chỉ lấy từ đơn thật: của shop nếu đủ mẫu, không thì của ngành. Không có thì None."""
+    og = (traits_cmp or {}).get("orders_growth") or {}
+    for side in ("shop", "industry"):
+        v = (og.get(side) or {}).get("value")
+        if v is not None:
+            return round(float(v))
+    return None
+
+
 def build_occasion_traits(
     *,
     shop_id: str,
@@ -353,11 +371,7 @@ def build_occasion_traits(
         elif target_s is None and len(all_series_map) > 0:
             target_s = next(iter(all_series_map.values()))
 
-    event_dates_by_year: Dict[int, date] = {}
-    for yr in range(2021, hom_nay.year + 2):
-        temp_win = calendar_vn.calculate_occasion_window(ev_info, date(yr, 6, 1))
-        if temp_win and temp_win.get("event_date"):
-            event_dates_by_year[yr] = date.fromisoformat(temp_win["event_date"])
+    event_dates_by_year: Dict[int, date] = calendar_vn.event_dates_by_year(ev_info, range(2021, hom_nay.year + 2))
 
     if target_s is not None:
         try:
@@ -397,20 +411,12 @@ def build_occasion_traits(
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             uplift_res = None
 
-    if uplift_res and uplift_res.get("uplift_p50"):
-        p50_up = float(uplift_res["uplift_p50"])
-        orders_growth_pct = round((p50_up - 1.0) * 100)
-    elif stl.get("seasonal"):
-        peak_seasonal = max(stl["seasonal"])
-        avg_seasonal = sum(stl["seasonal"]) / max(1, len(stl["seasonal"]))
-        orders_growth_pct = max(18, min(85, round(((peak_seasonal - avg_seasonal) / max(1.0, avg_seasonal)) * 100)))
-    else:
-        orders_growth_pct = round(stl.get("amplitude", 0.35) * 100)
+    search_pct = search_uplift_pct(uplift_res)
 
     competitor_prices = [p.get("price_vnd", 0) for p in all_competitors if p.get("price_vnd")]
     avg_cat_price = int(sum(competitor_prices) / len(competitor_prices)) if competitor_prices else 0
     baseline_spending = avg_cat_price if avg_cat_price > 0 else 200000
-    spending_growth_pct: int = 0
+    spending_growth_pct: Optional[int] = None  # None = chưa đo được
     occasion_spending = baseline_spending
 
     start_d = date.fromisoformat(active_camp["launch_window"]["start"]) if active_camp.get("launch_window") else hom_nay
@@ -573,9 +579,10 @@ def build_occasion_traits(
         past_ev,
         ind_win_days,
         hom_nay,
-        model_uplift_pct=float(orders_growth_pct) if uplift_res else None,
+        model_uplift_pct=None,  # độ nâng lượt tìm kiếm không được dùng thay cho tăng trưởng đơn
         model_label=method_meta.get("method", ""),
     )
+    orders_growth_pct = resolve_orders_growth_pct(traits_cmp)
     key_to_cmp = {
         "ordersGrowth": "orders_growth",
         "higherSpending": "aov_growth",
@@ -585,9 +592,7 @@ def build_occasion_traits(
         "voucherSensitivity": "voucher_pct",
     }
 
-    done_shop_orders = [
-        o for o in shop_orders_hist if str(o.get("order_status") or "").upper() in ("DELIVERED", "COMPLETED", "PAID", "")
-    ] or shop_orders_hist
+    done_shop_orders = [o for o in shop_orders_hist if is_valid_demand_order(o)]
     shop_recent_n = len(done_shop_orders)
     shop_recent_map: Dict[str, Optional[float]] = {}
     if shop_recent_n >= 3:
@@ -624,7 +629,7 @@ def build_occasion_traits(
         spending_growth_pct = int(round(float(measured_aov_ind)))
     elif ind_scale.get("occAovPremium") is not None:
         spending_growth_pct = int(round(float(ind_scale["occAovPremium"])))
-    occasion_spending = int(baseline_spending * (1 + spending_growth_pct / 100))
+    occasion_spending = int(baseline_spending * (1 + (spending_growth_pct or 0) / 100))
 
     # Ưu tiên số đo thật từ đơn VietCraft (>= 10 đơn); chỉ dùng tỷ lệ từ listing đa sàn khi chưa đủ đơn thật
     ind_combo_blend: Optional[float] = (
@@ -647,7 +652,7 @@ def build_occasion_traits(
     )
 
     plat_fallback_map: Dict[str, Optional[float]] = {
-        "ordersGrowth": float(orders_growth_pct) if uplift_res else None,
+        "ordersGrowth": float(orders_growth_pct) if orders_growth_pct is not None else None,
         "higherSpending": float(ind_scale["occAovPremium"]) if ind_scale.get("occAovPremium") is not None else None,
         "earlyOrder": None,
         "peakClustering": float(peak_clump_pct) if peak_clump_pct is not None else None,
@@ -700,6 +705,7 @@ def build_occasion_traits(
         "method_meta": method_meta,
         "uplift_res": uplift_res,
         "orders_growth_pct": orders_growth_pct,
+        "search_uplift_pct": search_pct,
         "spending_growth_pct": spending_growth_pct,
         "baseline_spending": baseline_spending,
         "occasion_spending": occasion_spending,

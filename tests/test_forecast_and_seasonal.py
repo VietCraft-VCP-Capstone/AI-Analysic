@@ -36,7 +36,8 @@ def test_calculate_occasion_window():
     assert window["event_key"] == "tet"
     assert window["lead_time_days"] == 18
     assert window["event_date"] == "2027-02-06"
-    assert window["cut_off_date"] == "2027-01-19"  # 06/02 trừ 18 ngày lead time
+    # 18 ngày làm hàng + giao đếm lùi từ 05/02, bỏ qua 02/02–05/02 hãng vận chuyển nghỉ Tết → 15/01
+    assert window["cut_off_date"] == "2027-01-15"
     assert window["days_to_event"] > 0
     assert window["days_to_cut_off"] > 0
     assert window["status"] in ("active", "upcoming", "passed")

@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.api.v1._live import db_live, la_shop_live, san_pham_live
 from app.api.v1._mart import db
@@ -11,7 +11,7 @@ log = logging.getLogger("f38_seasonal")
 def analyze_product_seasonal_readiness(
     product: Dict[str, Any],
     active_camp: Dict[str, Any],
-    spending_growth_pct: int = 32,
+    spending_growth_pct: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Phân tích độ sẵn sàng của sản phẩm shop đón dịp cao điểm."""
     camp_name = re.sub(r"Lễ Hội |Mùa ", "", active_camp.get("name", "Chiến dịch"), flags=re.IGNORECASE)
@@ -48,13 +48,13 @@ def analyze_product_seasonal_readiness(
         combo_tip = "kèm hộp quà nơ sang trọng, thiệp chúc hoặc phụ kiện phối kèm (khăn/tất)"
         sample_combo = f"Set {core_title} Kèm Hộp Quà Sang Trọng & Thiệp {camp_name}"
         sample_keywords = f'"quà tặng thời trang", "set đồ {camp_name.lower()}", "thời trang {camp_name.lower()}"'
-        seller_action_tip = 'Thêm phân loại "Kèm Hộp Quà Sang Trọng & Thiệp (+35.000đ)" ngay trên sản phẩm hiện tại mà không cần nhập thêm mặt hàng mới.'
+        seller_action_tip = 'Thêm phân loại "Kèm Hộp Quà Sang Trọng & Thiệp" (tự đặt giá phụ thu theo chi phí hộp) ngay trên sản phẩm hiện tại mà không cần nhập thêm mặt hàng mới.'
     elif any(w in combined_text for w in ["khăn", "choàng", "lụa", "túi", "ví", "mũ", "nón", "phụ kiện"]):
         cat_label = "Phụ kiện thời trang"
         combo_tip = "kèm hộp đựng lót nhung hoặc túi quà quai xách và thiệp mừng"
         sample_combo = f"Hộp Quà Cao Cấp {core_title} Kèm Thiệp Tri Ân {camp_name}"
         sample_keywords = f'"khăn quà tặng", "hộp quà phụ kiện", "quà {camp_name.lower()} tinh tế"'
-        seller_action_tip = 'Thêm tùy chọn "Đóng Hộp Quà Nơ + Thiệp Kỷ Niệm (+30.000đ)" để khách mua làm quà biếu tặng trọn gói.'
+        seller_action_tip = 'Thêm tùy chọn "Đóng Hộp Quà Nơ + Thiệp Kỷ Niệm" (tự đặt giá phụ thu theo chi phí hộp) để khách mua làm quà biếu tặng trọn gói.'
     elif any(w in combined_text for w in ["gốm", "sứ", "ly", "cốc", "bình", "chén", "ấm", "tách", "gia dụng"]):
         cat_label = "Gốm sứ & Gia dụng"
         combo_tip = "ghép cặp đôi hoặc kèm thìa mạ vàng, đế lót gỗ và hộp quà kraft"
@@ -112,7 +112,11 @@ def analyze_product_seasonal_readiness(
             "action_title": "Tạo combo set quà tặng",
             "action_detail": f'Tạo thêm phân loại {combo_tip} (gợi ý: "{sample_combo}").',
             "seller_tip": seller_action_tip,
-            "market_data": f"Giá trị đơn hàng (AOV) dịp này tăng +{spending_growth_pct}% do khách mua làm quà.",
+            "market_data": (
+                f"Giá trị đơn hàng (AOV) dịp này {'tăng' if spending_growth_pct >= 0 else 'giảm'} {spending_growth_pct:+d}% so với ngày thường."
+                if spending_growth_pct is not None
+                else "Chưa đủ đơn để đo giá trị đơn hàng dịp này so với ngày thường."
+            ),
         },
         {
             "id": "seo",
@@ -142,7 +146,7 @@ def analyze_product_seasonal_readiness(
 def load_and_audit_shop_products(
     shop_id: str,
     active_camp: Dict[str, Any],
-    spending_growth_pct: int,
+    spending_growth_pct: Optional[int],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Lấy danh sách sản phẩm THẬT của shop & rà soát sản phẩm khớp với dịp."""
     shop_products: List[Dict[str, Any]] = []

@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 from app.api.v1._mart import db
 from app.core.potential_profile import build_product_potential_profile
+from app.core.platform_fees import commission_rate, net_margin_pct
 from app.core.redis_cache import cache_get_json, cache_set_json
 from app.core.seasonal_dl.forecaster import event_demand_uplift
 from app.core.seasonal_intel import real_stl, seasonal_peak_years, seller_competition
@@ -250,7 +251,8 @@ def build_market_blueprints(
         try:
             from app.core.seasonal_taxonomy import get_seasonal_suggestions
 
-            hybrid = get_seasonal_suggestions(primary_kw, cat_slug)
+            # Catalog trống: không gọi LLM theo từng request, chỉ dùng mẫu từ dữ liệu sàn và gắn nhãn ước tính
+            hybrid = get_seasonal_suggestions(primary_kw, cat_slug, use_llm=False)
             mined_grounding = hybrid.get("mined_grounding") or {}
             med_p = int(mined_grounding.get("median_price") or 220000)
             for idea in hybrid.get("ready_to_ship_ideas") or []:
@@ -273,7 +275,8 @@ def build_market_blueprints(
                         "image_url": "",
                         "product_url": "",
                         "platform": f"Hybrid Mining ({hybrid.get('ai_model', 'VietCraft')})",
-                        "seller_name": "Gợi ý khai phá thị trường",
+                        "seller_name": "Ý tưởng ước tính (chưa có dữ liệu sàn khác)",
+                        "is_estimate": True,
                         "seller_count": 0,
                         "sold_count": 0,
                         "cluster_total_sold": 0,
@@ -421,6 +424,7 @@ def build_ready_and_pod_ideas(
     """Đóng gói danh sách ý tưởng hàng sẵn, phôi POD Printify và cụm sản phẩm cơ hội."""
     ready_ideas: List[Dict[str, Any]] = []
     opportunity_clusters: List[Dict[str, Any]] = []
+    fee_rate = commission_rate()
 
     for idx, bp in enumerate(blueprints[:9]):
         kw_pts = lay_chuoi_trend_cho_tu_khoa(bp["keyword"])
@@ -475,8 +479,8 @@ def build_ready_and_pod_ideas(
                 "suggested_price": f"{bp['price']:,}đ",
                 "base_cost": f"{bp['cost']:,}đ",
                 "cost_basis": bp.get("cost_basis") or ("giá vốn từ listing" if sold_cnt else "ước tính 45% giá bán"),
-                "expected_profit": f"{bp['price'] - bp['cost'] - int(bp['price'] * 0.1):,}đ/sp",
-                "expected_profit_margin": f"{int((bp['price'] - bp['cost'] - bp['price'] * 0.1) / max(1, bp['price']) * 100)}%",
+                "expected_profit": f"{bp['price'] - bp['cost'] - int(bp['price'] * fee_rate):,}đ/sp",
+                "expected_profit_margin": f"{net_margin_pct(bp['price'], bp['cost'], fee_rate)}%",
                 "image_url": bp.get("image_url") or "",
                 "product_url": bp.get("product_url") or "",
                 "platform": platform_name,
@@ -581,8 +585,7 @@ def build_ready_and_pod_ideas(
         b_cost = int(p_doc.get("estimated_cost_vnd") or 95000)
         p_min_b = int(round(b_price * 0.85 / 5000.0) * 5000)
         p_max_b = int(round(b_price * 1.2 / 5000.0) * 5000)
-        margin_low = max(35, int((b_price - b_cost - b_price * 0.1) / b_price * 100) - 4)
-        margin_high = margin_low + 10
+        margin_pct = net_margin_pct(b_price, b_cost, fee_rate)
         prov_cnt = int(p_doc.get("provider_count") or 4)
 
         pod_item = {
@@ -591,7 +594,7 @@ def build_ready_and_pod_ideas(
             "name": p_doc.get("original_catalog_title") or p_doc["title"],
             "category": p_doc.get("sub_category") or "Phôi in POD",
             "market_price_range": f"{p_min_b:,}đ – {p_max_b:,}đ",
-            "expected_profit_margin": f"{margin_low}% – {margin_high}%",
+            "expected_profit_margin": f"{margin_pct}%",
             "base_cost": b_cost,
             "image_url": p_doc.get("image_url") or "",
             "product_url": p_doc.get("product_url") or "",
