@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
 
+from app.core.category_groups import GROUP_LABELS
 from app.core.order_validity import VALID_ORDER_FILTER, is_valid_demand_order  # noqa: F401
 
 TZ_VN = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -10,18 +11,8 @@ LUI_SAN_XUAT = 18  # BR-209: lùi thời gian in ấn (4 ngày p90) + vận chuy
 EXTERNAL_FRESHNESS_DAYS = 30
 VC_ORDER_WINDOW_DAYS = 90
 
-CAT_LABELS: Dict[str, str] = {
-    "thoi-trang": "Thời trang & May mặc",
-    "phu-kien": "Phụ kiện & Túi ví",
-    "sac-dep": "Sắc đẹp & Mỹ phẩm",
-    "nha-cua": "Nhà cửa & Đời sống",
-    "thiet-bi-dien-tu": "Thiết bị điện tử & Phụ kiện số",
-    "bach-hoa": "Bách hóa & Thực phẩm",
-    "me-be": "Mẹ & Bé",
-    "the-thao": "Thể thao & Dã ngoại",
-    "thu-cong-qua-tang": "Thủ công & Quà tặng",
-    "tong-hop": "Toàn ngành hàng TMĐT",
-}
+# Nhãn nhóm ngành: một bộ mã duy nhất ở app.core.category_groups
+CAT_LABELS: Dict[str, str] = GROUP_LABELS
 
 # Danh mục sản phẩm mẫu và phôi POD phân loại NGHIÊM NGẶT theo ngành hàng của shop (fallback khi DB trống)
 CATEGORY_OCCASION_BLUEPRINTS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
@@ -104,6 +95,16 @@ CATEGORY_OCCASION_BLUEPRINTS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
         ],
     },
 }
+
+
+# Mẫu dự phòng lưu theo mã cũ của catalog; quy về nhóm ngành chuẩn
+_BLUEPRINT_KEY_FOR_GROUP: Dict[str, str] = {"nha-cua-doi-song": "gia-dung", "thu-cong-qua-tang": "trang-tri"}
+
+
+def blueprints_for_group(group: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Mẫu ý tưởng dự phòng {dịp: [...]} của đúng nhóm ngành; nhóm không có mẫu thì {} (không mượn ngành khác)."""
+    return CATEGORY_OCCASION_BLUEPRINTS.get(_BLUEPRINT_KEY_FOR_GROUP.get(group, group), {})
+
 
 CAT_OCCASION_KEYWORDS: Dict[str, Dict[str, str]] = {
     "thoi-trang": {

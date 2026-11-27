@@ -14,7 +14,8 @@ from app.core.seasonal_opportunity import (
     dedupe_external_docs,
     filter_trend_points_by_date,
 )
-from app.services.f38.f38_constants import CATEGORY_OCCASION_BLUEPRINTS, EXTERNAL_FRESHNESS_DAYS, cutoff_utc_dt
+from app.core.category_groups import catalog_slugs_for
+from app.services.f38.f38_constants import EXTERNAL_FRESHNESS_DAYS, blueprints_for_group, cutoff_utc_dt
 from app.services.f38.f38_trends_stl import lay_chuoi_trend_cho_tu_khoa, tra_cuu_trend
 
 log = logging.getLogger("f38_seasonal")
@@ -35,7 +36,7 @@ def fetch_external_market_catalog(
         raw_ext_ready = list(
             ext_coll.find(
                 {
-                    "category_slug": cat_slug,
+                    "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                     "occasion_id": active_camp["id"],
                     "listing_type": "ready_to_ship",
                     "is_active": True,
@@ -57,7 +58,7 @@ def fetch_external_market_catalog(
             extra_ready = list(
                 ext_coll.find(
                     {
-                        "category_slug": cat_slug,
+                        "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                         "occasion_id": {"$in": ["default", "all"]},
                         "listing_type": "ready_to_ship",
                         "is_active": True,
@@ -75,7 +76,7 @@ def fetch_external_market_catalog(
             raw_ext_ready = list(
                 ext_coll.find(
                     {
-                        "category_slug": cat_slug,
+                        "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                         "listing_type": "ready_to_ship",
                         "is_active": True,
                     },
@@ -103,7 +104,7 @@ def fetch_external_market_catalog(
         raw_ext_pod = list(
             ext_coll.find(
                 {
-                    "category_slug": cat_slug,
+                    "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                     "listing_type": "pod_blank",
                     "is_active": True,
                 },
@@ -292,8 +293,8 @@ def build_market_blueprints(
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
 
     if not real_blueprints:
-        cat_blueprints = CATEGORY_OCCASION_BLUEPRINTS.get(cat_slug, CATEGORY_OCCASION_BLUEPRINTS["thoi-trang"])
-        fallback_bps = cat_blueprints.get(active_camp["id"], cat_blueprints.get("tet", list(cat_blueprints.values())[0]))
+        # Chỉ dùng mẫu đúng ngành và đúng dịp; không có thì để trống thay vì mượn mẫu ngành/dịp khác
+        fallback_bps = blueprints_for_group(cat_slug).get(active_camp["id"], [])
         for bp in fallback_bps:
             real_blueprints.append(
                 {

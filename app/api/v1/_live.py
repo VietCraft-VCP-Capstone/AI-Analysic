@@ -136,7 +136,7 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
 
     products = list(live["products"].find(
         {**{"shop_id": oid}, **LOC_SP_THAT},
-        {"title": 1, "tags": 1, "categories": 1, "images": 1, "description": 1,
+        {"title": 1, "tags": 1, "categories": 1, "category_ids": 1, "images": 1, "description": 1,
          "average_rating": 1, "rating_count": 1, "created_at": 1, "listing_status": 1,
          "status": 1, "is_hidden": 1, "source_idea_id": 1},
     ).limit(gioi_han))
@@ -164,6 +164,7 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
             "title": p.get("title") or "",
             "tags": p.get("tags") or [],
             "categories": p.get("categories") or [],
+            "category_ids": [str(c) for c in (p.get("category_ids") or [])],
             "images": p.get("images") or [],
             "image_url": (p.get("images") or [None])[0],
             "n_images": len(p.get("images") or []),

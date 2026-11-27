@@ -1,5 +1,4 @@
 import logging
-import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -15,6 +14,7 @@ from app.api.v1._live import db_live, la_shop_live, san_pham_live
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, build_meta, ok
 from app.core import calendar_vn
+from app.core.category_groups import GROUP_LABELS, detect_shop_group
 from app.core.redis_cache import cache_get_json, cache_set_json
 from app.core.shop_lead_time import load_shop_lead_time
 from app.core.seasonal_intel import keyword_shop_coverage, summarize_industry_orders
@@ -39,9 +39,6 @@ from app.services.f38.f38_constants import (
 from app.services.f38.f38_funnel_and_metrics import (
     build_route_risks,
     build_scorecard_metrics as _build_scorecard_metrics,
-    count_shop_orders_for_funnel,
-    tinh_campaign_funnel_va_kenh as _tinh_campaign_funnel_va_kenh,
-    tinh_motivation_retail as _tinh_motivation_retail,
 )
 from app.services.f38.f38_keywords import tinh_opportunity_keywords as _tinh_opportunity_keywords
 from app.services.f38.f38_market_ideas import (
@@ -74,31 +71,30 @@ router = APIRouter()
 log = logging.getLogger("f38_seasonal")
 
 
-def _detect_shop_category(shop_id: str, explicit_slug: Optional[str]) -> str:
-    """Suy đoán ngành hàng từ sản phẩm của shop bằng word-boundary regex; mặc định 'tong-hop' nếu không rõ."""
-    if explicit_slug and explicit_slug != "tong-hop":
-        return explicit_slug
+def _category_lookup() -> Dict[str, tuple]:
+    """{category_id: (slug, name)} của danh mục thật trên sàn (cache 1 giờ)."""
+    cached = cache_get_json("seasonal:categories:v1")
+    if isinstance(cached, dict):
+        return {k: tuple(v) for k, v in cached.items()}
+    try:
+        cats = {str(c["_id"]): (c.get("slug") or "", c.get("name") or "")
+                for c in db_live()["categories"].find({}, {"slug": 1, "name": 1})}
+    except Exception as exc:
+        log.warning("seasonal: categories lookup failed: %s", exc)
+        return {}
+    cache_set_json("seasonal:categories:v1", {k: list(v) for k, v in cats.items()}, ttl_seconds=3600)
+    return cats
+
+
+def _detect_shop_category(shop_id: str, explicit_slug: Optional[str]) -> Dict[str, Any]:
+    """Nhóm ngành của shop: seller chọn → dùng; không thì theo danh mục thật của sản phẩm (app.core.category_groups)."""
+    if explicit_slug and explicit_slug in GROUP_LABELS and explicit_slug != "tong-hop":
+        return {"slug": explicit_slug, "name": GROUP_LABELS[explicit_slug], "source": "seller_selected", "share_pct": None}
     if not la_shop_live(shop_id):
-        return explicit_slug or "tong-hop"
-    live_prods_cat = san_pham_live(shop_id) or []
-    if not live_prods_cat:
-        return explicit_slug or "tong-hop"
-    cat_text = " ".join(
-        f"{p.get('title', '')} {' '.join(p.get('categories') or [])} {' '.join(p.get('tags') or [])}".lower()
-        for p in live_prods_cat
-    )
-    cat_rules = [
-        ("phu-kien", ("phụ kiện", "túi xách", "ví", "thắt lưng", "kính mát", "mắt kính", "nón", "mũ", "trang sức", "khăn")),
-        ("nha-cua", ("gia dụng", "nhà cửa", "bếp", "cốc", "ly sứ", "ly thủy tinh", "bình giữ nhiệt", "móc treo", "đèn")),
-        ("thu-cong-qua-tang", ("trang trí", "decor", "tranh", "khung ảnh", "tượng", "nến", "hoa giả", "quà tặng", "thủ công")),
-        ("thoi-trang", ("thời trang", "áo", "váy", "đầm", "quần", "hoodie", "khoác", "set đồ")),
-    ]
-    best_cat, best_hits = "tong-hop", 0
-    for c_slug, c_words in cat_rules:
-        hits = sum(len(re.findall(rf"(?<!\w){re.escape(w)}(?!\w)", cat_text)) for w in c_words)
-        if hits > best_hits:
-            best_cat, best_hits = c_slug, hits
-    return best_cat
+        return {"slug": "tong-hop", "name": GROUP_LABELS["tong-hop"], "source": "none", "share_pct": None}
+    products = san_pham_live(shop_id) or []
+    has_cat_ids = any(p.get("category_ids") for p in products)
+    return detect_shop_group(products, _category_lookup() if has_cat_ids else {})
 
 
 def _compute_platform_order_rates(shop_id: str, cat_slug: Optional[str], camp_id: str) -> Dict[str, Any]:
@@ -153,7 +149,8 @@ def seasonal(
 ):
     # 1. Xác định ngày hiện tại (giờ VN), ngành hàng shop và danh sách đối thủ tham chiếu
     hom_nay = datetime.now(TZ_VN).date()
-    cat_slug = _detect_shop_category(shop_id, category_slug or categoryId)
+    seller_category = _detect_shop_category(shop_id, category_slug or categoryId)
+    cat_slug = seller_category["slug"]
     target_camp_id = campaign_id or campaignId
 
     all_competitors = cache_get_json("seasonal:all_competitors:v1")
@@ -300,22 +297,7 @@ def seasonal(
         stl=stl,
         shop_products=shop_products,
     )
-    shop_base_orders, actual_camp_orders, actual_views, actual_cart_adds = count_shop_orders_for_funnel(
-        shop_id, active_camp, shop_products, matching_shop_products
-    )
-    funnel_data = _tinh_campaign_funnel_va_kenh(
-        active_camp=active_camp,
-        cat_slug=cat_slug,
-        baseline_spending=baseline_spending,
-        occasion_spending=occasion_spending,
-        orders_growth_pct=orders_growth_pct,
-        spending_growth_pct=spending_growth_pct,
-        hom_nay=hom_nay,
-        base_orders=shop_base_orders,
-        actual_camp_orders=actual_camp_orders,
-        actual_views=actual_views,
-        actual_cart_adds=actual_cart_adds,
-    )
+    # Phễu, kênh bán và động cơ mua do backend tính từ đơn/sự kiện thật của shop (một nguồn duy nhất)
 
     # 10. Bản phác thảo định lượng (Data-Grounded Blueprint) để scope chặt cho LLM
     idea_draft_blueprint = build_idea_draft_blueprint(
@@ -353,6 +335,7 @@ def seasonal(
             "active_campaign": active_camp,
             "occasion_traits": occasion_traits,
             "selected_category_slug": cat_slug,
+            "seller_category": seller_category,
             "keyword": active_camp["name"],
             "primary_keyword": primary_kw,
             "decomposition": stl,
@@ -366,9 +349,6 @@ def seasonal(
             "search_uplift_pct": traits_bundle.get("search_uplift_pct"),
             "scorecard_metrics": scorecard_metrics,
             "opportunity_keywords": opportunity_keywords,
-            "campaign_funnel": funnel_data.get("campaign_funnel"),
-            "channel_breakdown": funnel_data.get("channel_breakdown"),
-            "motivation_breakdown": funnel_data.get("motivation_breakdown"),
             "events": events_payload,
             "potential_profiles": potential_profiles,
             "campaign_radar": campaign_radar,
