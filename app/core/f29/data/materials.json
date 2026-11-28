@@ -1,0 +1,17 @@
+{
+  "cotton": ["cotton", "cốt tông", "thun cotton", "vải cotton", "sợi cotton"],
+  "polyester": ["polyester", "vải polyester", "sợi polyester", "poly"],
+  "da_that": ["da", "da thật", "da bò", "da bò thật", "da cừu", "da thuộc", "da trâu"],
+  "da_tong_hop": ["da pu", "simili", "giả da", "da tổng hợp", "da nhân tạo"],
+  "canvas": ["canvas", "vải bố", "bố canvas", "vải canvas"],
+  "ni_len": ["len", "nỉ", "len lông cừu", "wool"],
+  "lua_satin": ["lụa", "satin", "lụa tơ tằm", "silk", "tơ tằm"],
+  "jean": ["jean", "jeans", "denim", "vải jean", "vải denim"],
+  "kaki": ["kaki", "vải kaki", "kaki thun", "khaki"],
+  "nylon_du": ["nylon", "nylon dù", "vải dù", "vải nylon"],
+  "go_tre": ["gỗ", "gỗ sồi", "gỗ tự nhiên", "tre", "tre trúc", "mây"],
+  "kim_loai": ["inox", "thép không gỉ", "nhôm", "đồng thau", "đồng đỏ", "bằng đồng", "chất liệu đồng", "bạc 925"],
+  "nhua": ["nhựa", "acrylic", "silicon", "pvc", "resin"],
+  "gom_su": ["gốm", "sứ", "gốm sứ", "ceramic", "sứ cao cấp"],
+  "khac": ["cói", "thổ cẩm", "thủy tinh"]
+}

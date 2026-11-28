@@ -1,0 +1,83 @@
+{
+  "h": 12,
+  "c": 0.903,
+  "c_similar": 0.8273,
+  "h_dung_cho": "mức near (warn): pHash phash, phash_flip, phash_crop",
+  "c_dung_cho": "mức similar (info): cosine, và hợp với pHash để giữ báo nhầm ≤ 1%",
+  "c_similar_dung_cho": "tham khảo, không dùng để khớp",
+  "chia_nhom": {
+    "seed": 0,
+    "goc_nhom_A": 100,
+    "goc_nhom_B": 100,
+    "chon_nguong_tren": "nhóm A",
+    "bao_cao_tren": "nhóm B"
+  },
+  "n_B_copies": 800,
+  "n_B_negatives": 339,
+  "fpr_warn_B": 0.0029,
+  "fpr_warn_wilson95_B": [
+    0.0005,
+    0.0165
+  ],
+  "fpr_info_B": 0.0029,
+  "fpr_info_wilson95_B": [
+    0.0005,
+    0.0165
+  ],
+  "muc_tieu_1pct": {
+    "warn": "đạt",
+    "info": "đạt"
+  },
+  "per_kind_B": {
+    "jpeg": {
+      "warn_recall": 1.0,
+      "info_recall": 1.0,
+      "precision_balanced": 0.997,
+      "recall_cos_only": 1.0
+    },
+    "resize": {
+      "warn_recall": 1.0,
+      "info_recall": 1.0,
+      "precision_balanced": 0.997,
+      "recall_cos_only": 1.0
+    },
+    "crop": {
+      "warn_recall": 0.89,
+      "info_recall": 0.97,
+      "precision_balanced": 0.997,
+      "recall_cos_only": 0.96
+    },
+    "flip": {
+      "warn_recall": 1.0,
+      "info_recall": 1.0,
+      "precision_balanced": 0.997,
+      "recall_cos_only": 0.98
+    },
+    "rotate": {
+      "warn_recall": 0.75,
+      "info_recall": 0.98,
+      "precision_balanced": 0.996,
+      "recall_cos_only": 0.97
+    },
+    "bright": {
+      "warn_recall": 1.0,
+      "info_recall": 1.0,
+      "precision_balanced": 0.997,
+      "recall_cos_only": 1.0
+    },
+    "text": {
+      "warn_recall": 0.94,
+      "info_recall": 0.99,
+      "precision_balanced": 0.997,
+      "recall_cos_only": 0.95
+    },
+    "border": {
+      "warn_recall": 0.89,
+      "info_recall": 1.0,
+      "precision_balanced": 0.997,
+      "recall_cos_only": 1.0
+    }
+  },
+  "excluded_near_dup_pairs": 0,
+  "seconds": 270.7
+}

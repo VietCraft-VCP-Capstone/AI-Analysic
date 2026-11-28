@@ -1,0 +1,32 @@
+{
+ "tau": 0.0617,
+ "mode": "hint",
+ "rows": {
+  "total": 3997,
+  "val": 507,
+  "test": 782
+ },
+ "groups": [
+  "fashion",
+  "home",
+  "sport"
+ ],
+ "val": {
+  "false_alarm": 0.0118,
+  "catch": 0.787
+ },
+ "test": {
+  "other_group": {
+   "false_alarm": 0.0217,
+   "catch": 0.7289
+  },
+  "same_group": {
+   "false_alarm": 0.0217,
+   "catch": 0.4668
+  }
+ },
+ "gate": {
+  "false_alarm_max": 0.02,
+  "catch_min": 0.5
+ }
+}
