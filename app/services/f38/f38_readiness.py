@@ -1,17 +1,25 @@
 import logging
 import re
-from typing import Any, Dict, List, Tuple
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.api.v1._live import db_live, la_shop_live, san_pham_live
 from app.api.v1._mart import db
+from app.core.platform_fees import commission_rate
+from app.core.stock_plan import stock_plan
+from app.services.f38.f38_constants import TZ_VN, VC_ORDER_WINDOW_DAYS as SOLD_LOOKBACK_DAYS
+from app.services.f38.f38_trends_stl import load_vietcraft_real_sold_map
 
 log = logging.getLogger("f38_seasonal")
+
+# Số sản phẩm của shop đem ra so khớp với từ khóa hot / rà soát độ sẵn sàng đón dịp
+SHOP_PRODUCTS_LIMIT = 1000
 
 
 def analyze_product_seasonal_readiness(
     product: Dict[str, Any],
     active_camp: Dict[str, Any],
-    spending_growth_pct: int = 32,
+    spending_growth_pct: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Phân tích độ sẵn sàng của sản phẩm shop đón dịp cao điểm."""
     camp_name = re.sub(r"Lễ Hội |Mùa ", "", active_camp.get("name", "Chiến dịch"), flags=re.IGNORECASE)
@@ -48,13 +56,13 @@ def analyze_product_seasonal_readiness(
         combo_tip = "kèm hộp quà nơ sang trọng, thiệp chúc hoặc phụ kiện phối kèm (khăn/tất)"
         sample_combo = f"Set {core_title} Kèm Hộp Quà Sang Trọng & Thiệp {camp_name}"
         sample_keywords = f'"quà tặng thời trang", "set đồ {camp_name.lower()}", "thời trang {camp_name.lower()}"'
-        seller_action_tip = 'Thêm phân loại "Kèm Hộp Quà Sang Trọng & Thiệp (+35.000đ)" ngay trên sản phẩm hiện tại mà không cần nhập thêm mặt hàng mới.'
+        seller_action_tip = 'Thêm phân loại "Kèm Hộp Quà Sang Trọng & Thiệp" (tự đặt giá phụ thu theo chi phí hộp) ngay trên sản phẩm hiện tại mà không cần nhập thêm mặt hàng mới.'
     elif any(w in combined_text for w in ["khăn", "choàng", "lụa", "túi", "ví", "mũ", "nón", "phụ kiện"]):
         cat_label = "Phụ kiện thời trang"
         combo_tip = "kèm hộp đựng lót nhung hoặc túi quà quai xách và thiệp mừng"
         sample_combo = f"Hộp Quà Cao Cấp {core_title} Kèm Thiệp Tri Ân {camp_name}"
         sample_keywords = f'"khăn quà tặng", "hộp quà phụ kiện", "quà {camp_name.lower()} tinh tế"'
-        seller_action_tip = 'Thêm tùy chọn "Đóng Hộp Quà Nơ + Thiệp Kỷ Niệm (+30.000đ)" để khách mua làm quà biếu tặng trọn gói.'
+        seller_action_tip = 'Thêm tùy chọn "Đóng Hộp Quà Nơ + Thiệp Kỷ Niệm" (tự đặt giá phụ thu theo chi phí hộp) để khách mua làm quà biếu tặng trọn gói.'
     elif any(w in combined_text for w in ["gốm", "sứ", "ly", "cốc", "bình", "chén", "ấm", "tách", "gia dụng"]):
         cat_label = "Gốm sứ & Gia dụng"
         combo_tip = "ghép cặp đôi hoặc kèm thìa mạ vàng, đế lót gỗ và hộp quà kraft"
@@ -112,7 +120,11 @@ def analyze_product_seasonal_readiness(
             "action_title": "Tạo combo set quà tặng",
             "action_detail": f'Tạo thêm phân loại {combo_tip} (gợi ý: "{sample_combo}").',
             "seller_tip": seller_action_tip,
-            "market_data": f"Giá trị đơn hàng (AOV) dịp này tăng +{spending_growth_pct}% do khách mua làm quà.",
+            "market_data": (
+                f"Giá trị đơn hàng (AOV) dịp này {'tăng' if spending_growth_pct >= 0 else 'giảm'} {spending_growth_pct:+d}% so với ngày thường."
+                if spending_growth_pct is not None
+                else "Chưa đủ đơn để đo giá trị đơn hàng dịp này so với ngày thường."
+            ),
         },
         {
             "id": "seo",
@@ -142,13 +154,16 @@ def analyze_product_seasonal_readiness(
 def load_and_audit_shop_products(
     shop_id: str,
     active_camp: Dict[str, Any],
-    spending_growth_pct: int,
+    spending_growth_pct: Optional[int],
+    hom_nay: Optional[date] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Lấy danh sách sản phẩm THẬT của shop & rà soát sản phẩm khớp với dịp."""
+    """Lấy danh sách sản phẩm THẬT của shop & rà soát sản phẩm khớp với dịp (kèm gợi ý số lượng chuẩn bị)."""
     shop_products: List[Dict[str, Any]] = []
+    sold_90d: Dict[str, int] = {}
     try:
         if la_shop_live(shop_id):
-            raw_sp = san_pham_live(shop_id, gioi_han=100)
+            raw_sp = san_pham_live(shop_id, gioi_han=SHOP_PRODUCTS_LIMIT, kem_mo_ta=True)
+            sold_90d = load_vietcraft_real_sold_map() or {}
             for p in raw_sp:
                 imgs = p.get("images") or []
                 if not imgs and p.get("image_url"):
@@ -158,14 +173,17 @@ def load_and_audit_shop_products(
                         "_id": p["product_id"],
                         "title": p["title"],
                         "price_vnd": p.get("price_vnd") or 0,
+                        "cost_vnd": p.get("cost_vnd"),
+                        "product_type": p.get("product_type"),
                         "stock": p.get("stock") or 0,
                         "images": imgs,
                         "thumbnail": imgs[0] if imgs else None,
                         "image_url": imgs[0] if imgs else None,
                         "tags": p.get("tags") or [],
                         "categories": p.get("categories") or [],
+                        "description": p.get("description") or "",
                         "source_idea_id": p.get("source_idea_id"),
-                        "orders": 0,
+                        "orders": int(sold_90d.get(p["product_id"], 0)),  # số cái bán được 90 ngày gần nhất
                         "revenue_vnd": 0,
                     }
                 )
@@ -181,6 +199,7 @@ def load_and_audit_shop_products(
                 "sold_count": 1,
                 "thumbnail": 1,
                 "image_url": 1,
+                "description": 1,
             }
             seed_prods: List[Dict[str, Any]] = []
             try:
@@ -207,15 +226,16 @@ def load_and_audit_shop_products(
                     {
                         "_id": str(p["_id"]),
                         "title": p.get("title") or "",
-                        "price_vnd": int(p.get("price") or p.get("retail_price") or 150000),
-                        "stock": int(p.get("stock") or 25),
+                        "price_vnd": int(p.get("price") or p.get("retail_price") or 0),
+                        "stock": int(p.get("stock") or 0),
                         "images": imgs,
                         "thumbnail": imgs[0] if imgs else None,
                         "image_url": imgs[0] if imgs else None,
                         "tags": p.get("tags") or [],
                         "categories": p.get("categories") or [],
+                        "description": str(p.get("description") or "")[:3000],
                         "orders": int(p.get("sold_count") or 0),
-                        "revenue_vnd": int(p.get("sold_count") or 0) * int(p.get("price") or 150000),
+                        "revenue_vnd": int(p.get("sold_count") or 0) * int(p.get("price") or 0),
                     }
                 )
     except Exception as exc:
@@ -226,11 +246,31 @@ def load_and_audit_shop_products(
         active_camp.get("name", "").lower(),
         active_camp.get("id", "").lower(),
     ]
+    # Số ngày còn bán của dịp: từ hôm nay (hoặc ngày mở bán nếu chưa tới) tới ngày lễ
+    today = hom_nay or datetime.now(TZ_VN).date()
+    lw = active_camp.get("launch_window") or {}
+    sell_start = max(today, date.fromisoformat(lw["traction_start"])) if lw.get("traction_start") else today
+    selling_days = (
+        max(1, (date.fromisoformat(lw["peak_date"]) - sell_start).days) if lw.get("peak_date") else 30
+    )
+    fee_rate: Optional[float] = None
     matching_shop_products: List[Dict[str, Any]] = []
     for p in shop_products:
         text_to_check = f"{p.get('title') or ''} {' '.join(p.get('tags') or [])} {' '.join(p.get('categories') or [])}".lower()
         if any(term in text_to_check for term in search_terms if len(term) >= 3):
             p["readiness_analysis"] = analyze_product_seasonal_readiness(p, active_camp, spending_growth_pct)
+            if fee_rate is None:
+                fee_rate = commission_rate()
+            sold = int(sold_90d.get(str(p.get("_id")), 0))
+            p["stock_plan"] = stock_plan(
+                units_per_day=(sold / SOLD_LOOKBACK_DAYS) if sold > 0 else None,
+                window_days=selling_days,
+                price=p.get("price_vnd") or None,
+                cost=p.get("cost_vnd") or None,
+                fee_rate=fee_rate,
+                current_stock=int(p.get("stock") or 0),
+                product_type=p.get("product_type"),
+            )
             matching_shop_products.append(p)
 
     return shop_products, matching_shop_products

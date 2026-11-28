@@ -136,29 +136,37 @@ def run_once(force: bool = False, use_subprocess: bool = True) -> Dict[str, Any]
             _release_lock()
 
 
+def _enabled(name: str) -> bool:
+    """Mọi cờ scheduler mặc định TẮT; chỉ bật khi biến môi trường = "1"."""
+    return os.getenv(name, "0") == "1"
+
+
+def _tick(now: datetime, state: Dict[str, Optional[str]]) -> None:
+    """Một lượt kiểm tra lịch; `state` giữ ngày đã chạy để không chạy lặp trong cùng ngày."""
+    day_key = now.date().isoformat()
+    # Thu thập dữ liệu đa sàn hằng ngày lúc 02:30 giờ Việt Nam (giữ độ tươi <= 30 ngày & snapshot 30d)
+    if now.hour == 2 and now.minute >= 30 and state.get("market") != day_key:
+        state["market"] = day_key
+        if _enabled("SEASONAL_MARKET_COLLECTOR_ENABLED"):
+            run_market_collector_once()
+    # Huấn luyện lại mô hình Seasonal DL vào Chủ Nhật 02:00 sáng giờ Việt Nam
+    if now.weekday() == 6 and now.hour == 2 and state.get("dl") != day_key:
+        state["dl"] = day_key
+        if _enabled("SEASONAL_DL_SCHEDULER_ENABLED"):
+            run_once()
+
+
 def _loop() -> None:
-    last_market_day: Optional[str] = None
-    last_dl_day: Optional[str] = None
+    state: Dict[str, Optional[str]] = {}
     while not _stop_event.is_set():
-        now = datetime.now(TZ_VN)
-        day_key = now.date().isoformat()
-        # Thu thập dữ liệu đa sàn hằng ngày lúc 02:30 giờ Việt Nam (giữ độ tươi <= 30 ngày & snapshot 30d)
-        if now.hour == 2 and now.minute >= 30 and last_market_day != day_key:
-            last_market_day = day_key
-            if os.getenv("SEASONAL_MARKET_COLLECTOR_ENABLED", "1") == "1":
-                run_market_collector_once()
-        # Huấn luyện lại mô hình Seasonal DL vào Chủ Nhật 02:00 sáng giờ Việt Nam
-        if now.weekday() == 6 and now.hour == 2 and last_dl_day != day_key:
-            last_dl_day = day_key
-            if os.getenv("SEASONAL_DL_SCHEDULER_ENABLED", "0") == "1":
-                run_once()
+        _tick(datetime.now(TZ_VN), state)
         _stop_event.wait(900)
 
 
 def start() -> None:
     global _thread
-    dl_on = os.getenv("SEASONAL_DL_SCHEDULER_ENABLED", "0") == "1"
-    mkt_on = os.getenv("SEASONAL_MARKET_COLLECTOR_ENABLED", "0") == "1"
+    dl_on = _enabled("SEASONAL_DL_SCHEDULER_ENABLED")
+    mkt_on = _enabled("SEASONAL_MARKET_COLLECTOR_ENABLED")
     if not (dl_on or mkt_on):
         return
     if _thread and _thread.is_alive():
@@ -175,3 +183,22 @@ def stop() -> None:
         _thread.join(timeout=2.0)
     _thread = None
 
+
+
+if __name__ == "__main__":
+    # Chạy một lần từ cron/worker riêng (khuyến nghị cho production thay vì luồng nền trong process API):
+    #   python -m app.core.seasonal_dl_scheduler --market        # thu thập dữ liệu sàn khác
+    #   python -m app.core.seasonal_dl_scheduler --retrain [--force]
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Seasonal: chạy collector hoặc huấn luyện lại một lần")
+    parser.add_argument("--market", action="store_true", help="chạy collector sản phẩm sàn khác")
+    parser.add_argument("--retrain", action="store_true", help="huấn luyện lại model DL (qua cổng kiểm định)")
+    parser.add_argument("--force", action="store_true", help="bỏ qua khóa phân tán/lịch")
+    args = parser.parse_args()
+    if not (args.market or args.retrain):
+        parser.error("cần --market hoặc --retrain")
+    if args.market:
+        print(json.dumps(run_market_collector_once(force=args.force), ensure_ascii=False, default=str))
+    if args.retrain:
+        print(json.dumps(run_once(force=args.force), ensure_ascii=False, default=str))

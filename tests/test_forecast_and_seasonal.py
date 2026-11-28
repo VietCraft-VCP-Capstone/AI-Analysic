@@ -36,7 +36,8 @@ def test_calculate_occasion_window():
     assert window["event_key"] == "tet"
     assert window["lead_time_days"] == 18
     assert window["event_date"] == "2027-02-06"
-    assert window["cut_off_date"] == "2027-01-19"  # 06/02 trừ 18 ngày lead time
+    # 18 ngày làm hàng + giao đếm lùi từ 05/02, bỏ qua 02/02–05/02 hãng vận chuyển nghỉ Tết → 15/01
+    assert window["cut_off_date"] == "2027-01-15"
     assert window["days_to_event"] > 0
     assert window["days_to_cut_off"] > 0
     assert window["status"] in ("active", "upcoming", "passed")
@@ -108,51 +109,14 @@ def test_product_potential_profile_5_layers():
     assert len(profile["trial_plan"]["stop_loss_rules"]) >= 1
 
 
-def test_seasonal_dl_forecaster_and_retail_motivation():
+def test_seasonal_dl_forecaster_method_info():
+    # Phễu/kênh/động cơ mua đã chuyển hẳn sang backend (seasonal-math.ts), AI chỉ còn thông tin phương pháp dự báo
     from app.core.seasonal_dl.forecaster import method_info
-    from app.api.v1.f38_seasonal import _tinh_motivation_retail, _tinh_campaign_funnel_va_kenh
-    import datetime
 
-    # 1. Method info test
     m_info = method_info()
     assert m_info["available"] is True
     assert m_info["method"] in ("seasonal_naive_conformal", "deep_ensemble")
     assert "avg_coverage_raw" in m_info
-
-    # 2. Motivation test: khi chưa đủ đơn thực tế của shop -> không bịa tỷ lệ % cố định
-    mot_fashion = _tinh_motivation_retail("thoi-trang", "tet")
-    assert mot_fashion["source_type"] == "insufficient"
-    assert mot_fashion["self_purchases_pct"] is None
-    assert mot_fashion["gift_purchases_pct"] is None
-    assert mot_fashion["top_reasons"] == []
-
-    # 3. Funnel calculation for upcoming campaign (chỉ dùng dữ liệu thật từ product_events + orders)
-    fake_camp = {"id": "tet", "name": "Tết Nguyên Đán"}
-    funnel_data = _tinh_campaign_funnel_va_kenh(
-        active_camp=fake_camp,
-        cat_slug="thoi-trang",
-        baseline_spending=200000,
-        occasion_spending=250000,
-        orders_growth_pct=35,
-        spending_growth_pct=25,
-        hom_nay=datetime.date(2026, 11, 15),
-        base_orders=10,
-        actual_camp_orders=2,
-        actual_views=100,
-        actual_cart_adds=10,
-    )
-    funnel = funnel_data["campaign_funnel"]
-    assert funnel["actual"]["orders"] == 2
-    assert funnel["actual"]["views"] == 100
-    assert funnel["actual"]["cart_adds"] == 10
-    assert funnel["actual"]["impressions"] is None
-    assert funnel["real_ctr_pct"] is None
-    assert funnel["real_cart_rate_pct"] == 10.0
-    assert funnel["real_order_rate_pct"] == 20.0
-
-    channels = funnel_data["channel_breakdown"]
-    assert all(ch["orders_count"] == 0 and ch["gmv_vnd"] == 0 for ch in channels)
-    assert all(ch["growth_pct"] is None for ch in channels)
 
 
 def test_calibrate_shop_uplift_and_scheduler():

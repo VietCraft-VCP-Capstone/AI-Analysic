@@ -1,9 +1,10 @@
 import logging
 from datetime import date, timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.api.v1._mart import db
 from app.core.potential_profile import build_product_potential_profile
+from app.core.platform_fees import commission_rate, net_margin_pct
 from app.core.redis_cache import cache_get_json, cache_set_json
 from app.core.seasonal_dl.forecaster import event_demand_uplift
 from app.core.seasonal_intel import real_stl, seasonal_peak_years, seller_competition
@@ -13,10 +14,25 @@ from app.core.seasonal_opportunity import (
     dedupe_external_docs,
     filter_trend_points_by_date,
 )
-from app.services.f38.f38_constants import CATEGORY_OCCASION_BLUEPRINTS, EXTERNAL_FRESHNESS_DAYS, cutoff_utc_dt
+from app.core.category_groups import catalog_slugs_for
+from app.core.cost_basis import DEFAULT_COST_RATIO, real_listing_cost, resolve_cost
+from app.core.seasonal_keyword_pool import is_relevant, normalize_kw, occasion_markers, occasion_terms, stable_id
+from app.services.f38.f38_constants import EXTERNAL_FRESHNESS_DAYS, cutoff_utc_dt
 from app.services.f38.f38_trends_stl import lay_chuoi_trend_cho_tu_khoa, tra_cuu_trend
 
 log = logging.getLogger("f38_seasonal")
+
+
+def profit_fields(price: int, cost: int, cost_is_real: bool, fee_rate: float) -> Dict[str, Optional[str]]:
+    """Giá vốn / lãi của mẫu thị trường. Chỉ có khi biết giá vốn thật của đúng sản phẩm đó:
+    giá vốn suy từ tỷ lệ chung của shop cho ra cùng một biên lãi ở mọi mẫu nên không hiện."""
+    if not cost_is_real:
+        return {"base_cost": None, "expected_profit": None, "expected_profit_margin": None}
+    return {
+        "base_cost": f"{cost:,}đ",
+        "expected_profit": f"{price - cost - int(price * fee_rate):,}đ/sp",
+        "expected_profit_margin": f"{net_margin_pct(price, cost, fee_rate)}%",
+    }
 
 
 def fetch_external_market_catalog(
@@ -34,7 +50,7 @@ def fetch_external_market_catalog(
         raw_ext_ready = list(
             ext_coll.find(
                 {
-                    "category_slug": cat_slug,
+                    "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                     "occasion_id": active_camp["id"],
                     "listing_type": "ready_to_ship",
                     "is_active": True,
@@ -56,7 +72,7 @@ def fetch_external_market_catalog(
             extra_ready = list(
                 ext_coll.find(
                     {
-                        "category_slug": cat_slug,
+                        "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                         "occasion_id": {"$in": ["default", "all"]},
                         "listing_type": "ready_to_ship",
                         "is_active": True,
@@ -74,7 +90,7 @@ def fetch_external_market_catalog(
             raw_ext_ready = list(
                 ext_coll.find(
                     {
-                        "category_slug": cat_slug,
+                        "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                         "listing_type": "ready_to_ship",
                         "is_active": True,
                     },
@@ -93,7 +109,7 @@ def fetch_external_market_catalog(
         ]
         if cleaned_ready:
             raw_ext_ready = cleaned_ready
-        cache_set_json(ext_ready_key, raw_ext_ready, ttl_seconds=1800)
+        cache_set_json(ext_ready_key, raw_ext_ready, ttl_seconds=21600)
 
     ext_pod_key = f"seasonal:ext_pod:{cat_slug}:v2"
     raw_ext_pod = cache_get_json(ext_pod_key)
@@ -102,7 +118,7 @@ def fetch_external_market_catalog(
         raw_ext_pod = list(
             ext_coll.find(
                 {
-                    "category_slug": cat_slug,
+                    "category_slug": {"$in": catalog_slugs_for(cat_slug)},
                     "listing_type": "pod_blank",
                     "is_active": True,
                 },
@@ -117,9 +133,82 @@ def fetch_external_market_catalog(
                 .sort([("sold_count", -1)])
                 .limit(6)
             )
-        cache_set_json(ext_pod_key, raw_ext_pod, ttl_seconds=1800)
+        cache_set_json(ext_pod_key, raw_ext_pod, ttl_seconds=21600)
 
     return raw_ext_ready, raw_ext_pod
+
+
+_DEFAULT_MODEL: Dict[str, Any] = {"ratio": DEFAULT_COST_RATIO, "source": "default", "n_items": 0}
+
+
+def blueprints_from_market_listings(
+    listings: List[Dict[str, Any]],
+    terms: set,
+    limit: int = 4,
+    cost_model: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Ý tưởng từ sản phẩm Tiki thật mà crawler F42 thu 2 lần/ngày (`market_price_listing`), gom theo từ khóa
+    liên quan tới dịp. Dùng khi catalog đa sàn chưa đủ; không còn mẫu viết sẵn hay giá mặc định.
+    """
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for ml in listings:
+        if str(ml.get("source") or "").lower() != "tiki" or not int(ml.get("price") or 0):
+            continue
+        for kw in (normalize_kw(k) for k in (ml.get("keywords") or [])):
+            if is_relevant(kw, terms):
+                groups.setdefault(kw, []).append(ml)
+                break
+    ranked = sorted(groups.items(), key=lambda kv: -sum(int(x.get("sold") or 0) for x in kv[1]))
+    out: List[Dict[str, Any]] = []
+    for kw, items in ranked[:limit]:
+        items = sorted(items, key=lambda x: int(x.get("sold") or 0), reverse=True)
+        lead = items[0]
+        prices = sorted(int(x["price"]) for x in items)
+        mid = len(prices) // 2
+        median = prices[mid] if len(prices) % 2 else int(round((prices[mid - 1] + prices[mid]) / 2))
+        cost, cost_basis = resolve_cost(median, cost_model or _DEFAULT_MODEL)
+        out.append(
+            {
+                "cluster_sellers": [],
+                "title": lead.get("title") or kw,
+                "category": f"Nhóm «{kw}» trên Tiki",
+                "keyword": kw,
+                "price": median,
+                "cost": cost,
+                "cost_basis": cost_basis,
+                "cost_is_real": False,
+                "price_min": prices[0],
+                "price_max": prices[-1],
+                "image_url": "",
+                "product_url": lead.get("url") or "",
+                "platform": "Tiki",
+                "seller_name": "Sản phẩm đang bán trên Tiki",
+                "seller_count": 0,
+                "sold_count": int(lead.get("sold") or 0),
+                "num_favorers": 0,
+                "cluster_total_sold": sum(int(x.get("sold") or 0) for x in items),
+                "cluster_total_favorers": 0,
+                "rating_average": float(lead.get("rating") or 0.0),
+                "review_count": int(lead.get("review_count") or 0),
+                "cluster_query": kw,
+                "cluster_products": [
+                    {
+                        "title": x.get("title") or "",
+                        "imageUrl": "",
+                        "priceVnd": int(x["price"]),
+                        "platform": "Tiki",
+                        "productUrl": x.get("url") or "",
+                        "sellerName": "",
+                        "soldCount": int(x.get("sold") or 0),
+                        "favorersCount": 0,
+                        "ratingAverage": float(x.get("rating") or 0.0),
+                    }
+                    for x in items[:3]
+                ],
+            }
+        )
+    return out
 
 
 def build_market_blueprints(
@@ -127,6 +216,8 @@ def build_market_blueprints(
     cat_slug: str,
     active_camp: Dict[str, Any],
     primary_kw: str,
+    market_listings: Optional[List[Dict[str, Any]]] = None,
+    cost_model: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Gom nhóm sản phẩm thật đa sàn thành các cụm blueprint (kèm bổ sung Hybrid Mining & fallback an toàn)."""
     grouped_clusters: Dict[str, List[Dict[str, Any]]] = {}
@@ -207,6 +298,9 @@ def build_market_blueprints(
                 entry["maxPriceVnd"] = pv if entry["maxPriceVnd"] is None else max(entry["maxPriceVnd"], pv)
         cluster_sellers = sorted(sellers_map.values(), key=lambda s: (s["soldCount"], s["favorersCount"]), reverse=True)
 
+        lead_cost, lead_cost_basis = resolve_cost(
+            lead["price_vnd"], cost_model or _DEFAULT_MODEL, listing_cost=lead.get("estimated_cost_vnd"), platform=lead.get("platform")
+        )
         real_blueprints.append(
             {
                 "cluster_sellers": cluster_sellers,
@@ -214,7 +308,9 @@ def build_market_blueprints(
                 "category": lead.get("sub_category") or "Thời trang & Phụ kiện",
                 "keyword": lead.get("trend_keyword") or primary_kw,
                 "price": int(lead["price_vnd"]),
-                "cost": int(lead.get("estimated_cost_vnd") or round(lead["price_vnd"] * 0.45, -3)),
+                "cost": lead_cost,
+                "cost_basis": lead_cost_basis,
+                "cost_is_real": real_listing_cost(lead["price_vnd"], lead.get("estimated_cost_vnd"), lead.get("platform")) is not None,
                 "price_min": p_min,
                 "price_max": p_max,
                 "image_url": lead.get("image_url") or "",
@@ -246,72 +342,16 @@ def build_market_blueprints(
             }
         )
 
-    if len(real_blueprints) < 3:
-        try:
-            from app.core.seasonal_taxonomy import get_seasonal_suggestions
-
-            hybrid = get_seasonal_suggestions(primary_kw, cat_slug)
-            mined_grounding = hybrid.get("mined_grounding") or {}
-            med_p = int(mined_grounding.get("median_price") or 220000)
-            for idea in hybrid.get("ready_to_ship_ideas") or []:
-                if len(real_blueprints) >= 4:
-                    break
-                title = (idea.get("title") or "").strip()
-                if not title or any(bp["title"].lower() == title.lower() for bp in real_blueprints):
-                    continue
-                price_est = max(50000, med_p)
-                real_blueprints.append(
-                    {
-                        "cluster_sellers": [],
-                        "title": title,
-                        "category": idea.get("category") or cat_slug,
-                        "keyword": primary_kw,
-                        "price": price_est,
-                        "cost": int(round(price_est * 0.48, -3)),
-                        "price_min": int(round(price_est * 0.85, -3)),
-                        "price_max": int(round(price_est * 1.2, -3)),
-                        "image_url": "",
-                        "product_url": "",
-                        "platform": f"Hybrid Mining ({hybrid.get('ai_model', 'VietCraft')})",
-                        "seller_name": "Gợi ý khai phá thị trường",
-                        "seller_count": 0,
-                        "sold_count": 0,
-                        "cluster_total_sold": 0,
-                        "rating_average": 0.0,
-                        "review_count": 0,
-                        "cluster_query": primary_kw,
-                        "cluster_products": [],
-                        "why_it_sells": idea.get("why_it_sells") or "",
-                        "upsell_bundle_tip": idea.get("upsell_bundle_tip") or "",
-                    }
-                )
-        except Exception as exc:
-            log.warning("seasonal: %s: %s", type(exc).__name__, exc)
-
-    if not real_blueprints:
-        cat_blueprints = CATEGORY_OCCASION_BLUEPRINTS.get(cat_slug, CATEGORY_OCCASION_BLUEPRINTS["thoi-trang"])
-        fallback_bps = cat_blueprints.get(active_camp["id"], cat_blueprints.get("tet", list(cat_blueprints.values())[0]))
-        for bp in fallback_bps:
-            real_blueprints.append(
-                {
-                    **bp,
-                    "price_min": bp["price"] - 30000,
-                    "price_max": bp["price"] + 40000,
-                    "image_url": "",
-                    "product_url": "",
-                    "platform": "Gợi ý tham khảo theo ngành",
-                    "seller_name": "Chưa có dữ liệu bán thật",
-                    "seller_count": 0,
-                    "sold_count": 0,
-                    "cluster_total_sold": 0,
-                    "rating_average": 0.0,
-                    "review_count": 0,
-                    "cluster_query": bp["keyword"],
-                    "cluster_products": [],
-                    "is_template": True,
-                    "cost_basis": "ước tính 45% giá bán (chưa có giá vốn thật)",
-                }
-            )
+    if len(real_blueprints) < 3 and market_listings:
+        # Catalog đa sàn chưa đủ: bổ sung từ sản phẩm Tiki thật của crawler F42 (không dùng mẫu viết sẵn)
+        terms = occasion_terms(active_camp.get("search_keywords") or []) | occasion_markers(active_camp["id"])
+        seen = {bp["title"].lower() for bp in real_blueprints}
+        for bp in blueprints_from_market_listings(market_listings, terms, limit=4, cost_model=cost_model):
+            if len(real_blueprints) >= 4:
+                break
+            if bp["title"].lower() not in seen:
+                real_blueprints.append(bp)
+                seen.add(bp["title"].lower())
 
     return real_blueprints
 
@@ -378,7 +418,7 @@ def build_potential_profiles(
             "years_analyzed": peaks["years_analyzed"],
             "competition": comp_bp,
             "cost_basis": bp.get("cost_basis")
-            or ("giá vốn từ listing" if bp.get("sold_count") else "giả định 45% giá bán (seller có thể sửa)"),
+            or "chưa có căn cứ giá vốn",
             "lead_basis": "mặc định 4 ngày — chưa đo từ đơn của shop",
         }
         p_profile = build_product_potential_profile(
@@ -421,6 +461,7 @@ def build_ready_and_pod_ideas(
     """Đóng gói danh sách ý tưởng hàng sẵn, phôi POD Printify và cụm sản phẩm cơ hội."""
     ready_ideas: List[Dict[str, Any]] = []
     opportunity_clusters: List[Dict[str, Any]] = []
+    fee_rate = commission_rate()
 
     for idx, bp in enumerate(blueprints[:9]):
         kw_pts = lay_chuoi_trend_cho_tu_khoa(bp["keyword"])
@@ -466,17 +507,17 @@ def build_ready_and_pod_ideas(
         else:
             market_lead_txt = f"Gợi ý theo ngành (chưa có dữ liệu bán thật) cho dịp {active_camp['name']}; "
 
+        ready_id = stable_id("ready", active_camp["id"], bp["title"])
         ready_ideas.append(
             {
+                "id": ready_id,
                 "title": bp["title"],
                 "category": bp["category"],
                 "keyword": bp["keyword"],
                 "market_price_range": price_range_str,
                 "suggested_price": f"{bp['price']:,}đ",
-                "base_cost": f"{bp['cost']:,}đ",
-                "cost_basis": bp.get("cost_basis") or ("giá vốn từ listing" if sold_cnt else "ước tính 45% giá bán"),
-                "expected_profit": f"{bp['price'] - bp['cost'] - int(bp['price'] * 0.1):,}đ/sp",
-                "expected_profit_margin": f"{int((bp['price'] - bp['cost'] - bp['price'] * 0.1) / max(1, bp['price']) * 100)}%",
+                "cost_basis": bp.get("cost_basis") or "chưa có căn cứ giá vốn",
+                **profit_fields(bp["price"], bp["cost"], bool(bp.get("cost_is_real")), fee_rate),
                 "image_url": bp.get("image_url") or "",
                 "product_url": bp.get("product_url") or "",
                 "platform": platform_name,
@@ -494,7 +535,7 @@ def build_ready_and_pod_ideas(
                 "why_it_sells": market_lead_txt + trend_txt + model_txt + ".",
                 "sourcing_tip": f"Giá tham chiếu {bp['price']:,}đ ({price_range_str}"
                 + (f", {seller_cnt} shop trong cụm" if seller_cnt else "")
-                + f"). Giá vốn mục tiêu ≤ {bp['cost']:,}đ ({bp.get('cost_basis') or 'ước tính 45% giá bán'}).",
+                + f"). Giá vốn mục tiêu ≤ {bp['cost']:,}đ ({bp.get('cost_basis') or 'chưa có căn cứ giá vốn'}).",
                 "upsell_bundle_tip": (
                     f"Ngành có {traits_cmp['combo_pct']['industry']['value']:.0f}% đơn dịp này mua ≥ 2 món — thử bundle."
                     if traits_cmp["combo_pct"]["industry"]["value"] is not None
@@ -538,7 +579,8 @@ def build_ready_and_pod_ideas(
 
         opportunity_clusters.append(
             {
-                "id": f"clust-real-{idx}",
+                "id": stable_id("clust", active_camp["id"], bp["title"]),
+                "idea_id": ready_id,
                 "title": bp["title"],
                 "category": bp["category"],
                 "quadrant": quadrant,
@@ -557,7 +599,7 @@ def build_ready_and_pod_ideas(
                 "sellers": bp.get("cluster_sellers") or [],
                 "clusteringMethod": f"Thu thập trực tiếp từ {platform_name} & đa sàn (đã khử trùng, trạng thái: Đang bán)",
                 "evidence": {
-                    "id": f"ev_clust_real_{idx}",
+                    "id": "ev_" + stable_id("clust", active_camp["id"], bp["title"]),
                     "definition": f"Sản phẩm thật đang mở bán trên sàn {platform_name} trong nhóm '{bp.get('cluster_query') or bp['category']}'.",
                     "sources": [f"API sản phẩm đang bán {platform_name}", "Google Trends VN", "external_market_products"],
                     "howObtained": f"Truy vấn các sản phẩm có trạng thái đang bán, khử trùng theo external_id và gom nhóm {seller_cnt} gian hàng duy nhất cùng phân khúc.",
@@ -577,21 +619,26 @@ def build_ready_and_pod_ideas(
     pod_blanks: List[Dict[str, Any]] = []
     pod_target = 3 if len(opportunity_clusters) >= 6 else max(0, 9 - len(opportunity_clusters))
     for idx, p_doc in enumerate(raw_ext_pod[:pod_target]):
-        b_price = int(p_doc.get("price_vnd") or 220000)
-        b_cost = int(p_doc.get("estimated_cost_vnd") or 95000)
+        # Phôi thiếu giá bán hoặc giá phôi thì bỏ qua, không tự gán giá mặc định
+        if not p_doc.get("price_vnd") or not p_doc.get("estimated_cost_vnd"):
+            continue
+        b_price = int(p_doc["price_vnd"])
+        b_cost = int(p_doc["estimated_cost_vnd"])
         p_min_b = int(round(b_price * 0.85 / 5000.0) * 5000)
         p_max_b = int(round(b_price * 1.2 / 5000.0) * 5000)
-        margin_low = max(35, int((b_price - b_cost - b_price * 0.1) / b_price * 100) - 4)
-        margin_high = margin_low + 10
-        prov_cnt = int(p_doc.get("provider_count") or 4)
+        margin_pct = net_margin_pct(b_price, b_cost, fee_rate)
+        prov_cnt = int(p_doc.get("provider_count") or 0)
+        colors_txt = f" ({p_doc['colors_count']} màu sẵn kho)" if p_doc.get("colors_count") else ""
 
+        pod_title = f"{p_doc['title']} · Chủ đề {active_camp['name']}"
         pod_item = {
+            "id": stable_id("pod", active_camp["id"], pod_title),
             "blank_type": p_doc.get("blank_type") or "tshirt_unisex",
-            "title": f"{p_doc['title']} · Chủ đề {active_camp['name']}",
+            "title": pod_title,
             "name": p_doc.get("original_catalog_title") or p_doc["title"],
             "category": p_doc.get("sub_category") or "Phôi in POD",
             "market_price_range": f"{p_min_b:,}đ – {p_max_b:,}đ",
-            "expected_profit_margin": f"{margin_low}% – {margin_high}%",
+            "expected_profit_margin": f"{margin_pct}%",
             "base_cost": b_cost,
             "image_url": p_doc.get("image_url") or "",
             "product_url": p_doc.get("product_url") or "",
@@ -599,12 +646,12 @@ def build_ready_and_pod_ideas(
             "seller_name": p_doc.get("seller_name") or "Printify Catalog",
             "seller_count": prov_cnt,
             "sold_count": int(p_doc.get("sold_count") or 0),
-            "sourcing_tip": f"Phôi chuẩn từ {p_doc.get('seller_name', 'Printify')} ({p_doc.get('colors_count', 10)} màu sẵn kho), giá phôi ~{b_cost:,}đ, chỉ in khi có đơn.",
+            "sourcing_tip": f"Phôi chuẩn từ {p_doc.get('seller_name', 'Printify')}{colors_txt}, giá phôi ~{b_cost:,}đ, chỉ in khi có đơn.",
             "why_it_sells": f"Phôi POD đang mở bán thực tế trên {p_doc.get('platform', 'Printify')}, cá nhân hóa hình in theo chủ đề {active_camp['name']} không lo tồn kho.",
-            "upsell_bundle_tip": "Cho phép khách thêm tên riêng hoặc lời chúc lên sản phẩm (+30.000đ/sp).",
+            "upsell_bundle_tip": "Cho phép khách thêm tên riêng hoặc lời chúc lên sản phẩm và tính thêm phí cá nhân hóa.",
             "suggested_theme": f"Thiết kế chủ đề {active_camp['name']} cá nhân hóa",
             "design_hook": f"Phôi gốc: {p_doc.get('original_catalog_title') or p_doc['title']}",
-            "signal_label": "Hồ sơ POD Đạt ●●●●",
+            "signal_label": "Phôi POD đang mở bán" if int(p_doc.get("sold_count") or 0) == 0 else f"Phôi POD · {int(p_doc['sold_count']):,} lượt bán",
         }
         pod_blanks.append(pod_item)
 
@@ -625,7 +672,8 @@ def build_ready_and_pod_ideas(
 
         opportunity_clusters.append(
             {
-                "id": f"clust-pod-{idx}",
+                "id": stable_id("clust", active_camp["id"], pod_item["title"]),
+                "idea_id": pod_item["id"],
                 "title": pod_item["title"],
                 "category": pod_item["category"],
                 "quadrant": "niche_market",
@@ -652,7 +700,7 @@ def build_ready_and_pod_ideas(
                 ],
                 "clusteringMethod": f"Danh mục phôi POD đang hoạt động từ {pod_item['platform']} Catalog API",
                 "evidence": {
-                    "id": f"ev_clust_pod_{idx}",
+                    "id": "ev_" + stable_id("clust", active_camp["id"], pod_item["title"]),
                     "definition": f"Phôi in theo yêu cầu (POD) lấy từ danh mục đang hoạt động trên {pod_item['platform']}.",
                     "sources": ["Printify Catalog API (/v1/catalog/blueprints.json)", "printify_variants.json"],
                     "howObtained": "Đồng bộ trực tiếp blueprint đang mở bán kèm ảnh gốc và số lượng nhà in cung cấp.",

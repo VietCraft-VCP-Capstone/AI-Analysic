@@ -6,7 +6,7 @@ from app.api.v1._live import db_live, la_shop_live
 from app.core.listing_intel.trend_store import weekly_series
 from app.core.redis_cache import cache_get_json, cache_set_json
 from app.core.seasonal_intel import real_stl
-from app.services.f38.f38_constants import TZ_VN, VC_ORDER_WINDOW_DAYS, cutoff_utc_dt
+from app.services.f38.f38_constants import TZ_VN, VALID_ORDER_FILTER, VC_ORDER_WINDOW_DAYS, cutoff_utc_dt
 
 log = logging.getLogger("f38_seasonal")
 
@@ -55,6 +55,9 @@ def lay_don_hang_lich_su(shop_id: str, include_industry: bool = True):
         "shop_id": 1,
         "created_at": 1,
         "order_status": 1,
+        "payment_method": 1,
+        "payment_status": 1,
+        "refund_status": 1,
         "items": 1,
         "coupon_code": 1,
         "financial_breakdown": 1,
@@ -62,8 +65,7 @@ def lay_don_hang_lich_su(shop_id: str, include_industry: bool = True):
     since = datetime.now() - timedelta(days=365 * 4)
     flt = {
         "created_at": {"$gte": since},
-        "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
-        "is_simulated": {"$ne": True},
+        **VALID_ORDER_FILTER,
         "seed_ref": {"$exists": False},
     }
     shop_o: List[Dict[str, Any]] = []
@@ -87,7 +89,7 @@ def load_vietcraft_real_sold_map(
 ) -> Dict[str, int]:
     """Đếm lượt bán thật theo product_id từ `db_live()['orders']` trong `window_days` ngày gần nhất.
 
-    Chỉ tính đơn hoàn tất (`DELIVERED`, `COMPLETED`, `PAID`) và loại trừ đơn mô phỏng (`is_simulated=True`).
+    Chỉ tính đơn hợp lệ (`VALID_ORDER_FILTER`: không hủy, không hoàn tiền, không mô phỏng).
     """
     ref_day = as_of or datetime.now(TZ_VN).date()
     ckey = f"seasonal:vc_real_sold:{window_days}d:{ref_day.isoformat()}:v1"
@@ -102,8 +104,7 @@ def load_vietcraft_real_sold_map(
             {
                 "$match": {
                     "created_at": {"$gte": since_dt},
-                    "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
-                    "is_simulated": {"$ne": True},
+                    **VALID_ORDER_FILTER,
                     "seed_ref": {"$exists": False},
                 }
             },
