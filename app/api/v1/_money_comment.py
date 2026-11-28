@@ -31,7 +31,7 @@ def su_that(bc: Dict[str, Any]) -> Dict[str, str]:
 
 
 def _loi_nhac(su: Dict[str, str]) -> str:
-    return ("Bạn là cố vấn kinh doanh cho người bán nhỏ trên sàn đồ thủ công Việt Nam. "
+    return ("Bạn là cố vấn kinh doanh cho người bán nhỏ trên sàn thương mại điện tử Việt Nam. "
             "Viết đúng 1 câu ngắn, tối đa 25 từ, tiếng Việt dễ hiểu: khuyên đúng việc ghi ở 'Việc nên làm' và vì sao, không gợi ý việc hay loại voucher khác. "
             "Tránh từ chung chung như tối ưu, nâng cao, đẩy mạnh, chiến lược. Nếu cần số thì chỉ dùng số có trong dữ kiện. "
             "Trả đúng JSON dạng {\"next_voucher\": \"...\"}.\n\n"

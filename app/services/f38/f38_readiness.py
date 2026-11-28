@@ -82,7 +82,7 @@ def analyze_product_seasonal_readiness(
         sample_keywords = f'"hộp quà thực phẩm", "quà biếu {camp_name.lower()}", "trà quà tặng"'
         seller_action_tip = "Ghép set 2-3 vị khác nhau đóng hộp quà tết hoặc kèm bình giữ nhiệt cao cấp."
     else:
-        cat_label = "Sản phẩm thủ công & Quà tặng"
+        cat_label = "Sản phẩm & Quà tặng"
         combo_tip = "kèm hộp quà nơ đóng sẵn và thiệp chúc mừng"
         sample_combo = f"Set Quà Tặng {core_title} Cao Cấp Dịp {camp_name}"
         sample_keywords = f'"quà tặng {camp_name.lower()}", "set quà tri ân"'
