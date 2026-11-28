@@ -1,8 +1,10 @@
+import json
 import math
 import re
 import time
 import unicodedata
 from collections import Counter, defaultdict
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -13,6 +15,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
 
+from app.api.v1._competitor_subkind import LOAI_NHO, bat, nhan_cua
 from app.api.v1._materials import chuan_hoa, tap_chuan
 
 # Hai ngưỡng đo trên 17.000 tin Shopee chưa dùng để chỉnh (22/10/2026), đáp án là nhãn "cùng sản phẩm":
@@ -56,6 +59,27 @@ def _tach(s: Any) -> List[str]:
     return [t for t in re.findall(r"\w+", s) if len(t) >= 2 and t not in TU_BO]
 
 
+def _nap_dong_nghia() -> Tuple[Optional[re.Pattern], Dict[str, str]]:
+    """competitor_synonyms.json {từ chuẩn: [cách gọi khác]} -> một mẫu khớp nguyên cụm, cụm dài thử trước."""
+    chuan = lambda s: unicodedata.normalize("NFC", s.lower())  # noqa: E731
+    tu = json.loads(Path(__file__).with_name("competitor_synonyms.json").read_text("utf-8"))
+    ve = {chuan(v): chuan(k) for k, vs in tu.items() for v in vs}
+    assert len(ve) == sum(map(len, tu.values())) and not set(ve) & {chuan(k) for k in tu}, "từ điển đồng nghĩa trùng hoặc vòng"
+    mau = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(v) for v in sorted(ve, key=len, reverse=True)) + r")(?!\w)") if ve else None
+    return mau, ve
+
+
+_MAU_DONG_NGHIA, _VE_TU_CHUAN = _nap_dong_nghia()
+
+
+def dong_nghia(s: Any) -> str:
+    """Cách gọi khác về một từ ("áo phông" -> "áo thun") để TF-IDF thấy là cùng chữ; chỉ cụm không nhập nhằng."""
+    if not bat():               # chung công tắc COMPETITOR_SUBKIND=0, để tắt vẫn về đúng bản cũ
+        return s or ""
+    s = unicodedata.normalize("NFC", str(s or "").lower())
+    return _MAU_DONG_NGHIA.sub(lambda m: _VE_TU_CHUAN[m.group(0)], s) if _MAU_DONG_NGHIA else s
+
+
 TACH_TRUONG = " | "
 
 
@@ -69,10 +93,11 @@ def _gram(doc: str) -> List[str]:
 
 
 def truong(row: Dict[str, Any], ten_tag: Dict[str, str]) -> List[str]:
-    """Tên nhân đôi (quan trọng nhất), từng từ khoá (tên có dấu), từng chất liệu (tên chuẩn nếu nhận ra), loại hàng."""
-    tag = [ten_tag.get(t) or str(t).replace("-", " ") for t in row.get("tags") or []]
+    """Tên nhân đôi (quan trọng nhất), từng từ khoá (tên có dấu), từng chất liệu (tên chuẩn nếu nhận ra), loại hàng.
+    Mô tả không qua từ điển đồng nghĩa: "dây chuyền sản xuất" trong mô tả không phải dây chuyền đeo cổ."""
+    tag = [dong_nghia(ten_tag.get(t) or str(t).replace("-", " ")) for t in row.get("tags") or []]
     cl = [" ".join(chuan_hoa(m)) or str(m) for m in row.get("materials") or []]
-    return [row.get("title") or ""] * 2 + tag + cl + [row.get("product_type_name") or ""]
+    return [dong_nghia(row.get("title"))] * 2 + tag + cl + [dong_nghia(row.get("product_type_name"))]
 
 
 def _tfidf(docs: List[str], **kw):
@@ -91,6 +116,7 @@ class MayGiong:
         mo_ta, ten_tag = mo_ta or {}, ten_tag or {}
         self.dong = list(dong)
         self.vi_tri = {r["listing_id"]: i for i, r in enumerate(self.dong)}
+        self.loai_nho = nhan_cua(self.dong, mo_ta)
         ten = [TACH_TRUONG.join(truong(r, ten_tag)) for r in self.dong]
         mt = [(mo_ta.get(r["listing_id"]) or "")[:300] for r in self.dong]
         ky_tu = [bo_dau(r.get("title")) for r in self.dong]      # bỏ dấu riêng ở đây để bắt tên gõ không dấu
@@ -106,7 +132,7 @@ class MayGiong:
                 phan.append(vec.transform(docs) * trong_so)
         self.x = normalize(hstack(phan).tocsr())
         self.ten_tu = self.vec_tu.get_feature_names_out()
-        self.loai_tu = {t for r in self.dong for t in _tach(r.get("product_type_name"))}
+        self.loai_tu = {t for r in self.dong for t in _tach(dong_nghia(r.get("product_type_name")))}
         co = (self.x_tu > 0).astype(float)
         theo_loai: Dict[Any, List[int]] = {}
         for i, r in enumerate(self.dong):
@@ -137,20 +163,27 @@ class MayGiong:
                 break
         return ra
 
+    def _cung_loai(self, i: int, j: int) -> List[str]:
+        nho = self.loai_nho[i]
+        return [f"cùng loại: {LOAI_NHO[self.dong[i]['product_type_name']][nho]['ten']}"] if nho and nho == self.loai_nho[j] else []
+
     def lang_gieng(self, listing_id: str, k: int, nguong: float = NGUONG_GIONG,
-                   loc_chat_lieu: bool = True) -> List[Tuple[int, float]]:
-        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, không khác chất liệu (nếu loc_chat_lieu), đạt ngưỡng."""
+                   loc_chat_lieu: bool = True, loc_loai_nho: bool = True) -> List[Tuple[int, float]]:
+        """k sản phẩm giống nhất CÙNG LOẠI HÀNG, khác shop, không khác chất liệu (nếu loc_chat_lieu), đạt ngưỡng.
+        Hai bên đều có loại nhỏ (nếu loc_loai_nho) thì chỉ cần cùng loại nhỏ, bỏ ngưỡng và luật từ hiếm."""
         i = self.vi_tri.get(listing_id)
         if i is None or self.x is None:
             return []
         loai = self.dong[i].get("product_type_id")
+        nho = self.loai_nho[i] if loc_loai_nho else None
         sim = (self.x @ self.x[i].T).toarray().ravel()
         ung = sorted(((float(sim[j]), j) for j, r in enumerate(self.dong)
                       if j != i and r.get("product_type_id") == loai
-                      and r["shop_id"] != self.dong[i]["shop_id"] and sim[j] >= nguong
+                      and r["shop_id"] != self.dong[i]["shop_id"]
+                      and (nho == self.loai_nho[j] if nho and self.loai_nho[j] else sim[j] >= nguong)
                       and not (loc_chat_lieu and self.khac_chat_lieu(i, j))), reverse=True)
         # Đối thủ trực tiếp phải có điểm chung có nghĩa, không chỉ giống nhau ở văn mẫu mô tả.
-        return [(j, s) for s, j in ung if s >= NGUONG_KHONG_LY_DO or self._ly_do(i, j, 1)][:k]
+        return [(j, s) for s, j in ung if (nho and self.loai_nho[j]) or s >= NGUONG_KHONG_LY_DO or self._ly_do(i, j, 1)][:k]
 
     def khop_nhat(self, listing_id: str, shop_id: str) -> Tuple[Optional[int], float]:
         """Sản phẩm cùng loại của shop_id giống listing_id nhất."""
@@ -174,7 +207,7 @@ class MayGiong:
             "est_sales_90d": self.dong[j].get("est_sales_90d") or 0,
             "similarity": round(s, 3),
             "near_identical": s >= NGUONG_GAN_NHU_Y_HET,
-            "reasons": self._ly_do(i, j),
+            "reasons": self._ly_do(i, j) or self._cung_loai(i, j),
             "materials": self.dong[j].get("materials") or [],
         } for j, s in self.lang_gieng(listing_id, k)]
 
@@ -191,7 +224,8 @@ def gia_de_xuat(may: MayGiong, listing_id: str, k: int = K_GIA) -> Tuple[Optiona
     Trả (kết quả, lý do nếu không có)."""
     i = may.vi_tri.get(listing_id)
     # Không lọc chất liệu: trên Amazon lọc không làm giá sát hơn (chênh 0,0 điểm) mà bớt mẫu; chất liệu đã nằm trong TF-IDF.
-    lg = [(j, s) for j, s in may.lang_gieng(listing_id, k, loc_chat_lieu=False) if may.dong[j].get("price_vnd")]
+    # Không lọc loại nhỏ: trên 12 sản phẩm thật sai số giá trung vị +1,7 điểm, CI 95% [-1,3; +4,4], chưa chứng minh không tệ hơn.
+    lg = [(j, s) for j, s in may.lang_gieng(listing_id, k, loc_chat_lieu=False, loc_loai_nho=False) if may.dong[j].get("price_vnd")]
     if i is None or len(lg) < TOI_THIEU_GIA:
         return None, (f"Mới tìm được {len(lg)} sản phẩm đủ giống cùng loại trên sàn, "
                       f"cần ít nhất {TOI_THIEU_GIA} để AI tính giá đối thủ trực tiếp")

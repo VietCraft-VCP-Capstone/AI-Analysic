@@ -1,13 +1,12 @@
 import logging
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.core import calendar_vn
+from app.core.seasonal_uplift import expected_orders_range, order_uplift_from_history
 from app.core.redis_cache import cache_get_json, cache_set_json
-from app.core.seasonal_dl.forecaster import event_demand_uplift
 from app.core.seasonal_intel import _dt as _si_dt
 from app.services.f38.f38_constants import CAT_LABELS, CAT_OCCASION_KEYWORDS
-from app.services.f38.f38_trends_stl import tra_cuu_trend
 
 log = logging.getLogger("f38_seasonal")
 
@@ -88,9 +87,43 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
         },
     )
 
+    lead_days = int(win.get("lead_time_days") or ev.get("lead_time_days") or 14)
+    cutoff_basis = f"Hạn chốt {cut_str} = Ngày lễ ({ev_str}) − {lead_days} ngày (thời gian làm hàng và giao hàng)."
+    phase = win.get("current_phase")
+
+    if phase == "post_event":
+        return {
+            "action_type": "post_event_review",
+            "badge_text": f"Đã qua lễ {win.get('days_since_event', 0)} ngày",
+            "badge_variant": "blue",
+            "title": f"Xem kết quả {ev_name} và rút kinh nghiệm",
+            "advice": "So số đơn thực tế với mục tiêu, ghi lại sản phẩm bán tốt/bán chậm và đánh giá dịp này để kế hoạch năm sau chính xác hơn.",
+            "calculation_basis": f"Giữ dịp ở pha sau lễ tới {win.get('post_event_end', '')} để seller kịp đánh giá.",
+            "cta_label": "Xem kết quả dịp",
+            "target_tab": "performance",
+            "is_urgent": False,
+        }
+
+    if phase == "last_call":
+        days_to_event = int(win.get("days_to_event") or 0)
+        return {
+            "action_type": "last_call",
+            "badge_text": f"Còn {days_to_event} ngày tới lễ",
+            "badge_variant": "amber",
+            "title": f"Sát lễ {ev_name}: chỉ bán hàng có sẵn",
+            "advice": (
+                f"Đã qua hạn chốt đơn thường ({cut_str}). Ngừng nhận mẫu làm theo yêu cầu; chỉ mở bán hàng có sẵn, "
+                f"bật giao nhanh/hỏa tốc và ghi rõ thời gian giao để khách nhận trước {ev_str}."
+            ),
+            "calculation_basis": cutoff_basis,
+            "cta_label": "Xem sản phẩm shop & tồn kho",
+            "target_tab": "readiness",
+            "is_urgent": True,
+        }
+
     if days_to_cutoff <= 3 or hom_nay >= peak_d:
         if days_to_cutoff <= 1:
-            badge_text = f"Hạn chốt {days_to_cutoff} ngày" if days_to_cutoff > 0 else "Đã qua hạn chốt"
+            badge_text = f"Hạn chốt {days_to_cutoff} ngày" if days_to_cutoff > 0 else "Hạn chốt hôm nay"
         else:
             badge_text = f"Hạn chốt còn {days_to_cutoff} ngày"
 
@@ -100,7 +133,7 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
             "badge_variant": "amber",
             "title": f"Chốt đơn & Giao hàng kịp {ev_name}",
             "advice": f"Hạn chốt còn {days_to_cutoff} ngày ({cut_str}). Ngừng nhận mẫu đặt trước, tập trung đóng gói hàng sẵn có để kịp giao trước {ev_str}.",
-            "calculation_basis": f"Hạn chốt {cut_str} = Ngày sự kiện ({ev_str}) − 10 ngày (đóng gói & giao hàng an toàn).",
+            "calculation_basis": cutoff_basis,
             "cta_label": "Xem sản phẩm shop & tồn kho",
             "target_tab": "readiness",
             "is_urgent": True,
@@ -113,7 +146,7 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
             "badge_variant": "blue",
             "title": prof["traction_title"],
             "advice": prof["traction_advice"],
-            "calculation_basis": f"Bắt đầu mở bán {trac_str} = Trước cao điểm 10 ngày để kịp index từ khóa.",
+            "calculation_basis": f"Bắt đầu mở bán {trac_str}, trước hạn chốt đơn ({cut_str}) {(cut_off_d - traction_d).days} ngày để sàn kịp index từ khóa và gom đánh giá.",
             "cta_label": "Xem xu hướng & sức mua",
             "target_tab": "traits",
             "is_urgent": False,
@@ -129,7 +162,7 @@ def tao_khuyen_nghi_hanh_dong(ev: dict, win: dict, hom_nay: date, cat_slug: str)
         "badge_variant": "emerald",
         "title": prof["prep_title"],
         "advice": prof["prep_advice"],
-        "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Ngày sự kiện ({ev_str}) − 38 ngày (thời gian làm hàng & đón sóng).",
+        "calculation_basis": f"Bắt đầu chuẩn bị {rd_d.strftime('%d/%m')} = Hạn chốt đơn ({cut_str}) − {int(ev.get('prep_days', 30))} ngày chuẩn bị của dịp.",
         "cta_label": "Xem gợi ý sản phẩm đón dịp",
         "target_tab": "potential",
         "is_urgent": False,
@@ -140,13 +173,17 @@ def build_all_campaigns(
     hom_nay: date,
     cat_slug: str,
     target_camp_id: Optional[str],
+    shop_lead_days: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Xây dựng danh sách toàn bộ dịp mua sắm trong năm và chọn chiến dịch đang xem."""
+    """Xây dựng danh sách toàn bộ dịp mua sắm trong năm và chọn chiến dịch đang xem.
+
+    `shop_lead_days`: lead time đo từ đơn thật của shop (p90 + dự phòng); None = dùng mặc định của dịp.
+    """
     all_campaigns: List[Dict[str, Any]] = []
     weekday_names = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ nhật"]
 
     for ev in calendar_vn.SHOPPING_EVENTS:
-        win = calendar_vn.calculate_occasion_window(ev, hom_nay)
+        win = calendar_vn.calculate_occasion_window(ev, hom_nay, shop_lead_days=shop_lead_days)
         if not win:
             continue
 
@@ -166,8 +203,17 @@ def build_all_campaigns(
             "days_to_peak": win["days_to_event"],
             "days_to_cutoff": win["days_to_cut_off"],
             "status": win["status"],
-            "is_safe_to_launch": win["days_to_cut_off"] > 0,
-            "timing_warning": None if win["days_to_cut_off"] > 0 else "Đã quá hạn chốt đơn dịp này (nguy cơ giao hàng trễ sau lễ)",
+            "is_safe_to_launch": win["days_to_cut_off"] >= 0,
+            "timing_warning": (
+                None if win["days_to_cut_off"] >= 0
+                else "Đã qua lễ, dịp này đang ở pha xem kết quả" if win["current_phase"] == "post_event"
+                else "Đã qua hạn chốt đơn thường: chỉ nhận hàng có sẵn và giao nhanh"
+            ),
+            "days_since_event": win.get("days_since_event", 0),
+            "cut_off_note": win.get("cut_off_note"),
+            "lead_time_source": win.get("lead_time_source"),
+            "default_lead_time_days": win.get("default_lead_time_days"),
+            "post_event_end": win.get("post_event_end"),
             "cut_off_formula": win["cut_off_formula"],
         }
 
@@ -198,9 +244,10 @@ def build_all_campaigns(
             next_deadline_days_left = (ev_d - hom_nay).days
             next_deadline_is_urgent = False
         else:
-            next_deadline_title = "Đã qua hạn chốt đơn"
-            next_deadline_date_text = ev_d.strftime("%d/%m")
-            next_deadline_days_left = 0
+            pe_d = date.fromisoformat(win["post_event_end"])
+            next_deadline_title = f"Đánh giá kết quả trước {pe_d.strftime('%d/%m')}"
+            next_deadline_date_text = pe_d.strftime("%d/%m")
+            next_deadline_days_left = max(0, (pe_d - hom_nay).days)
             next_deadline_is_urgent = False
 
         if ev_d.year != hom_nay.year:
@@ -295,57 +342,93 @@ def build_all_campaigns(
     return all_campaigns, active_camp
 
 
+EXPECTED_RATE_DAYS = 60
+EXPECTED_MIN_ORDERS = 5          # dưới mức này vẫn tính nhưng gắn cờ độ tin cậy thấp
+EXPECTED_MIN_COVERAGE_DAYS = 7   # dưới 7 ngày lịch sử thì chưa tính được
+EXPECTED_CONFIDENT_DAYS = 14
+
+
+UPLIFT_SOURCE_LABELS = {
+    "shop_orders": "đơn của shop ở dịp này các năm trước",
+    "platform_orders": "đơn toàn sàn ở dịp này các năm trước",
+    "market_sold": "tốc độ bán thật trên Tiki trong kỳ dịp so với trước dịp",
+}
+PLATFORM_MIN_PRE_ORDERS = 50
+
+
 def attach_expected_orders(
     all_campaigns: List[Dict[str, Any]],
     shop_orders_hist: List[Dict[str, Any]],
     hom_nay: date,
+    platform_orders: Optional[List[Dict[str, Any]]] = None,
+    market_uplift: Optional[Callable[[Dict[str, Any], date, date], Optional[Dict[str, Any]]]] = None,
 ) -> None:
-    """Tính 'Dự kiến' số đơn cho từng dịp từ nhịp đơn 90 ngày của shop × uplift mô hình (cache Redis)."""
-    since_90 = datetime.combine(hom_nay - timedelta(days=90), datetime.min.time())
-    recent_shop_90 = [o for o in shop_orders_hist if (_si_dt(o.get("created_at")) or datetime.min) >= since_90]
-    shop_rate_90 = (len(recent_shop_90) / 90.0) if len(recent_shop_90) >= 5 else None
-    if shop_rate_90 is None:
-        return
+    """
+    Đơn dự kiến của từng dịp = mức bán ngày thường (nhịp đơn 60 ngày × số ngày kỳ dịp) × mức tăng đơn
+    ĐO TỪ DỮ LIỆU BÁN THẬT: đơn của shop các mùa trước → đơn toàn sàn các mùa trước → tốc độ bán trên Tiki.
+    Không dùng lượt tìm kiếm. Chưa đo được mức tăng thì giữ mức ngày thường và ghi rõ.
+    """
+    times = [t for t in (_si_dt(o.get("created_at")) for o in shop_orders_hist) if t]
+    first = min(times, default=None)
 
+    def rate_until(end: datetime) -> Optional[Tuple[float, int, int]]:
+        """Nhịp đơn tối đa 60 ngày trước `end` (cùng quy tắc với BE baselineDailyRate). None khi < 7 ngày lịch sử."""
+        if first is None or first >= end:
+            return None
+        start = max(end - timedelta(days=EXPECTED_RATE_DAYS), first)
+        coverage = max(1, int(-(-(end - start).total_seconds() // 86400)))
+        if coverage < EXPECTED_MIN_COVERAGE_DAYS:
+            return None
+        n = sum(1 for t in times if start <= t < end)
+        return n / float(coverage), n, coverage
+
+    recent = rate_until(datetime.combine(hom_nay + timedelta(days=1), datetime.min.time()))
     for camp in all_campaigns:
         try:
+            ow = camp.get("occasion_window") or {}
             lw = camp.get("launch_window") or {}
-            ev_str = lw.get("peak_date")
-            st_str = lw.get("start")
-            if not ev_str or not st_str:
+            st_str = ow.get("traction_start") or lw.get("start")
+            ev_str = ow.get("event_date") or lw.get("peak_date")
+            if not st_str or not ev_str:
                 continue
-            ev_d = date.fromisoformat(ev_str)
-            st_d = date.fromisoformat(st_str)
-            win_d = max(7, (ev_d - st_d).days)
-            cand_kws = list(dict.fromkeys(list(camp.get("search_keywords") or []) + ["quà tặng"]))
-            up_c = None
-            ev_info_c = next((e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == camp["id"]), None)
-            for kw_c in cand_kws:
-                s_obj, m_key, _ = tra_cuu_trend(kw_c)
-                if s_obj is None:
-                    continue
-                ckey = f"seasonal:dl_uplift:v1:{m_key}:{ev_d.isoformat()}:{win_d}:{hom_nay.isoformat()}"
-                cand_up = cache_get_json(ckey)
-                if not isinstance(cand_up, dict):
-                    ev_by_yr: Dict[int, date] = {}
-                    if ev_info_c:
-                        for yr in range(2021, hom_nay.year + 2):
-                            tw_c = calendar_vn.calculate_occasion_window(ev_info_c, date(yr, 6, 1))
-                            if tw_c and tw_c.get("event_date"):
-                                ev_by_yr[yr] = date.fromisoformat(tw_c["event_date"])
-                    cand_up = event_demand_uplift(
-                        series=s_obj, event_dates=ev_by_yr, event_date=ev_d, window_days=win_d, today=hom_nay
-                    )
-                    if cand_up:
-                        cache_set_json(ckey, cand_up, ttl_seconds=1800)
-                if isinstance(cand_up, dict) and cand_up.get("uplift_p10") and cand_up.get("uplift_p90"):
-                    up_c = cand_up
-                    break
-            if isinstance(up_c, dict):
-                o10 = max(1, round(shop_rate_90 * win_d * float(up_c["uplift_p10"])))
-                o90 = max(o10, round(shop_rate_90 * win_d * float(up_c["uplift_p90"])))
-                camp["expected_orders"] = f"{o10}" if o10 == o90 else f"{o10}–{o90}"
-        except Exception as exc:
+            st_d, ev_d = date.fromisoformat(st_str), date.fromisoformat(ev_str)
+            days = max(7, (ev_d - st_d).days + 1)  # tính cả ngày mở bán và ngày lễ (khớp kỳ đo của phễu)
+            # Dịp đã mở bán: nhịp nền TRƯỚC ngày mở bán (khớp phễu), để đơn của chính mùa không bị tính là "ngày thường"
+            started = st_d <= hom_nay
+            base = rate_until(datetime.combine(st_d, datetime.min.time())) if started else recent
+            rate_label = "trước ngày mở bán" if started else "gần nhất"
+            if base is None:
+                camp["expected_orders"] = None
+                camp["expected_uplift"] = None
+                camp["expected_low_confidence"] = True
+                camp["expected_orders_basis"] = "Shop có dưới 7 ngày lịch sử đơn nên chưa tính được mức ngày thường."
+                continue
+            rate, n_base, coverage = base
+            low_conf = n_base < EXPECTED_MIN_ORDERS or coverage < EXPECTED_CONFIDENT_DAYS
+            camp["expected_low_confidence"] = low_conf
+            ev_info = next((e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == camp.get("id")), None)
+            past = sorted(d for d in calendar_vn.event_dates_by_year(ev_info, range(2021, hom_nay.year + 1)).values()
+                          if d < hom_nay and d != ev_d) if ev_info else []
+            uplift, source = order_uplift_from_history(shop_orders_hist, past, days), "shop_orders"
+            if uplift is None and platform_orders:
+                uplift, source = order_uplift_from_history(platform_orders, past, days, min_pre_orders=PLATFORM_MIN_PRE_ORDERS), "platform_orders"
+            if uplift is None and market_uplift is not None:
+                uplift, source = market_uplift(camp, st_d, ev_d), "market_sold"
+            r = expected_orders_range(rate, days, uplift)
+            camp["expected_orders"] = f"{r['p10']}" if r["p10"] == r["p90"] else f"{r['p10']}–{r['p90']}"
+            camp["expected_uplift"] = {**uplift, "source": source} if uplift else None
+            base_txt = f"{rate:.2f} đơn/ngày ({n_base} đơn trong {coverage} ngày {rate_label}) × {days} ngày kỳ dịp"
+            if uplift:
+                spread = f"x{uplift['mid']:g}" if uplift["low"] == uplift["high"] else f"x{uplift['mid']:g} (x{uplift['low']:g}–x{uplift['high']:g})"
+                camp["expected_orders_basis"] = f"{base_txt} × mức tăng {spread} đo từ {UPLIFT_SOURCE_LABELS[source]}; khoảng 80%."
+            else:
+                camp["expected_orders_basis"] = (
+                    f"{base_txt}, khoảng 80%. Chưa đo được mức tăng đơn của dịp này (chưa có đơn mùa trước "
+                    "hay đủ lịch sử bán trên Tiki) nên đang là mức ngày thường."
+                )
+            if low_conf:
+                camp["expected_orders_basis"] += " Độ tin cậy thấp: còn ít đơn hoặc lịch sử ngắn."
+        except Exception as exc:  # noqa: BLE001
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
 
 

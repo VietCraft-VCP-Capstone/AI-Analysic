@@ -17,8 +17,10 @@ from statistics import median
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
+from scipy.stats import poisson
 
-COMPLETED = {"DELIVERED", "COMPLETED", "PAID"}
+from app.core.order_validity import is_valid_demand_order
+
 MIN_WINDOW_ORDERS = 15      # tối thiểu đơn trong các cửa sổ dịp để coi là "đo được"
 MIN_SHOPS_FOR_RANK = 5      # tối thiểu shop ngành để xếp hạng percentile
 
@@ -105,7 +107,7 @@ def order_amount(o: Dict[str, Any]) -> float:
 def _completed(orders: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out = []
     for o in orders:
-        if (o.get("order_status") or "").upper() in COMPLETED and _dt(o.get("created_at")):
+        if is_valid_demand_order(o) and _dt(o.get("created_at")):
             out.append(o)
     return out
 
@@ -273,43 +275,36 @@ def seller_competition(listings: List[Dict[str, Any]], my_price: float) -> Dict[
 
 
 # ----------------------------------------------------------------------------- Product coverage (hot keyword actions)
-def keyword_shop_coverage(keyword: str, shop_products: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Shop đã có bao nhiêu sản phẩm chứa từ khóa trong tên/tag → hành động có giá trị thật."""
-    kw_low = keyword.lower().strip()
-    toks = [t for t in kw_low.split() if len(t) > 1]
-    if not toks:
-        return {"matching": 0, "total": len(shop_products), "gap": True, "product_ids": [], "products": [], "already_tagged": False}
-    hits = []
-    matched_products = []
-    tagged_hits = 0
-    for p in shop_products:
-        p_tags = [str(t).lower().strip() for t in (p.get("tags") or [])]
-        title = str(p.get("title") or p.get("name") or "")
-        text = " ".join([title] + p_tags).lower()
-        score = sum(1 for t in toks if t in text) / len(toks)
-        if kw_low in text or score >= 0.75:
-            pid = str(p.get("_id") or p.get("id") or "")
-            hits.append(pid)
-            matched_products.append({"id": pid, "title": title})
-            if any(kw_low == pt or kw_low in pt for pt in p_tags):
-                tagged_hits += 1
-    return {
-        "matching": len(hits),
-        "total": len(shop_products),
-        "gap": len(hits) == 0,
-        "product_ids": hits[:5],
-        "products": matched_products[:5],
-        "already_tagged": len(hits) > 0 and tagged_hits == len(hits),
-    }
+def keyword_shop_coverage(
+    keyword: str,
+    shop_products: List[Dict[str, Any]],
+    index: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Shop đã có bao nhiêu sản phẩm phù hợp với từ khóa. Quy tắc so khớp: xem `app.core.keyword_match`."""
+    from app.core.keyword_match import keyword_shop_coverage as _coverage  # noqa: PLC0415
+
+    return _coverage(keyword, shop_products, index=index)
 
 
 # ----------------------------------------------------------------------------- Counterfactual impact (Thành quả)
+def normal_day_orders(rate_per_day: float, days: float) -> Dict[str, float]:
+    """Số đơn nếu bán như ngày thường: kỳ vọng = nhịp nền × số ngày, khoảng 80% theo phân phối Poisson.
+
+    Không nhân với độ nâng lượt tìm kiếm: lượt tìm (Google Trends) không phải số đơn.
+    """
+    lam = max(0.0, float(rate_per_day) * float(days))
+    return {"p10": int(poisson.ppf(0.1, lam)) if lam > 0 else 0,
+            "p50": round(lam, 1),
+            "p90": int(poisson.ppf(0.9, lam)) if lam > 0 else 0}
+
+
 def impact_report(shop_orders: List[Dict[str, Any]], event: date, win_days: int, today: date,
                   adopted_keywords: List[str], market_uplift: Optional[Dict[str, Any]],
                   prev_event: Optional[date]) -> Dict[str, Any]:
-    """Thành quả = thực tế − phản thực (không áp dụng).
+    """Thành quả = thực tế so với kịch bản "bán như ngày thường".
 
-    Phản thực = nhịp đơn nền 8 tuần × uplift thị trường (QuantileForecaster P10/P50/P90).
+    Kịch bản ngày thường = nhịp đơn nền 8 tuần × số ngày (khoảng 80% Poisson). Độ nâng lượt tìm kiếm
+    (`market_uplift`) chỉ trả kèm để tham khảo, không nhân vào số đơn.
     Nhóm "áp dụng" = đơn có sản phẩm khớp từ khóa gợi ý đã chọn. So thêm với mùa trước (YoY).
     """
     done = _completed(shop_orders)
@@ -339,18 +334,18 @@ def impact_report(shop_orders: List[Dict[str, Any]], event: date, win_days: int,
     res: Dict[str, Any] = {"phase": phase, "window": [ws.date().isoformat(), event.isoformat()],
                            "elapsed_days": elapsed, "adopted_keywords": adopted_keywords,
                            "baseline_orders_per_day": None if base_rate is None else round(base_rate, 3),
-                           "baseline_n": len(base)}
-    if phase == "upcoming" or base_rate is None or not market_uplift:
+                           "baseline_n": len(base),
+                           "search_uplift_p50": (market_uplift or {}).get("uplift_p50")}
+    if phase == "upcoming" or base_rate is None:
         res["status"] = "insufficient" if base_rate is None else "projected"
-        if base_rate is not None and market_uplift:
-            days = win_days
-            for q in ("p10", "p50", "p90"):
-                res[f"expected_orders_{q}"] = round(base_rate * days * float(market_uplift.get(f"uplift_{q}", 1.0)), 1)
+        if base_rate is not None:
+            for q, v in normal_day_orders(base_rate, win_days).items():
+                res[f"expected_orders_{q}"] = v
             if base_amt:
                 res["expected_gmv_p50"] = round(res["expected_orders_p50"] * base_amt)
         return res
 
-    cf = {q: base_rate * elapsed * float(market_uplift.get(f"uplift_{q}", 1.0)) for q in ("p10", "p50", "p90")}
+    cf = normal_day_orders(base_rate, elapsed)
     actual = len(win)
     adopted = [o for o in win if _hits(o)]
     res.update({
@@ -379,6 +374,11 @@ def impact_report(shop_orders: List[Dict[str, Any]], event: date, win_days: int,
 
 
 # ----------------------------------------------------------------------------- Playbook (Áp dụng)
+# Vị trí lưu tick của từng bước (khớp thứ tự cũ khi còn nhiều ngày, nên tick đã lưu trước đây vẫn đúng)
+PLAYBOOK_SLOTS: Dict[str, int] = {"listing": 0, "test": 1, "decide": 2, "produce": 3, "cutoff": 4}
+PLAYBOOK_TEST_ORDERS = 20
+
+
 def build_playbook(idea: Dict[str, Any], cut_off: date, event: date, today: date,
                    uplift: Optional[Dict[str, Any]], base_orders_per_day: Optional[float],
                    shop_lead_days: int) -> Dict[str, Any]:
@@ -388,25 +388,33 @@ def build_playbook(idea: Dict[str, Any], cut_off: date, event: date, today: date
     produce_deadline = cut_off - timedelta(days=shop_lead_days + ship_days)
     steps = []
 
-    def _add(label: str, d: date, kpi: str, why: str):
-        steps.append({"date": d.isoformat(), "days_from_today": (d - today).days, "task": label,
-                      "kpi": kpi, "why": why, "overdue": d < today})
+    def _add(key: str, label: str, d: date, kpi: str, why: str, **extra: Any):
+        # `key`/`slot` cố định để FE lưu tick & tự ghi nhận đúng bước, dù thứ tự hiển thị (theo ngày) thay đổi mỗi ngày
+        steps.append({"key": key, "slot": PLAYBOOK_SLOTS[key], "date": d.isoformat(), "days_from_today": (d - today).days,
+                      "task": label, "kpi": kpi, "why": why, "overdue": d < today, **extra})
+
+    # Luôn giữ thứ tự hợp lý listing ≤ thử nhỏ < quyết định ≤ hạn chốt, kể cả khi còn ít ngày
+    listing_d = min(cut_off, today + timedelta(days=min(3, total_days // 4)))
+    test_d = min(cut_off, max(listing_d + timedelta(days=1), today + timedelta(days=min(7, max(1, total_days // 3)))))
+    decide_d = min(cut_off, max(test_d + timedelta(days=1), today + timedelta(days=min(10, max(2, total_days // 2)))))
 
     kw = idea.get("keyword") or idea.get("title") or ""
-    _add(f"Đăng listing & gắn tag «{kw}»", min(cut_off, today + timedelta(days=min(3, max(0, total_days)))),
+    _add("listing", f"Đăng listing & gắn tag «{kw}»", listing_d,
          "Listing hiển thị trên tìm kiếm", "Sàn cần vài ngày để index; đăng sớm giúp thu thập đánh giá trước đỉnh.")
-    _add("Thử nhỏ 20 đơn đầu / ngân sách có dừng lỗ", today + timedelta(days=min(7, max(1, total_days // 3))),
-         "≥ ngưỡng hòa vốn ở bước thử", "Xác nhận chuyển đổi thật trước khi gom hàng số lượng lớn.")
-    _add("Quyết định nhân rộng hay dừng", today + timedelta(days=min(10, max(2, total_days // 2))),
+    _add("test", f"Thử nhỏ {PLAYBOOK_TEST_ORDERS} đơn đầu / ngân sách có dừng lỗ", test_d,
+         "≥ ngưỡng hòa vốn ở bước thử", "Xác nhận chuyển đổi thật trước khi gom hàng số lượng lớn.",
+         target_orders=PLAYBOOK_TEST_ORDERS)
+    _add("decide", "Quyết định nhân rộng hay dừng", decide_d,
          "Đạt tiêu chí → nhập thêm; không đạt → dừng", "Giảm rủi ro tồn kho sau dịp.")
-    _add("Chốt sản xuất / nhập hàng", produce_deadline, "Đủ tồn trước hạn ship",
+    _add("produce", "Chốt sản xuất / nhập hàng", produce_deadline, "Đủ tồn trước hạn ship",
          f"Trừ {shop_lead_days} ngày làm hàng + {ship_days} ngày vận chuyển khỏi hạn chốt đơn.")
-    _add("Hạn chốt nhận đơn an toàn", cut_off, "Đóng nhận đơn giao kịp lễ", "Sau mốc này giao trễ rủi ro cao.")
+    _add("cutoff", "Hạn chốt nhận đơn an toàn", cut_off, "Đóng nhận đơn giao kịp lễ", "Sau mốc này giao trễ rủi ro cao.")
 
     exp = None
-    if uplift and base_orders_per_day is not None:
+    if base_orders_per_day is not None:
+        # Mức ngày thường (không nhân độ nâng lượt tìm kiếm, vì lượt tìm không phải số đơn)
         days = max(1, (event - max(today, event - timedelta(days=30))).days)
-        exp = {q: round(base_orders_per_day * days * float(uplift.get(f"uplift_{q}", 1.0)), 1) for q in ("p10", "p50", "p90")}
+        exp = normal_day_orders(base_orders_per_day, days)
     return {"idea": idea.get("title"), "steps": sorted(steps, key=lambda s: s["date"]),
             "expected_orders_next_30d": exp, "feasible": total_days >= shop_lead_days + ship_days,
             "days_left_to_cut_off": total_days}

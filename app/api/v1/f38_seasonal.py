@@ -1,5 +1,4 @@
 import logging
-import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -15,7 +14,10 @@ from app.api.v1._live import db_live, la_shop_live, san_pham_live
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, build_meta, ok
 from app.core import calendar_vn
+from app.core.category_groups import GROUP_LABELS, detect_shop_group
 from app.core.redis_cache import cache_get_json, cache_set_json
+from app.core.shop_lead_time import load_shop_lead_time
+from app.core.keyword_match import build_product_index
 from app.core.seasonal_intel import keyword_shop_coverage, summarize_industry_orders
 from app.services.f38.f38_campaigns import (
     attach_expected_orders,
@@ -28,6 +30,7 @@ from app.services.f38.f38_constants import (
     CAT_LABELS,
     CAT_OCCASION_KEYWORDS,
     EXTERNAL_FRESHNESS_DAYS,
+    VALID_ORDER_FILTER,
     LUI_SAN_XUAT,
     MART,
     TZ_VN,
@@ -37,10 +40,11 @@ from app.services.f38.f38_constants import (
 from app.services.f38.f38_funnel_and_metrics import (
     build_route_risks,
     build_scorecard_metrics as _build_scorecard_metrics,
-    count_shop_orders_for_funnel,
-    tinh_campaign_funnel_va_kenh as _tinh_campaign_funnel_va_kenh,
-    tinh_motivation_retail as _tinh_motivation_retail,
 )
+from app.core.cost_basis import cost_basis_label, load_cost_model
+from app.core.market_freshness import load_market_freshness
+from app.core.seasonal_uplift import load_platform_order_times, market_uplift_for_camp
+from app.services.f38.f38_keywords import _load_f42_listings
 from app.services.f38.f38_keywords import tinh_opportunity_keywords as _tinh_opportunity_keywords
 from app.services.f38.f38_market_ideas import (
     build_market_blueprints,
@@ -72,31 +76,30 @@ router = APIRouter()
 log = logging.getLogger("f38_seasonal")
 
 
-def _detect_shop_category(shop_id: str, explicit_slug: Optional[str]) -> str:
-    """Suy đoán ngành hàng từ sản phẩm của shop bằng word-boundary regex; mặc định 'tong-hop' nếu không rõ."""
-    if explicit_slug and explicit_slug != "tong-hop":
-        return explicit_slug
+def _category_lookup() -> Dict[str, tuple]:
+    """{category_id: (slug, name)} của danh mục thật trên sàn (cache 1 giờ)."""
+    cached = cache_get_json("seasonal:categories:v1")
+    if isinstance(cached, dict):
+        return {k: tuple(v) for k, v in cached.items()}
+    try:
+        cats = {str(c["_id"]): (c.get("slug") or "", c.get("name") or "")
+                for c in db_live()["categories"].find({}, {"slug": 1, "name": 1})}
+    except Exception as exc:
+        log.warning("seasonal: categories lookup failed: %s", exc)
+        return {}
+    cache_set_json("seasonal:categories:v1", {k: list(v) for k, v in cats.items()}, ttl_seconds=3600)
+    return cats
+
+
+def _detect_shop_category(shop_id: str, explicit_slug: Optional[str]) -> Dict[str, Any]:
+    """Nhóm ngành của shop: seller chọn → dùng; không thì theo danh mục thật của sản phẩm (app.core.category_groups)."""
+    if explicit_slug and explicit_slug in GROUP_LABELS and explicit_slug != "tong-hop":
+        return {"slug": explicit_slug, "name": GROUP_LABELS[explicit_slug], "source": "seller_selected", "share_pct": None}
     if not la_shop_live(shop_id):
-        return explicit_slug or "tong-hop"
-    live_prods_cat = san_pham_live(shop_id) or []
-    if not live_prods_cat:
-        return explicit_slug or "tong-hop"
-    cat_text = " ".join(
-        f"{p.get('title', '')} {' '.join(p.get('categories') or [])} {' '.join(p.get('tags') or [])}".lower()
-        for p in live_prods_cat
-    )
-    cat_rules = [
-        ("phu-kien", ("phụ kiện", "túi xách", "ví", "thắt lưng", "kính mát", "mắt kính", "nón", "mũ", "trang sức", "khăn")),
-        ("nha-cua", ("gia dụng", "nhà cửa", "bếp", "cốc", "ly sứ", "ly thủy tinh", "bình giữ nhiệt", "móc treo", "đèn")),
-        ("thu-cong-qua-tang", ("trang trí", "decor", "tranh", "khung ảnh", "tượng", "nến", "hoa giả", "quà tặng", "thủ công")),
-        ("thoi-trang", ("thời trang", "áo", "váy", "đầm", "quần", "hoodie", "khoác", "set đồ")),
-    ]
-    best_cat, best_hits = "tong-hop", 0
-    for c_slug, c_words in cat_rules:
-        hits = sum(len(re.findall(rf"(?<!\w){re.escape(w)}(?!\w)", cat_text)) for w in c_words)
-        if hits > best_hits:
-            best_cat, best_hits = c_slug, hits
-    return best_cat
+        return {"slug": "tong-hop", "name": GROUP_LABELS["tong-hop"], "source": "none", "share_pct": None}
+    products = san_pham_live(shop_id) or []
+    has_cat_ids = any(p.get("category_ids") for p in products)
+    return detect_shop_group(products, _category_lookup() if has_cat_ids else {})
 
 
 def _compute_platform_order_rates(shop_id: str, cat_slug: Optional[str], camp_id: str) -> Dict[str, Any]:
@@ -107,8 +110,7 @@ def _compute_platform_order_rates(shop_id: str, cat_slug: Optional[str], camp_id
         return cached
 
     query: Dict[str, Any] = {
-        "order_status": {"$in": ["DELIVERED", "COMPLETED", "PAID"]},
-        "is_simulated": {"$ne": True},
+        **VALID_ORDER_FILTER,
         "seed_ref": {"$exists": False},
     }
     if la_shop_live(shop_id):
@@ -152,7 +154,8 @@ def seasonal(
 ):
     # 1. Xác định ngày hiện tại (giờ VN), ngành hàng shop và danh sách đối thủ tham chiếu
     hom_nay = datetime.now(TZ_VN).date()
-    cat_slug = _detect_shop_category(shop_id, category_slug or categoryId)
+    seller_category = _detect_shop_category(shop_id, category_slug or categoryId)
+    cat_slug = seller_category["slug"]
     target_camp_id = campaign_id or campaignId
 
     all_competitors = cache_get_json("seasonal:all_competitors:v1")
@@ -163,24 +166,23 @@ def seasonal(
         cache_set_json("seasonal:all_competitors:v1", all_competitors, ttl_seconds=1800)
 
     # 2. Lịch toàn bộ dịp mua sắm trong năm & chọn chiến dịch đang xem
-    all_campaigns, active_camp = build_all_campaigns(hom_nay, cat_slug, target_camp_id)
+    # Lead time đo từ đơn đã giao của shop (p90 + dự phòng); thiếu mẫu thì dùng mặc định của từng dịp
+    shop_lead = load_shop_lead_time(shop_id)
+    shop_lead_days = shop_lead.get("lead_days") if shop_lead else None
+    all_campaigns, active_camp = build_all_campaigns(hom_nay, cat_slug, target_camp_id, shop_lead_days=shop_lead_days)
     primary_kw = active_camp["search_keywords"][0] if active_camp["search_keywords"] else "quà tặng"
     trend_series = _lay_chuoi_trend_cho_tu_khoa(primary_kw)
     stl = _tinh_stl_that(trend_series, chu_ky=52)
 
     ev_info = next(e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == active_camp["id"])
-    ev_win = calendar_vn.calculate_occasion_window(ev_info, hom_nay) or {
+    ev_win = calendar_vn.calculate_occasion_window(ev_info, hom_nay, shop_lead_days=shop_lead_days) or {
         "event_date": hom_nay.isoformat(),
         "cut_off_date": (hom_nay + timedelta(days=21)).isoformat(),
     }
     target_ev_d = date.fromisoformat(ev_win["event_date"])
     cut_off_d = date.fromisoformat(ev_win["cut_off_date"])
 
-    event_dates_by_year: Dict[int, date] = {}
-    for yr in range(2021, hom_nay.year + 2):
-        tw = calendar_vn.calculate_occasion_window(ev_info, date(yr, 6, 1))
-        if tw and tw.get("event_date"):
-            event_dates_by_year[yr] = date.fromisoformat(tw["event_date"])
+    event_dates_by_year: Dict[int, date] = calendar_vn.event_dates_by_year(ev_info, range(2021, hom_nay.year + 2))
     past_ev = {y: d for y, d in event_dates_by_year.items() if d < hom_nay}
 
     # 3. Đơn hàng lịch sử của shop & tổng hợp đơn toàn sàn (cache Redis 30 phút)
@@ -204,7 +206,13 @@ def seasonal(
 
     # 4. Sản phẩm thị trường đa sàn & Hồ sơ Tiềm năng 5 lớp
     raw_ext_ready, raw_ext_pod = fetch_external_market_catalog(cat_slug, active_camp, hom_nay)
-    real_blueprints = build_market_blueprints(raw_ext_ready, cat_slug, active_camp, primary_kw)
+    # Giá vốn: đo từ dòng hàng trong đơn của shop, thiếu thì toàn sàn, sau cùng mới ước tính (dùng chung với BE)
+    cost_model = load_cost_model(shop_id, hom_nay)
+    real_blueprints = build_market_blueprints(
+        raw_ext_ready, cat_slug, active_camp, primary_kw,
+        market_listings=_load_f42_listings(hom_nay, _cutoff_utc_dt(hom_nay, EXTERNAL_FRESHNESS_DAYS)),
+        cost_model=cost_model,
+    )
     potential_profiles = build_potential_profiles(
         real_blueprints, raw_ext_ready, event_dates_by_year, target_ev_d, cut_off_d, hom_nay
     )
@@ -252,27 +260,37 @@ def seasonal(
     )
 
     events_payload: List[Dict[str, Any]] = []
-    for kw in active_camp["search_keywords"][:5]:
+    for idx, kw in enumerate(active_camp["search_keywords"][:5]):
         kw_pts = _lay_chuoi_trend_cho_tu_khoa(kw)
-        recent_vals = [p[1] for p in kw_pts[-8:]] if kw_pts else [40.0]
-        events_payload.append(
-            {
-                "name": kw,
-                "peak_week_of_year": target_ev_d.isocalendar()[1],
-                "amplitude": round((sum(recent_vals) / len(recent_vals)) / 100.0, 2),
-                "launch_window": active_camp["launch_window"],
-                "ready_to_ship_ideas": ready_ideas,
-                "pod_blanks": pod_blanks,
-            }
-        )
+        recent_vals = [p[1] for p in kw_pts[-8:]]
+        ev_item: Dict[str, Any] = {
+            "name": kw,
+            "peak_week_of_year": target_ev_d.isocalendar()[1],
+            # mức quan tâm 8 tuần gần nhất (0–1); không có chuỗi thì để trống thay vì giả 0.4
+            "amplitude": round((sum(recent_vals) / len(recent_vals)) / 100.0, 2) if recent_vals else None,
+            "launch_window": active_camp["launch_window"],
+        }
+        if idx == 0:
+            # Chỉ từ khóa chính mang danh sách ý tưởng/phôi (bảng điều khiển seller đọc events[0]); tránh lặp 5 lần
+            ev_item["ready_to_ship_ideas"] = ready_ideas
+            ev_item["pod_blanks"] = pod_blanks
+        events_payload.append(ev_item)
 
     # 7. Sản phẩm thật của shop & độ sẵn sàng đón dịp
-    shop_products, matching_shop_products = load_and_audit_shop_products(shop_id, active_camp, spending_growth_pct)
+    shop_products, matching_shop_products = load_and_audit_shop_products(shop_id, active_camp, spending_growth_pct, hom_nay=hom_nay)
+    product_index = build_product_index(shop_products)
     for idea in ready_ideas:
-        idea["shop_coverage"] = keyword_shop_coverage(idea.get("keyword") or idea["title"], shop_products)
+        idea["shop_coverage"] = keyword_shop_coverage(
+            idea.get("keyword") or idea["title"], shop_products, index=product_index
+        )
 
     # 8. Dự kiến đơn từng dịp, kế hoạch áp dụng, báo cáo thành quả & câu chuyện 4 chương
-    attach_expected_orders(all_campaigns, shop_orders_hist, hom_nay)
+    # Đơn dự kiến = mức ngày thường × mức tăng đo từ dữ liệu bán thật (đơn shop/toàn sàn các mùa trước, tốc độ bán Tiki)
+    attach_expected_orders(
+        all_campaigns, shop_orders_hist, hom_nay,
+        platform_orders=load_platform_order_times(hom_nay),
+        market_uplift=lambda camp, st, ev: market_uplift_for_camp(camp, st, ev, hom_nay),
+    )
     impact, apply_playbooks, story = build_story_and_playbooks(
         active_camp=active_camp,
         cat_slug=cat_slug,
@@ -299,23 +317,9 @@ def seasonal(
         orders_growth_pct=orders_growth_pct,
         stl=stl,
         shop_products=shop_products,
+        past_event_dates=sorted(past_ev.values()),
     )
-    shop_base_orders, actual_camp_orders, actual_views, actual_cart_adds = count_shop_orders_for_funnel(
-        shop_id, active_camp, shop_products, matching_shop_products
-    )
-    funnel_data = _tinh_campaign_funnel_va_kenh(
-        active_camp=active_camp,
-        cat_slug=cat_slug,
-        baseline_spending=baseline_spending,
-        occasion_spending=occasion_spending,
-        orders_growth_pct=orders_growth_pct,
-        spending_growth_pct=spending_growth_pct,
-        hom_nay=hom_nay,
-        base_orders=shop_base_orders,
-        actual_camp_orders=actual_camp_orders,
-        actual_views=actual_views,
-        actual_cart_adds=actual_cart_adds,
-    )
+    # Phễu, kênh bán và động cơ mua do backend tính từ đơn/sự kiện thật của shop (một nguồn duy nhất)
 
     # 10. Bản phác thảo định lượng (Data-Grounded Blueprint) để scope chặt cho LLM
     idea_draft_blueprint = build_idea_draft_blueprint(
@@ -353,6 +357,7 @@ def seasonal(
             "active_campaign": active_camp,
             "occasion_traits": occasion_traits,
             "selected_category_slug": cat_slug,
+            "seller_category": seller_category,
             "keyword": active_camp["name"],
             "primary_keyword": primary_kw,
             "decomposition": stl,
@@ -361,19 +366,25 @@ def seasonal(
             "sample_size_n": measured_sample_size,
             "measured_cycles": measured_cycles,
             "route_risks": route_risks,
+            "shop_lead_time": shop_lead,
+            # % tăng LƯỢT TÌM KIẾM của dịp (Google Trends), không phải % tăng đơn
+            "search_uplift_pct": traits_bundle.get("search_uplift_pct"),
             "scorecard_metrics": scorecard_metrics,
             "opportunity_keywords": opportunity_keywords,
-            "campaign_funnel": funnel_data.get("campaign_funnel"),
-            "channel_breakdown": funnel_data.get("channel_breakdown"),
-            "motivation_breakdown": funnel_data.get("motivation_breakdown"),
+            # Mỗi nguồn thị trường được thu đến ngày nào; trang hiện cảnh báo khi nguồn cũ
+            "data_freshness": load_market_freshness(hom_nay),
+            "cost_model": {**cost_model, "basis": cost_basis_label(cost_model)},
             "events": events_payload,
             "potential_profiles": potential_profiles,
             "campaign_radar": campaign_radar,
             "ready_to_ship_ideas": ready_ideas,
             "pod_blanks": pod_blanks,
             "opportunity_clusters": opportunity_clusters,
-            "shop_products": shop_products,
-            "matching_shop_products": matching_shop_products,
+            # Mô tả chỉ dùng để so khớp từ khóa, không gửi về trình duyệt
+            "shop_products": [{k: v for k, v in p.items() if k != "description"} for p in shop_products],
+            "matching_shop_products": [
+                {k: v for k, v in p.items() if k != "description"} for p in matching_shop_products
+            ],
             "story": story,
             "apply_playbooks": apply_playbooks,
             "impact": impact,

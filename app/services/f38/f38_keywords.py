@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from app.api.v1._live import db_live
 from app.api.v1._mart import db
 from app.core.redis_cache import cache_get_json, cache_set_json
+from app.core.keyword_match import build_product_index
 from app.core.seasonal_intel import keyword_shop_coverage
 from app.core.seasonal_opportunity import (
     TREND_MAX_STALE_DAYS,
@@ -18,7 +19,22 @@ from app.services.f38.f38_constants import (
     VC_ORDER_WINDOW_DAYS,
     cutoff_utc_dt,
 )
+from app.core.listing_intel.trend_store import weekly_series
+from app.core.seasonal_keyword_pool import (
+    ORIGIN_LABELS,
+    build_keyword_pool,
+    f42_signals_for,
+    foreign_markers,
+    normalize_kw,
+    occasion_markers,
+    occasion_terms,
+    seasonal_trend_keywords,
+    stable_id,
+)
 from app.services.f38.f38_trends_stl import load_vietcraft_real_sold_map, tra_cuu_trend
+
+MAX_KEYWORDS = 15
+ONSITE_SEARCH_DAYS = 30
 
 log = logging.getLogger("f38_seasonal")
 
@@ -31,6 +47,7 @@ def tinh_opportunity_keywords(
     orders_growth_pct: int,
     stl: Dict[str, Any],
     shop_products: Optional[List[Dict[str, Any]]] = None,
+    past_event_dates: Optional[List[date]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Tính danh sách Từ khóa hot & Thẻ Tag đón đầu dịp:
@@ -108,29 +125,13 @@ def tinh_opportunity_keywords(
                     .limit(300)
                 )
                 ext_docs = dedupe_external_docs(occ_docs + cat_docs, target_occasion_id=camp_id)
-            cache_set_json(ext_cache_key, {"docs": ext_docs, "stale": ext_data_stale}, ttl_seconds=1800)
+            cache_set_json(ext_cache_key, {"docs": ext_docs, "stale": ext_data_stale}, ttl_seconds=21600)
         except Exception as exc:
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             ext_docs = []
 
-    # Bổ sung tín hiệu từ `market_listings` (crawler F42 Etsy + Tiki) — lọc độ tươi 30 ngày
-    f42_cache_key = f"seasonal:opp_f42_market:{hom_nay.isoformat()}:v2"
-    f42_listings = cache_get_json(f42_cache_key)
-    if not isinstance(f42_listings, list):
-        f42_listings = []
-        try:
-            f42_listings = list(
-                db()["market_listings"]
-                .find(
-                    {"is_valid": True, "fetched_at": {"$gte": fresh_since_dt}},
-                    {"_id": 1, "source": 1, "keyword": 1, "title": 1, "price": 1, "sold": 1, "review_count": 1},
-                )
-                .limit(600)
-            )
-            cache_set_json(f42_cache_key, f42_listings, ttl_seconds=1800)
-        except Exception as exc:
-            log.warning("seasonal: market_listings unavailable: %s", exc)
-            f42_listings = []
+    # Tín hiệu bán thật từ crawler giá F42 (Tiki + Etsy, 2 lần/ngày) trong `data-collection.market_price_listing`
+    f42_listings = _load_f42_listings(hom_nay, fresh_since_dt)
 
     kw_stats: Dict[str, Dict[str, Any]] = {}
     seen_ext_ids_per_kw: Dict[str, set] = {}
@@ -225,12 +226,12 @@ def tinh_opportunity_keywords(
                         "price": int(pp.get("original_price") or pp.get("price") or pp.get("retail_price") or 0),
                     }
                 )
-            cache_set_json(plat_cache_key, platform_prods, ttl_seconds=1800)
+            cache_set_json(plat_cache_key, platform_prods, ttl_seconds=21600)
         except Exception as exc:
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
             platform_prods = []
 
-    # 2. Ưu tiên từ khóa khớp ĐÚNG DỊP + NGÀNH HÀNG trước, sau đó bổ sung seed dịp và từ khóa bán chạy ngành
+    # 2. Ứng viên từ nhiều nguồn thu định kỳ (catalog, Trends, truy vấn đang tăng, tìm kiếm trên sàn, crawler F42)
     occasion_kw_items = [
         k
         for k, _ in sorted(
@@ -247,32 +248,31 @@ def tinh_opportunity_keywords(
             reverse=True,
         )
     ]
-
-    occasion_seeds: List[str] = []
     cat_kw_str = (
         CAT_OCCASION_KEYWORDS.get(cat_slug, {}).get(camp_id)
         or CAT_OCCASION_KEYWORDS.get("tong-hop", {}).get(camp_id)
         or ""
     )
-    for part in cat_kw_str.split(","):
-        s = part.strip().lower()
-        if s and s not in occasion_kw_items and s not in occasion_seeds:
-            occasion_seeds.append(s)
-    for skw in active_camp.get("search_keywords", []):
-        s = (skw or "").strip().lower()
-        if s and s not in occasion_kw_items and s not in occasion_seeds:
-            occasion_seeds.append(s)
-
-    candidate_tags: List[str] = []
-    for k in occasion_kw_items + occasion_seeds + general_kw_items:
-        if k not in candidate_tags:
-            candidate_tags.append(k)
-        if len(candidate_tags) >= 10:
-            break
+    occasion_seeds = [x.strip() for x in cat_kw_str.split(",") if x.strip()] + list(active_camp.get("search_keywords") or [])
+    seasonal_kws = [k for k, _ in seasonal_trend_keywords(weekly_series(), past_event_dates or [])]
+    pool = build_keyword_pool(
+        terms=occasion_terms(occasion_seeds) | occasion_markers(camp_id),
+        foreign_terms=foreign_markers(camp_id),
+        catalog_occasion=occasion_kw_items,
+        seeds=occasion_seeds,
+        seasonal_trends=seasonal_kws,
+        rising_related=_load_rising_queries(),
+        onsite_queries=_load_onsite_queries(hom_nay),
+        f42_keywords=sorted({normalize_kw(k) for ml in f42_listings for k in (ml.get("keywords") or [])}),
+        catalog_general=general_kw_items,
+        limit=MAX_KEYWORDS,
+    )
+    candidate_tags: List[str] = [x["tag"] for x in pool]
+    origins_by_tag: Dict[str, List[str]] = {x["tag"]: x["origins"] for x in pool}
 
     # 3. Thu thập đặc trưng thô đã khử trùng cho từng từ khóa ứng viên
     raw_rows: List[Dict[str, Any]] = []
-    for idx, tag in enumerate(candidate_tags[:10]):
+    for idx, tag in enumerate(candidate_tags):
         st = kw_stats.get(tag)
         s_obj, matched_key, match_kind = tra_cuu_trend(tag)
         pts = [(d.strftime("%Y-%m-%d"), float(v)) for d, v in s_obj.items()] if s_obj is not None else []
@@ -300,26 +300,14 @@ def tinh_opportunity_keywords(
                 if pv > 0:
                     plat_prices.append(pv)
 
-        f42_etsy_fav = 0
-        f42_etsy_hits = 0
-        f42_prices: List[int] = []
-        for ml in f42_listings:
-            if str(ml.get("source") or "").lower() != "etsy":
-                continue
-            ml_id = str(ml.get("_id") or "")
-            if ml_id and ml_id in seen_ext_pids:
-                continue
-            ml_kw = str(ml.get("keyword") or "").strip().lower()
-            ml_title = str(ml.get("title") or "").lower()
-            if ml_kw == t_low or (len(t_low) >= 4 and t_low in ml_title):
-                f42_etsy_hits += 1
-                f42_etsy_fav += int(ml.get("review_count") or 0)
-                mp = int(ml.get("price") or 0)
-                if mp > 0:
-                    f42_prices.append(mp)
+        f42 = f42_signals_for(tag, f42_listings, skip_ids=seen_ext_pids)
+        f42_etsy_hits = f42["etsy_hits"]
+        f42_etsy_fav = f42["etsy_reviews"]
+        f42_tiki_hits = f42["tiki_hits"]
+        f42_prices: List[int] = f42["prices"]
 
-        n_obs = (st["listing_count"] if st else 0) + plat_hits + f42_etsy_hits
-        sold_real = (int(st["sold_sum"]) if st else 0) + plat_sold
+        n_obs = (st["listing_count"] if st else 0) + plat_hits + f42_etsy_hits + f42_tiki_hits
+        sold_real = (int(st["sold_sum"]) if st else 0) + plat_sold + f42["tiki_sold"]
         etsy_favorers = (int(st["etsy_favorers"]) if st else 0) + f42_etsy_fav
         etsy_listings = (int(st["etsy_listings"]) if st else 0) + f42_etsy_hits
         sellers_real = len(all_sellers)
@@ -335,6 +323,9 @@ def tinh_opportunity_keywords(
         if f42_etsy_hits > 0:
             plats_in_kw.add("Etsy")
             platform_counts["Etsy"] = platform_counts.get("Etsy", 0) + f42_etsy_hits
+        if f42_tiki_hits > 0:
+            plats_in_kw.add("Tiki")
+            platform_counts["Tiki"] = platform_counts.get("Tiki", 0) + f42_tiki_hits
         pod_count = int(st["pod_count"]) if st else 0
         customizable_count = int(st["customizable_count"]) if st else 0
 
@@ -367,6 +358,7 @@ def tinh_opportunity_keywords(
     scored_list = score_opportunity_keywords(raw_rows, as_of=hom_nay)
 
     opportunity_keywords: List[Dict[str, Any]] = []
+    product_index = build_product_index(shop_products or [])  # chuẩn hóa 1 lần cho mọi từ khóa
     for row, sc in zip(raw_rows, scored_list):
         idx = row["idx"]
         tag = row["tag"]
@@ -389,6 +381,9 @@ def tinh_opportunity_keywords(
         breakdown = sc["score_breakdown"]
 
         has_exact_trend = match_kind == "exact" and trend_norm is not None
+        if n_obs == 0 and not has_exact_trend:
+            # Không có listing đang bán hay chuỗi Trends nào cho từ khóa: không hiện như một "cơ hội"
+            continue
 
         sources: List[str] = []
         if "Tiki" in row["platforms"]:
@@ -399,6 +394,10 @@ def tinh_opportunity_keywords(
             sources.append(f"VietCraft Live (đơn hoàn tất thật {VC_ORDER_WINDOW_DAYS} ngày gần nhất)")
         if has_exact_trend:
             sources.append("Google Trends Việt Nam (52 tuần đến hiện tại, khớp chính xác)")
+        if "onsite_search" in origins_by_tag.get(tag, []):
+            sources.append(f"Tìm kiếm trên VietCraft ({ONSITE_SEARCH_DAYS} ngày gần nhất)")
+        if "trends_rising" in origins_by_tag.get(tag, []):
+            sources.append("Google Trends: truy vấn liên quan đang tăng")
         if not sources:
             sources.append("Từ khóa chuẩn ngành hàng theo dịp")
 
@@ -469,7 +468,7 @@ def tinh_opportunity_keywords(
         if is_trend_stale and trend_stale_days is not None:
             caveats.insert(0, f"Chuỗi Google Trends tham khảo trễ {trend_stale_days} ngày so với hôm nay.")
 
-        cov = keyword_shop_coverage(tag, shop_products or [])
+        cov = keyword_shop_coverage(tag, shop_products or [], index=product_index)
         if cov["gap"] and shop_products:
             kw_action = {
                 "type": "create_listing",
@@ -502,8 +501,10 @@ def tinh_opportunity_keywords(
 
         opportunity_keywords.append(
             {
-                "id": f"kw_{camp_id}_{idx}",
+                "id": stable_id("kw", camp_id, tag),
                 "tag": tag,
+                "origins": origins_by_tag.get(tag, []),
+                "origin_labels": [ORIGIN_LABELS[o] for o in origins_by_tag.get(tag, []) if o in ORIGIN_LABELS],
                 "volume": display_vol,
                 "sold_count_real": sold_real,
                 "etsy_favorers": etsy_favorers,
@@ -534,7 +535,7 @@ def tinh_opportunity_keywords(
                 "shop_coverage": cov,
                 "action": kw_action,
                 "evidence": {
-                    "id": f"ev_kw_{camp_id}_{idx}",
+                    "id": "ev_" + stable_id("kw", camp_id, tag),
                     "definition": f"Điểm cơ hội cho từ khóa '{tag}' (ngành {cat_slug}) theo 1 công thức thống nhất: 50% Sức cầu + 50% Dư địa/Shop.",
                     "sources": sources,
                     "howObtained": how_obtained,
@@ -552,8 +553,10 @@ def tinh_opportunity_keywords(
             }
         )
 
+    # Từ khóa gắn với dịp lên trước; từ khóa chỉ "bán chạy trong ngành" để lấp chỗ trống xếp sau
     opportunity_keywords.sort(
         key=lambda x: (
+            any(o != "catalog_general" for o in x["origins"]),
             x["keyword_score"] is not None,
             x["keyword_score"] if x["keyword_score"] is not None else -1,
             x["sold_count_real"],
@@ -563,3 +566,69 @@ def tinh_opportunity_keywords(
     )
     return opportunity_keywords
 
+
+
+def _data_db():
+    from app.services.f42.orchestrator import _get_data_db
+
+    return _get_data_db()
+
+
+def _load_f42_listings(hom_nay: date, fresh_since_dt) -> List[Dict[str, Any]]:
+    key = f"seasonal:f42_price_listing:{hom_nay.isoformat()}:v3"
+    cached = cache_get_json(key)
+    if isinstance(cached, list):
+        return cached
+    try:
+        data_db = _data_db()
+        if data_db is None:
+            return []
+        rows = list(
+            data_db["market_price_listing"]
+            .find(
+                {"is_valid": True, "last_seen_at": {"$gte": fresh_since_dt}},
+                {"_id": 0, "external_id": 1, "source": 1, "keywords": 1, "title": 1, "price": 1, "sold": 1, "review_count": 1},
+            )
+            .limit(6000)
+        )
+        cache_set_json(key, rows, ttl_seconds=21600)
+        return rows
+    except Exception as exc:  # noqa: BLE001
+        log.warning("seasonal: market_price_listing unavailable: %s", exc)
+        return []
+
+
+def _load_rising_queries() -> List[str]:
+    try:
+        data_db = _data_db()
+        if data_db is None:
+            return []
+        rows = data_db["trend_related"].find({"kind": "rising"}, {"_id": 0, "query": 1}).limit(500)
+        return [str(r.get("query") or "") for r in rows]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("seasonal: trend_related unavailable: %s", exc)
+        return []
+
+
+def _load_onsite_queries(hom_nay: date) -> List[tuple]:
+    """Truy vấn tìm kiếm trên VietCraft trong 30 ngày gần nhất, kèm số lượt."""
+    key = f"seasonal:onsite_queries:{hom_nay.isoformat()}:v1"
+    cached = cache_get_json(key)
+    if isinstance(cached, list):
+        return [tuple(x) for x in cached]
+    try:
+        since = cutoff_utc_dt(hom_nay, ONSITE_SEARCH_DAYS)
+        rows = list(
+            db_live()["search_logs"].aggregate([
+                {"$match": {"created_at": {"$gte": since}, "keyword": {"$type": "string"}}},
+                {"$group": {"_id": {"$toLower": "$keyword"}, "n": {"$sum": 1}}},
+                {"$sort": {"n": -1}},
+                {"$limit": 500},
+            ])
+        )
+        out = [(str(r["_id"]), int(r["n"])) for r in rows]
+        cache_set_json(key, out, ttl_seconds=21600)
+        return out
+    except Exception as exc:  # noqa: BLE001
+        log.warning("seasonal: search_logs unavailable: %s", exc)
+        return []

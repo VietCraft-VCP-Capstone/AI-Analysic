@@ -43,6 +43,7 @@ QUERY_LOG_DAYS = 14         # chỉ lấy tiêu đề seller nhập trong 14 ng�
 QUERY_LOG_TOP = 60
 QUERY_HEAD_WORDS = 5        # cắt tiêu đề dài: tìm kiếm Tiki khớp tốt nhất với vài từ đầu
 HISTORY_KEEP = 60           # giữ 60 lần giá gần nhất (~1 tháng với 2 lần/ngày)
+SOLD_HISTORY_KEEP = 800     # số đã bán qua từng lượt cào (~1 năm): đo tốc độ bán thật theo mùa
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; VietCraftPriceBot/1.0)", "Accept": "application/json"}
 
 
@@ -218,8 +219,10 @@ def save_listings(db_data: Any, items: List[Dict[str, Any]]) -> int:
                 "$set": {**doc, "last_seen_at": it["fetched_at"]},
                 "$setOnInsert": {"first_seen_at": it["fetched_at"]},
                 "$addToSet": {"keywords": it["keyword"]},
-                "$push": {"price_history": {"$each": [{"price": it["price"], "at": it["fetched_at"]}],
-                                            "$slice": -HISTORY_KEEP}},
+                "$push": {
+                    "price_history": {"$each": [{"price": it["price"], "at": it["fetched_at"]}], "$slice": -HISTORY_KEEP},
+                    "sold_history": {"$each": [{"sold": int(it.get("sold") or 0), "at": it["fetched_at"]}], "$slice": -SOLD_HISTORY_KEEP},
+                },
             },
             upsert=True,
         ))

@@ -174,7 +174,50 @@ def _black_friday(year: int) -> date:
     return thursday + timedelta(days=1)
 
 
+def _nth_weekday(month: int, weekday: int, n: int):
+    """Ngày thứ `n` có thứ `weekday` (0 = Thứ Hai … 6 = Chủ Nhật) trong tháng."""
+    def fn(year: int) -> date:
+        first = date(year, month, 1)
+        return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
+    return fn
+
+
+# Kỳ nghỉ Tết của hãng vận chuyển (ước tính: ngừng lấy hàng ~4 ngày trước mùng 1, hoạt động lại ~mùng 6).
+# Chỉnh theo thông báo thực tế của hãng vận chuyển mỗi năm.
+CARRIER_TET_DAYS_BEFORE = 4
+CARRIER_TET_DAYS_AFTER = 5
+
+
+def carrier_tet_closure(year: int):
+    """(ngày đầu, ngày cuối) hãng vận chuyển nghỉ Tết của năm âm lịch bắt đầu trong `year`."""
+    tet = get_tet_date(year).date()
+    return tet - timedelta(days=CARRIER_TET_DAYS_BEFORE), tet + timedelta(days=CARRIER_TET_DAYS_AFTER)
+
+
+def _carrier_closed(d: date) -> bool:
+    for y in (d.year - 1, d.year, d.year + 1):
+        a, b = carrier_tet_closure(y)
+        if a <= d <= b:
+            return True
+    return False
+
+
+def cut_off_for(event_date: date, lead_days: int) -> date:
+    """Hạn chốt đơn = đếm lùi `lead_days` ngày làm hàng + giao từ hôm trước ngày lễ, bỏ qua ngày hãng vận chuyển nghỉ Tết."""
+    d = event_date
+    counted = 0
+    while counted < lead_days:
+        d -= timedelta(days=1)
+        if not _carrier_closed(d):
+            counted += 1
+    return d
+
+
 SHOPPING_EVENTS = [
+    {"key": "tet_duong_lich", "name": "Tết Dương lịch 1/1", "prep_days": 28, "lead_time_days": 10, "groups": ALL_GROUPS,
+     "date_fn": _fixed(1, 1), "icon": "calendar", "badge": "Năm mới dương lịch",
+     "category_focus": "Lịch năm mới, sổ kế hoạch, quà tặng đầu năm, đồ trang trí tiệc",
+     "default_search_keywords": ["quà tặng", "quà năm mới", "lịch năm mới"]},
     {"key": "tet", "name": "Tết Nguyên Đán", "prep_days": 45, "lead_time_days": 18, "groups": ALL_GROUPS,
      "date_fn": lambda y: get_tet_date(y).date(), "icon": "sparkles", "badge": "Đỉnh điểm sức mua toàn sàn",
      "category_focus": "Quà biếu Tết, bao lì xì, áo dài cách tân, hộp quà gỗ/gốm, vật phẩm phong thủy",
@@ -191,19 +234,37 @@ SHOPPING_EVENTS = [
      "groups": ["fashion", "shoes", "sport"], "date_fn": _fixed(4, 30), "icon": "sun", "badge": "Dịp du lịch & dã ngoại hè",
      "category_focus": "Áo thun du lịch, mũ nón, túi tote đi biển, bình giữ nhiệt",
      "default_search_keywords": ["áo thun", "áo phông nam", "áo phông nữ", "in áo thun", "túi tote"]},
+    {"key": "ngay_cua_me", "name": "Ngày của Mẹ", "prep_days": 21, "lead_time_days": 10,
+     "groups": ["fashion", "bags", "accessories", "home"], "date_fn": _nth_weekday(5, 6, 2), "icon": "heart",
+     "badge": "Chủ Nhật thứ 2 tháng 5",
+     "category_focus": "Quà tặng mẹ: khăn, túi, đồ gia dụng in thông điệp, set chăm sóc",
+     "default_search_keywords": ["quà tặng mẹ", "quà tặng"]},
     {"key": "1/6", "name": "Quốc tế Thiếu nhi 1/6", "prep_days": 21, "lead_time_days": 9,
      "groups": ["fashion", "shoes", "sport"], "date_fn": _fixed(6, 1), "icon": "smile", "badge": "Quà tặng trẻ em & gia đình",
      "category_focus": "Áo gia đình, đồ chơi gỗ mộc, gối ôm in hình thú",
      "default_search_keywords": ["áo gia đình", "quà tặng", "móc khóa"]},
+    {"key": "ngay_cua_cha", "name": "Ngày của Cha", "prep_days": 21, "lead_time_days": 10,
+     "groups": ["fashion", "accessories", "home"], "date_fn": _nth_weekday(6, 6, 3), "icon": "heart",
+     "badge": "Chủ Nhật thứ 3 tháng 6",
+     "category_focus": "Quà tặng bố: áo thun in chữ, ví, cốc, bình giữ nhiệt",
+     "default_search_keywords": ["quà tặng bố", "quà tặng"]},
     {"key": "khai_giang", "name": "Tựu trường & Khai giảng 5/9", "prep_days": 35, "lead_time_days": 14,
      "groups": ["bags", "shoes", "fashion", "sport", "accessories"], "date_fn": _fixed(9, 5), "icon": "backpack", "badge": "Dịp tựu trường & áo lớp",
      "category_focus": "Áo lớp/áo nhóm theo yêu cầu, balo canvas, sổ tay bìa da, móc khóa thẻ tên",
      "default_search_keywords": ["áo lớp", "áo nhóm", "áo đồng phục", "túi tote", "móc khóa"]},
+    {"key": "9/9", "name": "Siêu sale 9/9", "prep_days": 21, "lead_time_days": 7,
+     "groups": ALL_GROUPS, "date_fn": _fixed(9, 9), "icon": "zap", "badge": "Ngày sale đôi của sàn",
+     "category_focus": "Combo giảm giá, voucher shop, hàng bán chạy sẵn kho",
+     "default_search_keywords": ["áo thun", "quà tặng"]},
     {"key": "trung_thu", "name": "Tết Trung Thu", "prep_days": 30, "lead_time_days": 12,
      "groups": ["home", "fashion", "accessories"],
      "date_fn": lambda y: get_mid_autumn_date(y), "icon": "moon", "badge": "Tết đoàn viên truyền thống",
      "category_focus": "Hộp bánh trà quà tặng, lồng đèn giấy mộc, áo thun đoàn viên gia đình",
      "default_search_keywords": ["quà trung thu", "áo gia đình", "quà tặng"]},
+    {"key": "10/10", "name": "Siêu sale 10/10", "prep_days": 21, "lead_time_days": 7,
+     "groups": ALL_GROUPS, "date_fn": _fixed(10, 10), "icon": "zap", "badge": "Ngày sale đôi của sàn",
+     "category_focus": "Combo giảm giá, voucher shop, hàng bán chạy sẵn kho",
+     "default_search_keywords": ["áo thun", "quà tặng"]},
     {"key": "20/10", "name": "Phụ nữ Việt Nam 20/10", "prep_days": 28, "lead_time_days": 10,
      "groups": ["fashion", "bags", "accessories", "home"], "date_fn": _fixed(10, 20), "icon": "heart", "badge": "Dịp quà tặng thu đông",
      "category_focus": "Set quà tri ân mẹ & cô giáo, khăn choàng, bình gốm cắm hoa mộc",
@@ -220,6 +281,10 @@ SHOPPING_EVENTS = [
      "groups": ["fashion", "bags", "accessories", "home"], "date_fn": _fixed(11, 20), "icon": "book-open", "badge": "Dịp quà tặng tri ân",
      "category_focus": "Sổ da khắc tên, bút gỗ kỷ niệm, bình giữ nhiệt in câu chúc, tranh chữ mộc",
      "default_search_keywords": ["quà 20/11", "quà tặng thầy cô", "quà lưu niệm"]},
+    {"key": "black_friday", "name": "Black Friday", "prep_days": 21, "lead_time_days": 7,
+     "groups": ALL_GROUPS, "date_fn": _black_friday, "icon": "tag", "badge": "Thứ Sáu sau Lễ Tạ ơn (cuối tháng 11)",
+     "category_focus": "Giảm giá sâu, combo, quà tặng kèm",
+     "default_search_keywords": ["áo hoodie", "quà tặng"]},
     {"key": "12/12", "name": "Siêu sale 12/12", "prep_days": 28, "lead_time_days": 7,
      "groups": ALL_GROUPS, "date_fn": _fixed(12, 12), "icon": "shopping-bag", "badge": "Xả kho & Kích cầu cuối năm",
      "category_focus": "Set quà Noel sớm, áo khoác nỉ, đồ trang trí năm mới",
@@ -231,31 +296,49 @@ SHOPPING_EVENTS = [
 ]
 
 
-def calculate_occasion_window(ev: Dict[str, Any], hom_nay: date) -> Optional[Dict[str, Any]]:
+POST_EVENT_DAYS = 14  # số ngày sau lễ giữ dịp ở pha "sau lễ" để seller xem kết quả và đánh giá
+
+
+def event_dates_by_year(ev: Dict[str, Any], years) -> Dict[int, date]:
+    """Ngày lễ của dịp theo từng năm dương lịch (khóa năm = năm của chính ngày lễ)."""
+    out: Dict[int, date] = {}
+    for y in years:
+        try:
+            out[y] = ev["date_fn"](y)
+        except (KeyError, ValueError):
+            continue
+    return out
+
+
+def calculate_occasion_window(
+    ev: Dict[str, Any], hom_nay: date, shop_lead_days: Optional[int] = None
+) -> Optional[Dict[str, Any]]:
     """
-    Tính cửa sổ hành động 4 pha cho một dịp:
-    - Pha 1 (R&D / Lên kệ): Chuẩn bị mẫu, chụp ảnh sản phẩm, lên listing.
-    - Pha 2 (Đẩy số / Thử nhỏ): Chạy thử ngân sách nhỏ, thu thập đánh giá đầu tiên.
-    - Pha 3 (Cao điểm bán hàng / Thu hoạch): Sức mua mạnh nhất, duy trì quảng cáo chuyển đổi.
-    - Pha 4 (Hạn chốt đơn): Hạn cuối chốt đơn để xưởng sản xuất và ship kịp giao trước sự kiện.
+    Tính cửa sổ hành động 5 pha cho một dịp:
+    - Pha 1 rd_sprint (Lên mẫu): chuẩn bị mẫu, chụp ảnh, đăng listing.
+    - Pha 2 traction (Mở bán): chạy thử ngân sách nhỏ, gom đánh giá đầu tiên.
+    - Pha 3 peak (Cao điểm): sức mua mạnh nhất, tới hạn chốt đơn thường.
+    - Pha 4 last_call (Sát lễ): sau hạn chốt, chỉ bán hàng có sẵn và giao nhanh.
+    - Pha 5 post_event (Sau lễ): POST_EVENT_DAYS ngày để xem kết quả, đánh giá; hết pha mới chuyển sang năm sau.
     
     Quy tắc an toàn: Sau hạn chốt đơn, đóng cổng giao thường để tránh bom hàng/hoàn đơn.
     """
-    lead_time = ev.get("lead_time_days", 14)  # Thời gian in p90 + ship p90 + buffer 2 ngày
+    default_lead = ev.get("lead_time_days", 14)  # mặc định của dịp (đã tính cao điểm vận chuyển)
+    # Shop giao chậm hơn mặc định thì dùng lead time đo được; nhanh hơn vẫn giữ mặc định vì cao điểm chậm hơn ngày thường
+    lead_time = max(default_lead, int(shop_lead_days)) if shop_lead_days else default_lead
     prep_days = ev.get("prep_days", 30)       # Tổng số ngày chuẩn bị trước ngày lễ
 
-    # Tìm năm phù hợp: chọn năm gần nhất mà hạn chốt đơn >= hôm nay
-    # Nếu sự kiện năm nay đã qua hạn chốt đơn thì chuyển sang kỳ năm sau
+    # Chọn kỳ gần nhất chưa kết thúc pha "sau lễ" (ngày lễ + POST_EVENT_DAYS).
+    # Xét cả năm trước để dịp cuối năm (Noel) vẫn còn pha sau lễ sang đầu năm mới.
     target_event_date = None
-    for y in (hom_nay.year, hom_nay.year + 1):
+    for y in (hom_nay.year - 1, hom_nay.year, hom_nay.year + 1):
         try:
             ev_d = ev["date_fn"](y)
-            cut_off_d = ev_d - timedelta(days=lead_time)
-            if cut_off_d >= hom_nay:
-                target_event_date = ev_d
-                break
         except (KeyError, ValueError):
             continue
+        if ev_d + timedelta(days=POST_EVENT_DAYS) >= hom_nay:
+            target_event_date = ev_d
+            break
 
     if not target_event_date:
         # Nếu đã qua hết năm tới hoặc không tìm được, lấy năm tiếp theo
@@ -265,7 +348,16 @@ def calculate_occasion_window(ev: Dict[str, Any], hom_nay: date) -> Optional[Dic
             return None
 
     event_date = target_event_date
-    cut_off_date = event_date - timedelta(days=lead_time)
+    naive_cut_off = event_date - timedelta(days=lead_time)
+    cut_off_date = cut_off_for(event_date, lead_time)
+    cut_off_note = None
+    if cut_off_date != naive_cut_off:
+        closures = (carrier_tet_closure(y) for y in (event_date.year - 1, event_date.year))
+        closure = next((c for c in closures if c[0] < event_date and c[1] >= cut_off_date), None)
+        span = f" ({closure[0].strftime('%d/%m')}–{closure[1].strftime('%d/%m')})" if closure else ""
+        cut_off_note = (
+            f"Hạn chốt sớm hơn {(naive_cut_off - cut_off_date).days} ngày vì hãng vận chuyển nghỉ Tết{span}."
+        )
     peak_start = cut_off_date - timedelta(days=max(7, int(prep_days * 0.4)))
     traction_start = cut_off_date - timedelta(days=max(14, int(prep_days * 0.75)))
     rd_start = cut_off_date - timedelta(days=prep_days)
@@ -274,15 +366,22 @@ def calculate_occasion_window(ev: Dict[str, Any], hom_nay: date) -> Optional[Dic
     days_to_event = (event_date - hom_nay).days
     days_to_rd = (rd_start - hom_nay).days
 
-    # Xác định trạng thái và pha hiện tại
-    if days_to_cut_off < 0:
+    # Xác định trạng thái và pha hiện tại (5 pha + chưa tới)
+    if days_to_event < 0:
         status = "passed"
-        phase = "passed"
-        phase_label = "Đã qua hạn chốt đơn dịp này"
+        phase = "post_event"
+        phase_label = f"Sau lễ: xem kết quả và rút kinh nghiệm (lễ đã qua {-days_to_event} ngày)"
         badge_tone = "neutral"
+    elif days_to_cut_off < 0:
+        status = "active"
+        phase = "last_call"
+        phase_label = (
+            f"Sát lễ: đã qua hạn chốt đơn thường, chỉ nhận hàng có sẵn và giao nhanh (còn {days_to_event} ngày tới lễ)"
+        )
+        badge_tone = "warn"
     elif days_to_rd > 0:
         status = "upcoming"
-        phase = "early"
+        phase = "upcoming"
         phase_label = f"Sắp tới hạn chuẩn bị (còn {days_to_rd} ngày)"
         badge_tone = "neutral"
     elif hom_nay < traction_start:
@@ -312,11 +411,19 @@ def calculate_occasion_window(ev: Dict[str, Any], hom_nay: date) -> Optional[Dic
         "lead_time_days": lead_time,
         "days_to_cut_off": days_to_cut_off,
         "days_to_event": days_to_event,
+        "days_since_event": max(0, -days_to_event),
+        "post_event_end": (event_date + timedelta(days=POST_EVENT_DAYS)).isoformat(),
         "status": status,
         "current_phase": phase,
         "phase_label": phase_label,
         "badge_tone": badge_tone,
-        "cut_off_formula": f"Ngày sự kiện ({event_date.strftime('%d/%m')}) − Thời gian sản xuất p90 & giao hàng ({lead_time} ngày)",
+        "cut_off_formula": (
+            f"Ngày sự kiện ({event_date.strftime('%d/%m')}) − Thời gian sản xuất & giao hàng ({lead_time} ngày"
+            + (", không tính ngày hãng vận chuyển nghỉ Tết)" if cut_off_note else ")")
+        ),
+        "cut_off_note": cut_off_note,
+        "default_lead_time_days": default_lead,
+        "lead_time_source": "shop_measured" if lead_time != default_lead else "event_default",
     }
 
 
@@ -380,7 +487,7 @@ if __name__ == "__main__":
     win_tet = calculate_occasion_window(tet_ev, date(2026, 12, 10))
     assert win_tet is not None
     assert win_tet["status"] == "active", f"Tết ngày 10/12/2026 phải active, nhưng nhận {win_tet['status']}"
-    assert win_tet["days_to_cut_off"] == 40
+    assert win_tet["days_to_cut_off"] == 36  # đã trừ kỳ nghỉ Tết của hãng vận chuyển
     print(f"✓ Cửa sổ Tết ngày 10/12/2026: {win_tet['status']} - {win_tet['phase_label']}")
 
     # Noel 2026 (24/12): lead time 12 ngày -> cut-off 12/12. Ngày 10/12 -> còn 2 ngày chốt đơn -> peak phase!

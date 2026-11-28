@@ -31,6 +31,8 @@ from app.config import settings
 from app.services import llm
 from app.services.f42 import config
 from app.services.f42.market_crawler import (
+    ON_DEMAND_COOLDOWN_H,
+    QUERY_LOG_COLLECTION,
     build_keywords,
     query_key,
     save_listings,
@@ -136,7 +138,7 @@ def fetch_etsy(query_en: str, session: Optional[requests.Session] = None, match_
     http = session or requests
     res = http.get(
         ETSY_SEARCH_URL,
-        params={"keywords": keyword, "limit": limit},
+        params={"keywords": query_en, "limit": limit},
         headers={"x-api-key": settings.etsy_x_api_key, "Accept": "application/json"},
         timeout=TIMEOUT_S,
     )
@@ -190,6 +192,35 @@ def english_queries(db_data: Any, keywords: List[str],
                 out[kw] = en
                 cache.update_one({"_id": query_key(kw)}, {"$set": {"vi": kw, "en": en, "at": _now()}}, upsert=True)
     return out
+
+
+def fetch_etsy_on_demand(db_data: Any, keyword: str, fetch=fetch_etsy) -> bool:
+    """
+    Loại hàng chưa có giá Etsy (lượt cào 6h/18h chỉ đi qua từ khóa mồi): cào ngay 1 trang khi trong nước
+    thiếu dữ liệu. Mỗi từ khóa tối đa 1 lần / ON_DEMAND_COOLDOWN_H giờ. True nếu lưu được tin hợp lệ.
+    """
+    keyword = (keyword or "").strip()
+    if db_data is None or not keyword or not settings.etsy_x_api_key:
+        return False
+    try:
+        log = db_data[QUERY_LOG_COLLECTION]
+        key = "etsy:" + query_key(keyword)
+        last = (log.find_one({"_id": key}, {"last_crawled": 1}) or {}).get("last_crawled")
+        if last is not None:
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            if (_now() - last).total_seconds() < ON_DEMAND_COOLDOWN_H * 3600:
+                return False
+        log.update_one({"_id": key}, {"$set": {"query": keyword, "last_crawled": _now()}}, upsert=True)
+        en = english_queries(db_data, [keyword]).get(keyword)
+        if not en:
+            return False
+        items = fetch(en, None, keyword)
+        save_listings(db_data, items)
+        return any(it["is_valid"] for it in items)
+    except Exception as exc:  # noqa: BLE001 — Etsy lỗi thì vẫn trả gợi ý từ dữ liệu trong nước
+        logger.warning("f42.etsy_crawler.on_demand_failed: %s: %s", type(exc).__name__, exc)
+        return False
 
 
 def run_crawl_etsy(

@@ -77,7 +77,7 @@ def build_story_and_playbooks(
             "bullets": [
                 f"Mỗi kế hoạch lùi từ hạn chốt {cut_off_d.strftime('%d/%m')} với mốc, KPI và dừng lỗ",
                 (
-                    "Khoảng kỳ vọng đơn dựa trên nhịp đơn nền của shop × mức cầu dự báo"
+                    "Mức ngày thường = nhịp đơn nền 8 tuần của shop × số ngày (chưa tính độ tăng của dịp)"
                     if impact.get("baseline_orders_per_day") is not None
                     else "Shop chưa đủ đơn nền 8 tuần để ước lượng kỳ vọng đơn"
                 ),
@@ -88,9 +88,9 @@ def build_story_and_playbooks(
         "results": {
             "title": "Thành quả",
             "headline": {
-                "upcoming": "Chưa vào mùa — đây là kỳ vọng nếu áp dụng",
-                "running": "Đang vào mùa — so với kịch bản không áp dụng",
-                "ended": "Mùa đã kết thúc — kết quả so với kịch bản không áp dụng",
+                "upcoming": "Chưa vào mùa — đây là số đơn nếu bán như ngày thường",
+                "running": "Đang vào mùa — so với kịch bản bán như ngày thường",
+                "ended": "Mùa đã kết thúc — kết quả so với kịch bản bán như ngày thường",
             }[impact["phase"]],
             "bullets": [],
             "next_step": "Quay lại tổng quan",
@@ -101,12 +101,12 @@ def build_story_and_playbooks(
     if impact.get("status") == "measured":
         cf = impact["counterfactual_orders"]
         story["results"]["bullets"] = [
-            f"Thực tế {impact['actual_orders']} đơn · kịch bản không áp dụng ≈ {cf['p50']:.0f} đơn (80%: {cf['p10']:.0f}–{cf['p90']:.0f})",
+            f"Thực tế {impact['actual_orders']} đơn · nếu bán như ngày thường ≈ {cf['p50']:.0f} đơn (80%: {cf['p10']:.0f}–{cf['p90']:.0f})",
             f"Đơn từ ý tưởng đã gợi ý: {impact['adopted_orders']} ({impact['adopted_share_pct']}% tổng đơn)",
         ]
     elif impact.get("status") == "projected":
         story["results"]["bullets"] = [
-            f"Kỳ vọng {impact['expected_orders_p10']:.0f}–{impact['expected_orders_p90']:.0f} đơn trong cửa sổ dịp (trung vị {impact['expected_orders_p50']:.0f})",
+            f"Nếu bán như ngày thường: {impact['expected_orders_p10']:.0f}–{impact['expected_orders_p90']:.0f} đơn trong cửa sổ dịp (trung vị {impact['expected_orders_p50']:.0f})",
             "Số đo thật xuất hiện khi dịp bắt đầu",
         ]
     else:
@@ -126,8 +126,8 @@ def build_idea_draft_blueprint(
     ind_scale: Dict[str, Any],
     method_meta: Dict[str, Any],
     uplift_res: Optional[Dict[str, Any]],
-    orders_growth_pct: int,
-    spending_growth_pct: int,
+    orders_growth_pct: Optional[int],
+    spending_growth_pct: Optional[int],
     early_order_days: Optional[int],
     peak_clump_pct: Optional[float],
     ind_combo_blend: Optional[float],

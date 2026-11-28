@@ -23,6 +23,8 @@ class SuggestionRequest(BaseModel):
     extra_attributes: Optional[str] = None
     product_type: Optional[str] = None
     productType: Optional[str] = None
+    # Chỉ tính lại giá (seller đổi giá vốn): bỏ lượt gọi LLM viết tên/mô tả
+    pricing_only: bool = False
 
     def get_category_id(self) -> Optional[str]:
         return (self.category_id or self.categoryId or "").strip() or None
@@ -74,6 +76,8 @@ class ComparableItem(BaseModel):
     price: int
     similarity: Optional[float] = None  # None khi khớp theo từ khóa (không có điểm tương đồng)
     source: str  # "tiki" | "vietcraft"
+    sold: Optional[int] = None  # đã bán (None: nguồn không có số liệu)
+    url: Optional[str] = None  # link xem sản phẩm (Tiki/Etsy đầy đủ, sàn VietCraft dạng /product/<id>)
 
 
 class PricingResult(BaseModel):
@@ -93,11 +97,17 @@ class PricingResult(BaseModel):
     warnings: List[str] = Field(default_factory=list)
     explanation: str = ""
     comparables: List[ComparableItem] = Field(default_factory=list)
+    # Giá của mọi sản phẩm làm căn cứ (sau lọc ngoại lai): vẽ thước vị trí giá cho seller
+    price_points: List[int] = Field(default_factory=list)
     detected_product: Optional[str] = None
     detected_brand: Optional[str] = None
     source_label: Optional[str] = None
     # Google Trends: {keyword, momentum, recent_mean, prev_mean, direction}; None nếu không áp dụng
     demand_signal: Optional[Dict[str, Any]] = None
+    # Phân vị thị trường thật trước khi áp giá vốn: {p25, p50, p75, p90}
+    market: Optional[Dict[str, int]] = None
+    # Khi có giá vốn: lãi/biên theo từng mức giá, vị thế giá và kết luận (ok | tight | uncompetitive | loss | no_market)
+    cost_analysis: Optional[Dict[str, Any]] = None
 
 
 class TagItem(BaseModel):

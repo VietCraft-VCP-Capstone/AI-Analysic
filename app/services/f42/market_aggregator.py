@@ -96,7 +96,8 @@ class MarketDataAggregator:
 
         result["sample_titles"] = [r["title"] for r in rows[:5]]
         result["comparables"] = [
-            {"title": r["title"], "price": int(round(r["price"])), "similarity": None, "source": "Sàn VietCraft"}
+            {"title": r["title"], "price": int(round(r["price"])), "similarity": None, "source": "Sàn VietCraft",
+             "url": f"/product/{r['_id']}" if r.get("_id") else None}
             for r in rows[:6]
         ]
         result["common_tags"] = [k for k, _ in sorted(tags_counter.items(), key=lambda kv: kv[1], reverse=True)[:8]]
