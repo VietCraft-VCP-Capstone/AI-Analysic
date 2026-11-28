@@ -14,9 +14,10 @@ from app.api.v1._mart import client_dung_chung
 from app.core.f29.score import image_check
 from app.core.f29 import constants
 from app.core.f29.score import factors
+from app.core.f29.score.price import product_group
 from app.core.f29.checks import describe, duplicates, image_match, make_check, print_check
 from app.core.f29.checks.duplicates import fingerprint
-from app.core.f29.paths import MODELS
+from app.core.f29.paths import F29, MODELS
 from app.core.f29.shared import embedder, image_fetch, image_load, vision
 
 
@@ -98,12 +99,29 @@ def _flagged(checks: list[dict]) -> set[int]:
     return out
 
 
+def _verdict(img: dict, i: int, checks: list[dict], counted: bool) -> dict:
+    ids = {c.get("id"): c for c in checks}
+    dup, match = ids.get(f"duplicate_same_shop:{i}"), ids.get(f"image_match:{i}")
+    if dup and dup["severity"] == "warn":
+        v, cos = "duplicate", None
+    elif match and match["severity"] == "warn":
+        v, cos = "mismatch", match["evidence"]["cos"]
+    elif "image_match:scope" in ids:
+        v, cos = "not_learned", None
+    elif match and match["severity"] == "pass":
+        v, cos = "ok", match["evidence"]["cos"]
+    else:
+        v, cos = "unanalyzed", None
+    return {**img, "ai": {"verdict": v, "cos": cos, "counted": counted}}
+
+
 def _image(row: dict, checks: list[dict]) -> dict:
     ev = row["evidence"]
     flagged = _flagged(checks)
-    bad = sum(1 for i, img in enumerate(ev["images"]) if i in flagged and image_check.counts_as_useful(img))
-    analysis = {"state": "scored", "useful": max(0, ev["useful"] - bad), "unanalyzed": ev["unanalyzed"],
-                "images": ev["images"], "method": "ml_unvalidated" if ev["siglip"] else "heuristic"}
+    hit = {i for i, img in enumerate(ev["images"]) if i in flagged and image_check.counts_as_useful(img)}
+    images = [_verdict(img, i, checks, i in hit) for i, img in enumerate(ev["images"])]
+    analysis = {"state": "scored", "useful": max(0, ev["useful"] - len(hit)), "unanalyzed": ev["unanalyzed"],
+                "images": images, "method": "ml_unvalidated" if ev["siglip"] else "heuristic"}
     return factors.image_row(analysis, ev["median"], ev["in_category"])
 
 
@@ -118,14 +136,15 @@ NA_ACTION = "Chưa kiểm được mục này do lỗi hệ thống."
 
 
 def versions() -> dict:
-    return {**ARTIFACTS, "b3_attr": describe.version()}
+    return dict(ARTIFACTS)
 
 
 @cache
 def stamp() -> str:
     h = hashlib.md5()
-    for p in sorted(p for p in MODELS.rglob("*") if p.is_file() and p.suffix != ".md"):
-        h.update(p.relative_to(MODELS).as_posix().encode())
+    files = [*MODELS.rglob("*"), *F29.rglob("*.py")]
+    for p in sorted({p for p in files if p.is_file() and p.suffix != ".md" and "__pycache__" not in p.parts}):
+        h.update(p.relative_to(F29).as_posix().encode())
         h.update(p.read_bytes())
     return h.hexdigest()
 
@@ -188,11 +207,12 @@ def _checks(product: dict, variants: list, live_db, image_urls: list[str], image
     vecs = [loaded.get(u, (None, None))[1] for u in image_urls]
     colors = [v["color"] for v in variants if v.get("is_active") and v.get("color")]
     title_vec = txt(product.get("title"))
+    group = product_group(product)
     checks = [
         *_safe("print", "print", lambda: _print({**product, "active_colors": colors}, designs, imgs)),
         *_safe("describe", "description",
-               lambda: describe.check_listing(product, _mean(vecs), title_vec, vecs)),
-        *_safe("image_match", "image", lambda: image_match.image_checks(vecs, title_vec)),
+               lambda: describe.check_listing(product, _mean(vecs), title_vec)),
+        *_safe("image_match", "image", lambda: image_match.image_checks(vecs, title_vec, group)),
         *_safe("duplicates", "duplicate", lambda: _duplicates(product, image_urls, imgs, vecs, index)),
     ]
     return _plain(checks)

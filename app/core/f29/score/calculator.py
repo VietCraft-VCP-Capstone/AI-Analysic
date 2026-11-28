@@ -9,7 +9,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.api.v1._live import LOC_SP_THAT, db_live
 from app.config import settings
-from app.core.f29.score import ai_summary, image_check, recommend
+from app.core.f29.score import ai_summary, change, image_check, recommend
 from app.core.f29 import constants
 from app.core.f29.score import factors
 from app.core.f29.score import peers
@@ -50,7 +50,7 @@ def _snapshot(product: Dict[str, Any], variants: List[Dict[str, Any]]) -> Dict[s
 
 SAVED_FIELDS = ("title", "thumbnail", "score", "status", "coverage", "factors", "blockers", "recommendations",
                 "search", "versions", "content_snapshot", "axes", "axes_missing", "todos", "warnings",
-                "content_hash", "inputs_hash", "model_version", "checks", "confidence", "incomplete")
+                "content_hash", "inputs_hash", "model_version", "checks", "confidence", "incomplete", "change")
 RETRY_INCOMPLETE = timedelta(minutes=30)
 LEGACY_FIELDS = ("readiness", "conversion_detail", "content_changed_at", "breakdown", "basis", "cap")
 
@@ -159,8 +159,20 @@ class HealthScoreCalculator:
         product = self.live_db["products"].find_one({"_id": product_oid, **LOC_SP_THAT})
         if not product:
             return None
-        return self._score(product_id, product, self._variants(product_oid),
-                           peers.product_counts(self.live_db, product_oid), cfg, image_budget, True)
+        result = self._score(product_id, product, self._variants(product_oid),
+                             peers.product_counts(self.live_db, product_oid), cfg, image_budget, True)
+        result["change"] = change.explain(self._previous(product_oid), result)
+        return result
+
+    def _previous(self, product_oid: ObjectId) -> Optional[Dict[str, Any]]:
+        try:
+            return constants.store_db()["listing_health_scores"].find_one(
+                {"product_id": product_oid},
+                {"score": 1, "content_snapshot": 1, "content_hash": 1, "factors": 1, "model_version": 1,
+                 "incomplete": 1, "versions": 1},
+                sort=[("computed_at", -1)])
+        except Exception:
+            return None
 
     def calculate_draft(self, product: Dict[str, Any], variants: List[Dict[str, Any]],
                         image_budget: float) -> Dict[str, Any]:
@@ -214,7 +226,7 @@ class HealthScoreCalculator:
             "search": {"category": category_of(product), "queries": search,
                        "zero_result": self._zero_result(product)},
             "versions": {"score": MODEL_VERSION, "siglip": siglip, "relevance": "lexical",
-                         "benchmark": f"vc-{today}", **check_versions},
+                         "benchmark": f"vc-{today}", **check_versions, "stamp": checks_run.stamp()},
             "checks": checks,
             "ai": ai_summary.build(checks, rows),
             "confidence": scoring.confidence(rows, values["n"]),

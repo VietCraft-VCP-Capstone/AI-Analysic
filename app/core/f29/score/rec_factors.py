@@ -30,7 +30,7 @@ def _empty(desc: Dict[str, Any], category: Optional[str]) -> List[Dict[str, Any]
     why = (f"Chưa có mô tả, mặt bằng {where} là {ev['median_words']:g} từ. "
            "Mô tả đủ dài sẽ được cộng điểm")
     return [make("info", "empty", "description", "Chưa có mô tả", why,
-                 "Viết mô tả đủ 4 tiêu chí: số từ, kích thước, chất liệu, khác tên", "description",
+                 "Viết mô tả đủ dài, có kích thước và chất liệu, không chép lại tên", "description",
                  scoring.gain(desc, ev["median_words"]), "rule", {"median_words": ev["median_words"]})]
 
 
@@ -43,6 +43,7 @@ def description_recs(desc: Dict[str, Any], blockers: List[Dict[str, str]],
     ev = desc["evidence"]
     checks = ev["checks"]
     where = scope(category, ev["in_category"])
+    info = desc["weight"] * 50 / len(scoring.DESC_INFO) / 100
     recs = []
     if not checks["words"]:
         recs.append(make("info", "words", "description", "Mô tả quá ngắn",
@@ -52,15 +53,15 @@ def description_recs(desc: Dict[str, Any], blockers: List[Dict[str, str]],
     if not checks["not_title"]:
         recs.append(make("info", "not_title", "description", "Mô tả trùng tên",
                          "Mô tả đang giống hệt tên sản phẩm", "Viết mô tả riêng, không lặp lại tên sản phẩm",
-                         "description", 0.0, "rule"))
+                         "description", info, "rule"))
     if not checks["size"]:
         recs.append(make("info", "size", "description", "Thiếu kích thước thật",
                          "Kích thước đang là giá trị mặc định 10×10×10 cm / 500 g",
-                         "Nhập kích thước (cm) và cân nặng (g) thật", "description", 0.0, "rule"))
+                         "Nhập kích thước (cm) và cân nặng (g) thật", "description", info, "rule"))
     if not checks["material"] and not any(b["field"] == "materials" for b in blockers):
         recs.append(make("info", "material", "materials", "Thiếu chất liệu",
                          "Chưa ghi chất liệu trong mô tả, tên hoặc ô Chất liệu",
-                         "Ghi rõ chất liệu (ví dụ: cotton, len, gốm…) vào ô Chất liệu", "material", 0.0, "rule"))
+                         "Ghi rõ chất liệu (ví dụ: cotton, len, gốm…) vào ô Chất liệu", "material", info, "rule"))
     if not ev["care"]:
         recs.append(make("info", "care", "description", "Thiếu hướng dẫn giặt và bảo quản",
                          "Mô tả chưa có hướng dẫn giặt hoặc bảo quản",

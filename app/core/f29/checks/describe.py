@@ -8,8 +8,6 @@ import numpy as np
 from app.core.f29.score import text_rules
 from app.core.f29.checks import category as cat, make_check
 from app.core.f29.paths import MODELS
-from app.core.f29.checks.attributes import method_probs
-from app.core.f29.checks.attributes import claims, conflicts, vocab
 from app.core.f29.checks.category import category_checks, category_name
 from app.core.f29.score.text_rules import find_materials, material_line, sentences
 
@@ -28,6 +26,14 @@ OK_ACTION = "Chất liệu khớp nhau."
 def _model():
     path = B2_DIR / "model.joblib"
     return joblib.load(path) if path.exists() else None
+
+
+@lru_cache(maxsize=1)
+def _gate() -> float:
+    try:
+        return json.loads((B2_DIR / "metrics.json").read_text("utf-8")).get("suggest_gate", {}).get("min_p", 1.01)
+    except (OSError, ValueError, AttributeError):
+        return 1.01
 
 
 def material_top3(title: str, description: str) -> list[tuple[str, float]]:
@@ -69,9 +75,12 @@ def _missing_check(product: dict) -> dict:
     if text_rules.has_material(product):
         return make_check(MISSING_ID, "description", "pass", {}, OK_ACTION)
     top3 = material_top3(product.get("title"), product.get("description"))
-    return make_check(MISSING_ID, "description", "info", {"suggest": [[k, round(p, 4)] for k, p in top3]},
-                      MISSING_ACTION, confidence=top3[0][1] if top3 else 0.0,
-                      model_version="b2_material/v1" if top3 else "rule")
+    gate = _gate()
+    confident = bool(top3) and top3[0][0] != "khac" and top3[0][1] >= gate
+    suggest = [[k, round(p, 4)] for k, p in top3 if k != "khac" and p >= gate] if confident else []
+    return make_check(MISSING_ID, "description", "info", {"suggest": suggest}, MISSING_ACTION,
+                      confidence=top3[0][1] if suggest else 0.0,
+                      model_version="b2_material/v1" if suggest else "rule")
 
 
 def material_checks(product: dict) -> list[dict]:
@@ -83,68 +92,5 @@ def material_checks(product: dict) -> list[dict]:
     return [*checks, _missing_check(product)]
 
 
-ATTR_DIR = MODELS / "b3_attr" / "v1"
-MODEL_VERSION = "b3_attr/v1"
-DESC_CHARS = 300
-ACTION = "Mô tả ghi '{claimed}' nhưng ảnh giống '{seen}' (AI chắc {p}%). Sửa mô tả hoặc thay ảnh."
-PASS_ACTION = "Thuộc tính trong mô tả khớp ảnh."
-
-
-@lru_cache(maxsize=1)
-def _bundle() -> dict | None:
-    thr = ATTR_DIR / "thresholds.json"
-    files = ("model.joblib", "prompts.npy")
-    if not (thr.exists() and all((ATTR_DIR / f).exists() for f in files)):
-        return None
-    return {"groups": joblib.load(ATTR_DIR / "model.joblib"),
-            "V": np.load(ATTR_DIR / "prompts.npy", allow_pickle=True).item(),
-            **json.loads(thr.read_text("utf-8"))}
-
-
-def version() -> str:
-    b = _bundle()
-    return f"{MODEL_VERSION}@{b['mode'] if b else 'missing'}"
-
-
-def _vtype(product: dict) -> str | None:
-    return cat.vc_type(category_name(product))
-
-
-def _check(group: str, claimed: str, entry: dict, img, bundle: dict):
-    classes = entry["classes"]
-    rivals = [c for c in conflicts(group, claimed) if c in classes]
-    if not rivals:
-        return None
-    P = method_probs(bundle["method"], entry, bundle["V"].get(group), img)[0]
-    seen = max(rivals, key=lambda c: P[classes.index(c)])
-    p_seen, p_claimed = float(P[classes.index(seen)]), float(P[classes.index(claimed)])
-    sev = "warn" if p_seen - p_claimed > bundle["t_warn"] else "pass"
-    names = vocab()[group]["names"]
-    action = ACTION.format(claimed=names[claimed], seen=names[seen], p=round(p_seen * 100))
-    evidence = {"claimed": claimed, "seen": seen, "p_seen": round(p_seen, 4), "p_claimed": round(p_claimed, 4)}
-    return make_check(f"description_attribute:{group}", "description", sev, evidence,
-                      action if sev == "warn" else PASS_ACTION, confidence=p_seen,
-                      model_version=MODEL_VERSION, mode=bundle["mode"])
-
-
-def attribute_checks(product: dict, img_vec) -> list[dict]:
-    bundle = _bundle()
-    if bundle is None or img_vec is None:
-        return []
-    text = f"{product.get('title') or ''} {(product.get('description') or '')[:DESC_CHARS]}"
-    img = np.asarray(img_vec, dtype=np.float32).reshape(1, -1)
-    out = []
-    for group, claimed in claims(text, _vtype(product)).items():
-        entry = bundle["groups"].get(group)
-        if entry is None or claimed not in entry["classes"]:
-            continue
-        check = _check(group, claimed, entry, img, bundle)
-        if check is not None:
-            out.append(check)
-    return out
-
-
-def check_listing(product: dict, img_vec, txt_vec, img_vecs=None) -> list[dict]:
-    attr_vec = img_vecs[0] if img_vecs and img_vecs[0] is not None else img_vec
-    return [*material_checks(product),
-            *category_checks(product, img_vec, txt_vec), *attribute_checks(product, attr_vec)]
+def check_listing(product: dict, img_vec, txt_vec) -> list[dict]:
+    return [*material_checks(product), *category_checks(product, img_vec, txt_vec)]

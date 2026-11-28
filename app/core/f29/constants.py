@@ -45,7 +45,7 @@ def desc_words(text: str | None) -> int:
 
 def review_score(n_good: int, n: int, p0: float, m: float) -> float:
     if n <= 0:
-        return 0.0
+        return p0 * 100.0
     return (n_good + m * p0) / (n + m) * 100.0
 
 

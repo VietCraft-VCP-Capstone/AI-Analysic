@@ -80,5 +80,16 @@
         "top3": 0.6393
       }
     }
+  },
+  "suggest_gate": {
+    "min_p": 0.5369,
+    "target_precision": 0.8,
+    "val_precision": 0.8005,
+    "val_coverage": 0.4696,
+    "n_val": 790,
+    "test_precision": 0.8252,
+    "test_coverage": 0.4357,
+    "n_test": 801,
+    "input": "val và test, mô tả đã bỏ từ chất liệu"
   }
 }

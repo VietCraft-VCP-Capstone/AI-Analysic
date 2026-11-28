@@ -183,6 +183,7 @@ def score(factors: List[Dict[str, Any]]) -> Tuple[float, Dict[str, int]]:
 MIN_REVIEW_PEERS = 5
 LEVEL_LABEL = {"category": "cùng danh mục", "group": "cùng nhóm hàng", "all": "toàn sàn"}
 VALUE_KEY = {"image": "useful", "description": "words", "tags": "approved"}
+DESC_INFO = ("size", "material", "not_title")
 
 
 def _value(row: Dict[str, Any]) -> float:
@@ -215,9 +216,16 @@ def rescore(row: Dict[str, Any], peers: List[float], level: str) -> Dict[str, An
     value = _value(row)
     sub = _sub(row, value, peers)
     reason = row["reason"]
-    if row["state"] == "scored" and row["key"] != "price":
-        reason += f"; hơn {sub:.0f}% tin {LEVEL_LABEL[level]}"
     evidence = {**row["evidence"], "value": value, "peers": sorted(peers), "level": level}
+    if row["key"] == "description":
+        checks = row["evidence"].get("checks", {})
+        info = sum(bool(checks.get(k)) for k in DESC_INFO) / len(DESC_INFO) * 100
+        evidence.update(length_sub=round(sub, 1), criteria_sub=round(info, 1))
+        if row["state"] == "scored":
+            reason += f"; dài hơn {sub:.0f}% tin {LEVEL_LABEL[level]}"
+        sub = 0.5 * sub + 0.5 * info
+    elif row["state"] == "scored" and row["key"] != "price":
+        reason += f"; hơn {sub:.0f}% tin {LEVEL_LABEL[level]}"
     return {**row, "sub_score": round(sub, 1), "points": round(row["weight"] * sub / 100, 1),
             "method": "learned", "reason": reason, "evidence": evidence}
 
@@ -231,6 +239,8 @@ def gain(row: Dict[str, Any], new_value: float) -> float:
     if "peers" not in ev or row["key"] == "price":
         return 0.0
     new = pct(new_value, ev["peers"]) * 100
+    if row["key"] == "description":
+        return max(0.0, round(row["weight"] * 0.5 * (new - ev.get("length_sub", 0.0)) / 100, 1))
     return max(0.0, round(row["weight"] * (new - (row["sub_score"] or 0.0)) / 100, 1))
 
 

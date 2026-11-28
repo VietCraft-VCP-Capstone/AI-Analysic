@@ -64,9 +64,21 @@ def _match_one(doc: Dict[str, Any], query: Dict[str, Any]) -> bool:
     return True
 
 
+def _project(doc: Dict[str, Any], projection) -> Dict[str, Any]:
+    if not projection:
+        return dict(doc)
+    include = {k.split(".")[0] for k, v in projection.items() if v and k != "_id"}
+    if include:
+        keep = include | ({"_id"} if projection.get("_id", 1) else set())
+        return {k: v for k, v in doc.items() if k in keep}
+    drop = {k for k, v in projection.items() if not v} | ({"_id"} if not projection.get("_id", 1) else set())
+    return {k: v for k, v in doc.items() if k not in drop}
+
+
 class _FakeCursor:
-    def __init__(self, docs: List[Dict[str, Any]]):
+    def __init__(self, docs: List[Dict[str, Any]], projection=None):
         self._docs = docs
+        self._projection = projection
 
     def sort(self, key_or_list, direction=None):
         pairs = [(key_or_list, direction)] if isinstance(key_or_list, str) else list(key_or_list)
@@ -80,7 +92,7 @@ class _FakeCursor:
         return self
 
     def __iter__(self):
-        return iter(self._docs)
+        return iter([_project(d, self._projection) for d in self._docs])
 
 
 class _FakeCollection:
@@ -92,7 +104,7 @@ class _FakeCollection:
         return self
 
     def find(self, query=None, projection=None):
-        return _FakeCursor([dict(d) for d in self.docs if _match_one(d, query or {})])
+        return _FakeCursor([dict(d) for d in self.docs if _match_one(d, query or {})], projection)
 
     def find_one(self, query=None, projection=None, sort=None):
         matched = [d for d in self.docs if _match_one(d, query or {})]
@@ -100,7 +112,7 @@ class _FakeCollection:
             for key, dirn in reversed(sort):
                 matched = sorted(matched, key=lambda d: (d.get(key) is not None, d.get(key)),
                                  reverse=dirn == -1)
-        return dict(matched[0]) if matched else None
+        return _project(matched[0], projection) if matched else None
 
     @staticmethod
     def _apply(doc: Dict[str, Any], update: Dict[str, Any]):

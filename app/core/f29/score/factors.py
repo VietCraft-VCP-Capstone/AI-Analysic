@@ -8,7 +8,7 @@ from app.api.v1._live import LOC_SP_THAT
 from app.core.f29 import constants
 from app.core.f29.constants import LABELS, MIN_CATEGORY_SAMPLE, desc_words, review_score
 from app.core.f29.score.price import HIGH_PCT, category_of, price_sub
-from app.core.f29.score.scoring import normalize_image
+from app.core.f29.score.scoring import DESC_INFO, normalize_image
 from app.core.f29.score.text_rules import has_material, material_conflict, mentions
 
 
@@ -104,11 +104,11 @@ def description_row(product: Dict[str, Any], median_words: float, in_category: b
         "material": has_material(product) and material_conflict(product) is None,
         "not_title": text.lower() != str(product.get("title") or "").strip().lower(),
     }
-    passed = sum(checks.values())
+    passed = sum(checks[k] for k in DESC_INFO)
     evidence = {"checks": checks, "median_words": median_words, "in_category": in_category,
                 "words": desc_words(text), "care": bool(CARE.search(text))}
-    return _row("description", "scored", passed / len(checks) * 100, "rule",
-                f"Đạt {passed}/{len(checks)} tiêu chí mô tả", evidence)
+    return _row("description", "scored", passed / len(DESC_INFO) * 100, "rule",
+                f"Có {passed}/{len(DESC_INFO)} thông tin: kích thước, chất liệu, không chép tên", evidence)
 
 
 def tags_row(approved: int, pending: int, queries: List[Dict[str, Any]], method: str) -> Dict[str, Any]:
@@ -125,7 +125,8 @@ def tags_row(approved: int, pending: int, queries: List[Dict[str, Any]], method:
 
 def review_row(n_good: int, n: int, p0: float, m: float) -> Dict[str, Any]:
     if n == 0:
-        return _row("review", "not_applicable", None, "rule", "Chưa có đánh giá")
+        return _row("review", "scored", review_score(0, 0, p0, m), "rule",
+                    "Chưa có đánh giá, tạm tính bằng tỉ lệ đánh giá tốt chung của sàn", {"good": 0, "total": 0, "p0": p0, "m": m})
     return _row("review", "scored", review_score(n_good, n, p0, m), "rule",
                 f"{n_good}/{n} đánh giá tốt", {"good": n_good, "total": n, "p0": p0, "m": m})
 

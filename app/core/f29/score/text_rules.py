@@ -253,11 +253,15 @@ def mentions(text: str, terms) -> list[str]:
     return hits
 
 
+GARMENT_NAME = re.compile(r"\báo thun\b")
+
+
 def has_material(product: dict) -> bool:
     materials = product.get("materials")
     if isinstance(materials, list) and any(isinstance(m, str) and m.strip() for m in materials):
         return True
-    text = " ".join(v for v in (product.get("title"), product.get("description")) if isinstance(v, str))
+    raw = " ".join(v for v in (product.get("title"), product.get("description")) if isinstance(v, str))
+    text = GARMENT_NAME.sub(" ", li_norm(raw))
     found = li_materials(text)
     if not found:
         return False

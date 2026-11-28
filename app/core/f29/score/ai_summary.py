@@ -9,7 +9,6 @@ from app.core.f29.shared.normalize import fold
 SOURCES = {
     "b1_type/v1": ("Nhận diện loại hàng từ ảnh và tên", "tin Tiki Fashion"),
     "b2_material/v1": ("Đoán chất liệu từ mô tả", "tin Tiki"),
-    "b3_attr/v1": ("Kiểm ảnh có khớp mô tả", "ảnh Tiki"),
     "i_dupes/v1": ("Phát hiện ảnh trùng", "bản sao ảnh VietCraft"),
     "image_match/v1": ("Kiểm ảnh có khớp tên sản phẩm", "tin Tiki có ảnh và tên"),
 }
@@ -34,8 +33,6 @@ def _facts(name: str, m: dict) -> tuple[int, str]:
         t = m["test"]["A"]
         return sum(m["rows"].values()), (f"Điểm F1 {_pct(t['model']['macro_f1'])}% so với "
                                          f"{_pct(t['baseline_current']['macro_f1'])}% của cách bắt từ khoá")
-    if name == "b3_attr/v1":
-        return m["rows"]["total"], "Chỉ gợi ý, chưa qua ngưỡng tự đặt nên không trừ điểm"
     if name == "image_match/v1":
         t = m["test"]["other_group"]
         note = "" if m["mode"] == "live" else "; chưa qua ngưỡng tự đặt nên chỉ gợi ý"
@@ -99,16 +96,6 @@ def _b2(checks: list, no_image: bool):
     return f"AI đoán chất liệu: {found}", "info", suggest[0][1]
 
 
-def _b3(checks: list, no_image: bool):
-    found = [c for c in checks if str(c.get("id", "")).startswith("description_attribute:")]
-    if not found:
-        return (NO_IMAGE, "na", None) if no_image else None
-    warn = next((c for c in found if c["severity"] == "warn"), None)
-    if warn:
-        return warn["action"], "warn", (warn.get("evidence") or {}).get("p_seen")
-    return "Thuộc tính trong mô tả khớp ảnh", "pass", None
-
-
 def _dupes(checks: list, no_image: bool):
     if no_image:
         return NO_IMAGE, "na", None
@@ -122,6 +109,8 @@ def _dupes(checks: list, no_image: bool):
 def _match(checks: list, no_image: bool):
     if no_image:
         return NO_IMAGE, "na", None
+    if _check(checks, "image_match:scope"):
+        return NOT_LEARNED, "na", None
     idx = sorted(int(c["id"].split(":")[1]) + 1 for c in checks
                  if str(c.get("id", "")).startswith("image_match:") and c["severity"] == "warn")
     if idx:
@@ -129,7 +118,7 @@ def _match(checks: list, no_image: bool):
     return "Mọi ảnh đều khớp tên sản phẩm", "pass", None
 
 
-READERS = (("b1_type/v1", _b1), ("b2_material/v1", _b2), ("b3_attr/v1", _b3), ("i_dupes/v1", _dupes),
+READERS = (("b1_type/v1", _b1), ("b2_material/v1", _b2), ("i_dupes/v1", _dupes),
            ("image_match/v1", _match))
 
 

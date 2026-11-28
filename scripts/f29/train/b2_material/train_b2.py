@@ -13,6 +13,7 @@ from sklearn.pipeline import FeatureUnion, Pipeline
 from app.core.f29.checks.describe import B2_DIR as MODEL_DIR
 from app.core.f29.score.text_rules import strip_accents
 from scripts.f29.train.b2_material import b2_data as data
+from scripts.f29.train.b2_material import suggest_gate
 from scripts.f29.train.b2_material.b2_card import card
 
 C_GRID = (0.5, 2, 8)
@@ -108,6 +109,7 @@ def main() -> None:
     (MODEL_DIR / "card.md").write_text(card(metrics), "utf-8")
     print(json.dumps({"C": C, "test": test, "gate_A": metrics["gate_A"], "unaccented": metrics["test_unaccented"]},
                      ensure_ascii=False, indent=2))
+    suggest_gate.main([])
 
 
 if __name__ == "__main__":

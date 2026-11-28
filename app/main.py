@@ -100,8 +100,7 @@ async def lifespan(app: FastAPI):
             embedder.embed_images([Image.new("RGB", (32, 32))])
             category._model()
             describe._model()
-            describe._bundle()
-            ra("  [OK] F29: da warm-up SigLIP, B1, B2, B3 va du lieu xu huong.")
+            ra("  [OK] F29: da warm-up SigLIP, B1, B2 va du lieu xu huong.")
         except Exception as e:
             ra(f"  [!] F29 warm-up loi: {type(e).__name__}: {e}")
 
