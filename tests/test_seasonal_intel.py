@@ -77,3 +77,38 @@ def test_real_stl_strength_and_playbook():
     assert pb["feasible"] and len(pb["steps"]) == 5
     assert pb["steps"] == sorted(pb["steps"], key=lambda s: s["date"])
 
+
+def _by_key(pb):
+    return {s["key"]: s for s in pb["steps"]}
+
+
+def test_playbook_steps_have_fixed_key_and_slot():
+    pb = si.build_playbook({"title": "x", "keyword": "x"}, dt.date(2026, 12, 3), dt.date(2026, 12, 10),
+                           dt.date(2026, 11, 28), None, None, 4)
+    steps = _by_key(pb)
+    assert {k: s["slot"] for k, s in steps.items()} == {"listing": 0, "test": 1, "decide": 2, "produce": 3, "cutoff": 4}
+    assert steps["test"]["target_orders"] == 20
+
+
+def test_playbook_short_window_keeps_listing_before_test_before_decide():
+    # Còn 5 ngày tới hạn chốt: trước đây listing (01/12) rơi sau bước thử (29/11)
+    pb = si.build_playbook({"title": "x", "keyword": "x"}, dt.date(2026, 12, 3), dt.date(2026, 12, 10),
+                           dt.date(2026, 11, 28), None, None, 4)
+    s = _by_key(pb)
+    assert s["listing"]["date"] <= s["test"]["date"] < s["decide"]["date"] <= s["cutoff"]["date"]
+
+
+def test_playbook_long_window_dates_unchanged():
+    today = dt.date(2026, 11, 1)
+    pb = si.build_playbook({"title": "x", "keyword": "x"}, today + dt.timedelta(days=30), today + dt.timedelta(days=37),
+                           today, None, None, 4)
+    s = _by_key(pb)
+    assert [s[k]["days_from_today"] for k in ("listing", "test", "decide", "produce", "cutoff")] == [3, 7, 10, 22, 30]
+
+
+def test_playbook_cutoff_today_all_steps_capped():
+    today = dt.date(2026, 12, 3)
+    pb = si.build_playbook({"title": "x", "keyword": "x"}, today, today + dt.timedelta(days=7), today, None, None, 4)
+    s = _by_key(pb)
+    assert all(s[k]["date"] <= today.isoformat() for k in ("listing", "test", "decide", "cutoff"))
+

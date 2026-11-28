@@ -17,6 +17,7 @@ from app.core import calendar_vn
 from app.core.category_groups import GROUP_LABELS, detect_shop_group
 from app.core.redis_cache import cache_get_json, cache_set_json
 from app.core.shop_lead_time import load_shop_lead_time
+from app.core.keyword_match import build_product_index
 from app.core.seasonal_intel import keyword_shop_coverage, summarize_industry_orders
 from app.services.f38.f38_campaigns import (
     attach_expected_orders,
@@ -40,6 +41,10 @@ from app.services.f38.f38_funnel_and_metrics import (
     build_route_risks,
     build_scorecard_metrics as _build_scorecard_metrics,
 )
+from app.core.cost_basis import cost_basis_label, load_cost_model
+from app.core.market_freshness import load_market_freshness
+from app.core.seasonal_uplift import load_platform_order_times, market_uplift_for_camp
+from app.services.f38.f38_keywords import _load_f42_listings
 from app.services.f38.f38_keywords import tinh_opportunity_keywords as _tinh_opportunity_keywords
 from app.services.f38.f38_market_ideas import (
     build_market_blueprints,
@@ -201,7 +206,13 @@ def seasonal(
 
     # 4. Sản phẩm thị trường đa sàn & Hồ sơ Tiềm năng 5 lớp
     raw_ext_ready, raw_ext_pod = fetch_external_market_catalog(cat_slug, active_camp, hom_nay)
-    real_blueprints = build_market_blueprints(raw_ext_ready, cat_slug, active_camp, primary_kw)
+    # Giá vốn: đo từ dòng hàng trong đơn của shop, thiếu thì toàn sàn, sau cùng mới ước tính (dùng chung với BE)
+    cost_model = load_cost_model(shop_id, hom_nay)
+    real_blueprints = build_market_blueprints(
+        raw_ext_ready, cat_slug, active_camp, primary_kw,
+        market_listings=_load_f42_listings(hom_nay, _cutoff_utc_dt(hom_nay, EXTERNAL_FRESHNESS_DAYS)),
+        cost_model=cost_model,
+    )
     potential_profiles = build_potential_profiles(
         real_blueprints, raw_ext_ready, event_dates_by_year, target_ev_d, cut_off_d, hom_nay
     )
@@ -267,11 +278,19 @@ def seasonal(
 
     # 7. Sản phẩm thật của shop & độ sẵn sàng đón dịp
     shop_products, matching_shop_products = load_and_audit_shop_products(shop_id, active_camp, spending_growth_pct, hom_nay=hom_nay)
+    product_index = build_product_index(shop_products)
     for idea in ready_ideas:
-        idea["shop_coverage"] = keyword_shop_coverage(idea.get("keyword") or idea["title"], shop_products)
+        idea["shop_coverage"] = keyword_shop_coverage(
+            idea.get("keyword") or idea["title"], shop_products, index=product_index
+        )
 
     # 8. Dự kiến đơn từng dịp, kế hoạch áp dụng, báo cáo thành quả & câu chuyện 4 chương
-    attach_expected_orders(all_campaigns, shop_orders_hist, hom_nay)
+    # Đơn dự kiến = mức ngày thường × mức tăng đo từ dữ liệu bán thật (đơn shop/toàn sàn các mùa trước, tốc độ bán Tiki)
+    attach_expected_orders(
+        all_campaigns, shop_orders_hist, hom_nay,
+        platform_orders=load_platform_order_times(hom_nay),
+        market_uplift=lambda camp, st, ev: market_uplift_for_camp(camp, st, ev, hom_nay),
+    )
     impact, apply_playbooks, story = build_story_and_playbooks(
         active_camp=active_camp,
         cat_slug=cat_slug,
@@ -298,6 +317,7 @@ def seasonal(
         orders_growth_pct=orders_growth_pct,
         stl=stl,
         shop_products=shop_products,
+        past_event_dates=sorted(past_ev.values()),
     )
     # Phễu, kênh bán và động cơ mua do backend tính từ đơn/sự kiện thật của shop (một nguồn duy nhất)
 
@@ -351,14 +371,20 @@ def seasonal(
             "search_uplift_pct": traits_bundle.get("search_uplift_pct"),
             "scorecard_metrics": scorecard_metrics,
             "opportunity_keywords": opportunity_keywords,
+            # Mỗi nguồn thị trường được thu đến ngày nào; trang hiện cảnh báo khi nguồn cũ
+            "data_freshness": load_market_freshness(hom_nay),
+            "cost_model": {**cost_model, "basis": cost_basis_label(cost_model)},
             "events": events_payload,
             "potential_profiles": potential_profiles,
             "campaign_radar": campaign_radar,
             "ready_to_ship_ideas": ready_ideas,
             "pod_blanks": pod_blanks,
             "opportunity_clusters": opportunity_clusters,
-            "shop_products": shop_products,
-            "matching_shop_products": matching_shop_products,
+            # Mô tả chỉ dùng để so khớp từ khóa, không gửi về trình duyệt
+            "shop_products": [{k: v for k, v in p.items() if k != "description"} for p in shop_products],
+            "matching_shop_products": [
+                {k: v for k, v in p.items() if k != "description"} for p in matching_shop_products
+            ],
             "story": story,
             "apply_playbooks": apply_playbooks,
             "impact": impact,

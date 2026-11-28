@@ -12,6 +12,9 @@ from app.services.f38.f38_trends_stl import load_vietcraft_real_sold_map
 
 log = logging.getLogger("f38_seasonal")
 
+# Số sản phẩm của shop đem ra so khớp với từ khóa hot / rà soát độ sẵn sàng đón dịp
+SHOP_PRODUCTS_LIMIT = 1000
+
 
 def analyze_product_seasonal_readiness(
     product: Dict[str, Any],
@@ -159,7 +162,7 @@ def load_and_audit_shop_products(
     sold_90d: Dict[str, int] = {}
     try:
         if la_shop_live(shop_id):
-            raw_sp = san_pham_live(shop_id, gioi_han=100)
+            raw_sp = san_pham_live(shop_id, gioi_han=SHOP_PRODUCTS_LIMIT, kem_mo_ta=True)
             sold_90d = load_vietcraft_real_sold_map() or {}
             for p in raw_sp:
                 imgs = p.get("images") or []
@@ -178,6 +181,7 @@ def load_and_audit_shop_products(
                         "image_url": imgs[0] if imgs else None,
                         "tags": p.get("tags") or [],
                         "categories": p.get("categories") or [],
+                        "description": p.get("description") or "",
                         "source_idea_id": p.get("source_idea_id"),
                         "orders": int(sold_90d.get(p["product_id"], 0)),  # số cái bán được 90 ngày gần nhất
                         "revenue_vnd": 0,
@@ -195,6 +199,7 @@ def load_and_audit_shop_products(
                 "sold_count": 1,
                 "thumbnail": 1,
                 "image_url": 1,
+                "description": 1,
             }
             seed_prods: List[Dict[str, Any]] = []
             try:
@@ -228,6 +233,7 @@ def load_and_audit_shop_products(
                         "image_url": imgs[0] if imgs else None,
                         "tags": p.get("tags") or [],
                         "categories": p.get("categories") or [],
+                        "description": str(p.get("description") or "")[:3000],
                         "orders": int(p.get("sold_count") or 0),
                         "revenue_vnd": int(p.get("sold_count") or 0) * int(p.get("price") or 0),
                     }

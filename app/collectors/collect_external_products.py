@@ -1047,6 +1047,7 @@ def run_collection(
         f"[{dt.datetime.now()}] Bắt đầu thu thập sản phẩm TMĐT định kỳ "
         f"(source={src}, occasion={occasion or 'all'}, max_age={max_listing_age_days}d, vc_orders={order_window_days}d)..."
     )
+    started_at = dt.datetime.now(dt.timezone.utc)
     client = MongoClient(settings.MONGO_URI, serverSelectionTimeoutMS=15000)
     all_rows: List[Dict[str, Any]] = []
     touched_platforms: List[str] = []
@@ -1138,7 +1139,28 @@ def run_collection(
 
     total = save_to_mongodb(client, all_rows, occasion_filter=occasion, platforms_filter=touched_platforms)
     print(f"[{dt.datetime.now()}] Thu thập định kỳ hoàn tất: {len(all_rows)} sản phẩm ({', '.join(touched_platforms)}).")
+    _log_run(client, started_at, all_rows, touched_platforms, total)
     return total
+
+
+def _log_run(client: MongoClient, started_at: dt.datetime, rows: List[Dict[str, Any]], platforms: List[str], saved: int) -> None:
+    """Ghi một dòng vào `collector_run` (cùng bảng với cron Trends) để kiểm tra lịch thu có chạy thật không."""
+    per_platform: Dict[str, int] = {}
+    for r in rows:
+        k = str(r.get("platform") or "?")
+        per_platform[k] = per_platform.get(k, 0) + 1
+    try:
+        client[settings.MONGO_DB_DATA]["collector_run"].insert_one({
+            "job": "external_products",
+            "started_at": started_at,
+            "finished_at": dt.datetime.now(dt.timezone.utc),
+            "status": "ok" if saved > 0 else "empty",
+            "rows_written": saved,
+            "per_platform": per_platform,
+            "platforms": platforms,
+        })
+    except Exception as e:  # noqa: BLE001
+        print(f"  [collector_run] không ghi được nhật ký: {e}")
 
 
 def main():
@@ -1151,7 +1173,7 @@ def main():
     args = parser.parse_args()
 
     print("=== BẮT ĐẦU THU THẬP SẢN PHẨM THẬT ĐANG BÁN TỪ CÁC SÀN TMĐT ===")
-    run_collection(
+    total = run_collection(
         limit_per_query=args.limit_per_query,
         occasion=args.occasion,
         source=args.source,
@@ -1159,6 +1181,8 @@ def main():
         order_window_days=args.order_window_days,
     )
     print("=== HOÀN TẤT THU THẬP VÀ LƯU MONGODB ===")
+    if not total:
+        sys.exit("Không lưu được sản phẩm nào: kiểm tra kết nối sàn và khóa API.")
 
 
 if __name__ == "__main__":

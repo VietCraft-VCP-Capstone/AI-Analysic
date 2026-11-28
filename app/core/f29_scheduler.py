@@ -218,6 +218,23 @@ def etsy_market_crawl():
         _release_lock("lock_f42_etsy_crawl")
 
 
+def warm_seasonal_market():
+    """Seasonal: tính trước từ khóa và catalog theo ngành x dịp, nạp Redis (khóa để không chạy trùng)."""
+    if not _acquire_lock("lock_seasonal_market_warm", ttl_seconds=3600):
+        return
+    try:
+        from datetime import datetime as _dt
+
+        from app.services.f38.f38_warm import warm_seasonal_market_cache
+
+        n = warm_seasonal_market_cache(_dt.now(VN_TZ).date())
+        print(f"[seasonal_warm] da tinh truoc {n} cap nganh x dip", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[seasonal_warm] Loi: {type(e).__name__}: {e}", flush=True)
+    finally:
+        _release_lock("lock_seasonal_market_warm")
+
+
 _scheduler = None
 
 
@@ -281,18 +298,15 @@ def start_scheduler():
         register(scheduler)
     except Exception as e:  # noqa: BLE001
         print(f"[f29_scheduler] Khong dang ky duoc job Listing Intel: {type(e).__name__}: {e}", flush=True)
-    try:
-        from app.collectors.collect_external_products import run_collection
-        scheduler.add_job(
-            run_collection,
-            CronTrigger(hour=3, minute=30, timezone=VN_TZ),
-            id="collect_external_products_nightly",
-            max_instances=1,
-            coalesce=True,
-            misfire_grace_time=3600,
-        )
-    except Exception as e:  # noqa: BLE001
-        print(f"[f29_scheduler] Khong dang ky duoc job collect external products: {type(e).__name__}: {e}", flush=True)
+    # Catalog đa sàn do GitHub Actions thu (collect-market.yml); ở đây chỉ tính trước phần thị trường của Seasonal
+    scheduler.add_job(
+        warm_seasonal_market,
+        CronTrigger(hour="5,11,17,23", minute=20, timezone=VN_TZ),
+        id="seasonal_market_warm",
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
+    )
     scheduler.start()
     _scheduler = scheduler
     return scheduler

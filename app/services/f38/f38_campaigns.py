@@ -1,13 +1,12 @@
 import logging
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.core import calendar_vn
+from app.core.seasonal_uplift import expected_orders_range, order_uplift_from_history
 from app.core.redis_cache import cache_get_json, cache_set_json
-from app.core.seasonal_dl.forecaster import event_demand_uplift
 from app.core.seasonal_intel import _dt as _si_dt
 from app.services.f38.f38_constants import CAT_LABELS, CAT_OCCASION_KEYWORDS
-from app.services.f38.f38_trends_stl import tra_cuu_trend
 
 log = logging.getLogger("f38_seasonal")
 
@@ -343,54 +342,93 @@ def build_all_campaigns(
     return all_campaigns, active_camp
 
 
+EXPECTED_RATE_DAYS = 60
+EXPECTED_MIN_ORDERS = 5          # dưới mức này vẫn tính nhưng gắn cờ độ tin cậy thấp
+EXPECTED_MIN_COVERAGE_DAYS = 7   # dưới 7 ngày lịch sử thì chưa tính được
+EXPECTED_CONFIDENT_DAYS = 14
+
+
+UPLIFT_SOURCE_LABELS = {
+    "shop_orders": "đơn của shop ở dịp này các năm trước",
+    "platform_orders": "đơn toàn sàn ở dịp này các năm trước",
+    "market_sold": "tốc độ bán thật trên Tiki trong kỳ dịp so với trước dịp",
+}
+PLATFORM_MIN_PRE_ORDERS = 50
+
+
 def attach_expected_orders(
     all_campaigns: List[Dict[str, Any]],
     shop_orders_hist: List[Dict[str, Any]],
     hom_nay: date,
+    platform_orders: Optional[List[Dict[str, Any]]] = None,
+    market_uplift: Optional[Callable[[Dict[str, Any], date, date], Optional[Dict[str, Any]]]] = None,
 ) -> None:
-    """Tính 'Dự kiến' số đơn cho từng dịp từ nhịp đơn 90 ngày của shop × uplift mô hình (cache Redis)."""
-    since_90 = datetime.combine(hom_nay - timedelta(days=90), datetime.min.time())
-    recent_shop_90 = [o for o in shop_orders_hist if (_si_dt(o.get("created_at")) or datetime.min) >= since_90]
-    shop_rate_90 = (len(recent_shop_90) / 90.0) if len(recent_shop_90) >= 5 else None
-    if shop_rate_90 is None:
-        return
+    """
+    Đơn dự kiến của từng dịp = mức bán ngày thường (nhịp đơn 60 ngày × số ngày kỳ dịp) × mức tăng đơn
+    ĐO TỪ DỮ LIỆU BÁN THẬT: đơn của shop các mùa trước → đơn toàn sàn các mùa trước → tốc độ bán trên Tiki.
+    Không dùng lượt tìm kiếm. Chưa đo được mức tăng thì giữ mức ngày thường và ghi rõ.
+    """
+    times = [t for t in (_si_dt(o.get("created_at")) for o in shop_orders_hist) if t]
+    first = min(times, default=None)
 
+    def rate_until(end: datetime) -> Optional[Tuple[float, int, int]]:
+        """Nhịp đơn tối đa 60 ngày trước `end` (cùng quy tắc với BE baselineDailyRate). None khi < 7 ngày lịch sử."""
+        if first is None or first >= end:
+            return None
+        start = max(end - timedelta(days=EXPECTED_RATE_DAYS), first)
+        coverage = max(1, int(-(-(end - start).total_seconds() // 86400)))
+        if coverage < EXPECTED_MIN_COVERAGE_DAYS:
+            return None
+        n = sum(1 for t in times if start <= t < end)
+        return n / float(coverage), n, coverage
+
+    recent = rate_until(datetime.combine(hom_nay + timedelta(days=1), datetime.min.time()))
     for camp in all_campaigns:
         try:
+            ow = camp.get("occasion_window") or {}
             lw = camp.get("launch_window") or {}
-            ev_str = lw.get("peak_date")
-            st_str = lw.get("start")
-            if not ev_str or not st_str:
+            st_str = ow.get("traction_start") or lw.get("start")
+            ev_str = ow.get("event_date") or lw.get("peak_date")
+            if not st_str or not ev_str:
                 continue
-            ev_d = date.fromisoformat(ev_str)
-            st_d = date.fromisoformat(st_str)
-            win_d = max(7, (ev_d - st_d).days)
-            cand_kws = list(dict.fromkeys(list(camp.get("search_keywords") or []) + ["quà tặng"]))
-            up_c = None
-            ev_info_c = next((e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == camp["id"]), None)
-            for kw_c in cand_kws:
-                s_obj, m_key, _ = tra_cuu_trend(kw_c)
-                if s_obj is None:
-                    continue
-                ckey = f"seasonal:dl_uplift:v1:{m_key}:{ev_d.isoformat()}:{win_d}:{hom_nay.isoformat()}"
-                cand_up = cache_get_json(ckey)
-                if not isinstance(cand_up, dict):
-                    ev_by_yr: Dict[int, date] = {}
-                    if ev_info_c:
-                        ev_by_yr = calendar_vn.event_dates_by_year(ev_info_c, range(2021, hom_nay.year + 2))
-                    cand_up = event_demand_uplift(
-                        series=s_obj, event_dates=ev_by_yr, event_date=ev_d, window_days=win_d, today=hom_nay
-                    )
-                    if cand_up:
-                        cache_set_json(ckey, cand_up, ttl_seconds=1800)
-                if isinstance(cand_up, dict) and cand_up.get("uplift_p10") and cand_up.get("uplift_p90"):
-                    up_c = cand_up
-                    break
-            if isinstance(up_c, dict):
-                o10 = max(1, round(shop_rate_90 * win_d * float(up_c["uplift_p10"])))
-                o90 = max(o10, round(shop_rate_90 * win_d * float(up_c["uplift_p90"])))
-                camp["expected_orders"] = f"{o10}" if o10 == o90 else f"{o10}–{o90}"
-        except Exception as exc:
+            st_d, ev_d = date.fromisoformat(st_str), date.fromisoformat(ev_str)
+            days = max(7, (ev_d - st_d).days + 1)  # tính cả ngày mở bán và ngày lễ (khớp kỳ đo của phễu)
+            # Dịp đã mở bán: nhịp nền TRƯỚC ngày mở bán (khớp phễu), để đơn của chính mùa không bị tính là "ngày thường"
+            started = st_d <= hom_nay
+            base = rate_until(datetime.combine(st_d, datetime.min.time())) if started else recent
+            rate_label = "trước ngày mở bán" if started else "gần nhất"
+            if base is None:
+                camp["expected_orders"] = None
+                camp["expected_uplift"] = None
+                camp["expected_low_confidence"] = True
+                camp["expected_orders_basis"] = "Shop có dưới 7 ngày lịch sử đơn nên chưa tính được mức ngày thường."
+                continue
+            rate, n_base, coverage = base
+            low_conf = n_base < EXPECTED_MIN_ORDERS or coverage < EXPECTED_CONFIDENT_DAYS
+            camp["expected_low_confidence"] = low_conf
+            ev_info = next((e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == camp.get("id")), None)
+            past = sorted(d for d in calendar_vn.event_dates_by_year(ev_info, range(2021, hom_nay.year + 1)).values()
+                          if d < hom_nay and d != ev_d) if ev_info else []
+            uplift, source = order_uplift_from_history(shop_orders_hist, past, days), "shop_orders"
+            if uplift is None and platform_orders:
+                uplift, source = order_uplift_from_history(platform_orders, past, days, min_pre_orders=PLATFORM_MIN_PRE_ORDERS), "platform_orders"
+            if uplift is None and market_uplift is not None:
+                uplift, source = market_uplift(camp, st_d, ev_d), "market_sold"
+            r = expected_orders_range(rate, days, uplift)
+            camp["expected_orders"] = f"{r['p10']}" if r["p10"] == r["p90"] else f"{r['p10']}–{r['p90']}"
+            camp["expected_uplift"] = {**uplift, "source": source} if uplift else None
+            base_txt = f"{rate:.2f} đơn/ngày ({n_base} đơn trong {coverage} ngày {rate_label}) × {days} ngày kỳ dịp"
+            if uplift:
+                spread = f"x{uplift['mid']:g}" if uplift["low"] == uplift["high"] else f"x{uplift['mid']:g} (x{uplift['low']:g}–x{uplift['high']:g})"
+                camp["expected_orders_basis"] = f"{base_txt} × mức tăng {spread} đo từ {UPLIFT_SOURCE_LABELS[source]}; khoảng 80%."
+            else:
+                camp["expected_orders_basis"] = (
+                    f"{base_txt}, khoảng 80%. Chưa đo được mức tăng đơn của dịp này (chưa có đơn mùa trước "
+                    "hay đủ lịch sử bán trên Tiki) nên đang là mức ngày thường."
+                )
+            if low_conf:
+                camp["expected_orders_basis"] += " Độ tin cậy thấp: còn ít đơn hoặc lịch sử ngắn."
+        except Exception as exc:  # noqa: BLE001
             log.warning("seasonal: %s: %s", type(exc).__name__, exc)
 
 

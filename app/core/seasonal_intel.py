@@ -275,34 +275,15 @@ def seller_competition(listings: List[Dict[str, Any]], my_price: float) -> Dict[
 
 
 # ----------------------------------------------------------------------------- Product coverage (hot keyword actions)
-def keyword_shop_coverage(keyword: str, shop_products: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Shop đã có bao nhiêu sản phẩm chứa từ khóa trong tên/tag → hành động có giá trị thật."""
-    kw_low = keyword.lower().strip()
-    toks = [t for t in kw_low.split() if len(t) > 1]
-    if not toks:
-        return {"matching": 0, "total": len(shop_products), "gap": True, "product_ids": [], "products": [], "already_tagged": False}
-    hits = []
-    matched_products = []
-    tagged_hits = 0
-    for p in shop_products:
-        p_tags = [str(t).lower().strip() for t in (p.get("tags") or [])]
-        title = str(p.get("title") or p.get("name") or "")
-        text = " ".join([title] + p_tags).lower()
-        score = sum(1 for t in toks if t in text) / len(toks)
-        if kw_low in text or score >= 0.75:
-            pid = str(p.get("_id") or p.get("id") or "")
-            hits.append(pid)
-            matched_products.append({"id": pid, "title": title})
-            if any(kw_low == pt or kw_low in pt for pt in p_tags):
-                tagged_hits += 1
-    return {
-        "matching": len(hits),
-        "total": len(shop_products),
-        "gap": len(hits) == 0,
-        "product_ids": hits[:5],
-        "products": matched_products[:5],
-        "already_tagged": len(hits) > 0 and tagged_hits == len(hits),
-    }
+def keyword_shop_coverage(
+    keyword: str,
+    shop_products: List[Dict[str, Any]],
+    index: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Shop đã có bao nhiêu sản phẩm phù hợp với từ khóa. Quy tắc so khớp: xem `app.core.keyword_match`."""
+    from app.core.keyword_match import keyword_shop_coverage as _coverage  # noqa: PLC0415
+
+    return _coverage(keyword, shop_products, index=index)
 
 
 # ----------------------------------------------------------------------------- Counterfactual impact (Thành quả)
@@ -393,6 +374,11 @@ def impact_report(shop_orders: List[Dict[str, Any]], event: date, win_days: int,
 
 
 # ----------------------------------------------------------------------------- Playbook (Áp dụng)
+# Vị trí lưu tick của từng bước (khớp thứ tự cũ khi còn nhiều ngày, nên tick đã lưu trước đây vẫn đúng)
+PLAYBOOK_SLOTS: Dict[str, int] = {"listing": 0, "test": 1, "decide": 2, "produce": 3, "cutoff": 4}
+PLAYBOOK_TEST_ORDERS = 20
+
+
 def build_playbook(idea: Dict[str, Any], cut_off: date, event: date, today: date,
                    uplift: Optional[Dict[str, Any]], base_orders_per_day: Optional[float],
                    shop_lead_days: int) -> Dict[str, Any]:
@@ -402,20 +388,27 @@ def build_playbook(idea: Dict[str, Any], cut_off: date, event: date, today: date
     produce_deadline = cut_off - timedelta(days=shop_lead_days + ship_days)
     steps = []
 
-    def _add(label: str, d: date, kpi: str, why: str):
-        steps.append({"date": d.isoformat(), "days_from_today": (d - today).days, "task": label,
-                      "kpi": kpi, "why": why, "overdue": d < today})
+    def _add(key: str, label: str, d: date, kpi: str, why: str, **extra: Any):
+        # `key`/`slot` cố định để FE lưu tick & tự ghi nhận đúng bước, dù thứ tự hiển thị (theo ngày) thay đổi mỗi ngày
+        steps.append({"key": key, "slot": PLAYBOOK_SLOTS[key], "date": d.isoformat(), "days_from_today": (d - today).days,
+                      "task": label, "kpi": kpi, "why": why, "overdue": d < today, **extra})
+
+    # Luôn giữ thứ tự hợp lý listing ≤ thử nhỏ < quyết định ≤ hạn chốt, kể cả khi còn ít ngày
+    listing_d = min(cut_off, today + timedelta(days=min(3, total_days // 4)))
+    test_d = min(cut_off, max(listing_d + timedelta(days=1), today + timedelta(days=min(7, max(1, total_days // 3)))))
+    decide_d = min(cut_off, max(test_d + timedelta(days=1), today + timedelta(days=min(10, max(2, total_days // 2)))))
 
     kw = idea.get("keyword") or idea.get("title") or ""
-    _add(f"Đăng listing & gắn tag «{kw}»", min(cut_off, today + timedelta(days=min(3, max(0, total_days)))),
+    _add("listing", f"Đăng listing & gắn tag «{kw}»", listing_d,
          "Listing hiển thị trên tìm kiếm", "Sàn cần vài ngày để index; đăng sớm giúp thu thập đánh giá trước đỉnh.")
-    _add("Thử nhỏ 20 đơn đầu / ngân sách có dừng lỗ", today + timedelta(days=min(7, max(1, total_days // 3))),
-         "≥ ngưỡng hòa vốn ở bước thử", "Xác nhận chuyển đổi thật trước khi gom hàng số lượng lớn.")
-    _add("Quyết định nhân rộng hay dừng", today + timedelta(days=min(10, max(2, total_days // 2))),
+    _add("test", f"Thử nhỏ {PLAYBOOK_TEST_ORDERS} đơn đầu / ngân sách có dừng lỗ", test_d,
+         "≥ ngưỡng hòa vốn ở bước thử", "Xác nhận chuyển đổi thật trước khi gom hàng số lượng lớn.",
+         target_orders=PLAYBOOK_TEST_ORDERS)
+    _add("decide", "Quyết định nhân rộng hay dừng", decide_d,
          "Đạt tiêu chí → nhập thêm; không đạt → dừng", "Giảm rủi ro tồn kho sau dịp.")
-    _add("Chốt sản xuất / nhập hàng", produce_deadline, "Đủ tồn trước hạn ship",
+    _add("produce", "Chốt sản xuất / nhập hàng", produce_deadline, "Đủ tồn trước hạn ship",
          f"Trừ {shop_lead_days} ngày làm hàng + {ship_days} ngày vận chuyển khỏi hạn chốt đơn.")
-    _add("Hạn chốt nhận đơn an toàn", cut_off, "Đóng nhận đơn giao kịp lễ", "Sau mốc này giao trễ rủi ro cao.")
+    _add("cutoff", "Hạn chốt nhận đơn an toàn", cut_off, "Đóng nhận đơn giao kịp lễ", "Sau mốc này giao trễ rủi ro cao.")
 
     exp = None
     if base_orders_per_day is not None:
