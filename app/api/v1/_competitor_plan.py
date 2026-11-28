@@ -1,0 +1,200 @@
+"""Kế hoạch hành động: gom sự thật đã tính ở F32–F36 rồi lập việc theo luật.
+Không dùng mô hình ngôn ngữ: cùng số liệu luôn ra cùng kế hoạch, mỗi việc chỉ ra được luật và con số làm căn cứ."""
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote
+
+from app.api.v1._competitor_ai import thu_tu_de_doa
+from app.api.v1._competitor_landscape import IT_DU_LIEU_VUNG, vung_ban_chay
+
+TOI_DA_VIEC = 10      # trang chia 5 việc mỗi trang, trang đầu vẫn là 5 việc gấp nhất
+MOI_LOAI = 2          # mỗi loại việc tối đa 2 dòng để kế hoạch không toàn một việc
+THU_TU_MUC = {"gap": 0, "quan_trong": 1, "nen_lam": 2, "duy_tri": 3}
+# Sai số trung vị của giá đề xuất trên Amazon Handmade theo độ tin cậy: lệch ít hơn mức này thì có thể chính AI sai.
+SAI_SO_GIA = {"high": 0.068, "medium": 0.187, "low": 0.321}
+DANH_GIA_DU = 5       # Spiegel Research Center 2017: 5 đánh giá đầu làm khả năng được mua tăng mạnh nhất (+270%)
+
+
+def _tien(v: Optional[float]) -> str:
+    return f"{int(round(v)):,}".replace(",", ".") + "đ" if v is not None else "?"
+
+
+def _thoi_gian(phut: int) -> str:
+    """150 -> "2,5 giờ": số đo từ chat thường tính bằng giờ."""
+    return f"{phut} phút" if phut < 60 else f"{phut / 60:.1f}".replace(".0", "").replace(".", ",") + " giờ"
+
+
+def gom_su_that(f32: Dict, f33: Dict, f34: Dict, f35_theo_sp: List[Dict], f36: Dict) -> List[Dict[str, Any]]:
+    """Sự thật đã tính ở các tab (dữ liệu `data` của F32–F36), mỗi điều kèm các con số được phép nhắc lại."""
+    su: List[Dict[str, Any]] = []
+    theo_doi = {t["shop_id"] for t in (f36 or {}).get("tracked") or []}
+    da_bao = {a.get("listing_id") for a in (f36 or {}).get("alerts") or []}
+    # Cảnh báo không mang giá; giá của mẫu mới nằm ở dòng thời gian của shop đó.
+    gia_moi = {x["listing_id"]: x.get("price_vnd") for tr in (f36 or {}).get("tracked") or [] for x in tr.get("launches") or []}
+    for a in (f36 or {}).get("alerts") or []:
+        t = a.get("threat") or {}
+        if t.get("level") in ("high", "medium") and t.get("matched_title"):
+            su.append({"kind": "de_doa", "level": t["level"], "shop_id": a["shop_id"], "shop": a.get("shop_name"),
+                       "title": a.get("title"), "price": gia_moi.get(a.get("listing_id")),
+                       "mine": t["matched_title"], "similarity_pct": round(t["similarity"] * 100),
+                       "near_identical": bool(t.get("near_identical")),
+                       "cheaper_pct": t.get("price_gap_pct") if (t.get("price_gap_pct") or 0) > 0 else None})
+    # Mẫu gần như trùng hàng của tôi đăng trong 8 tuần mà cảnh báo 7 ngày đã bỏ qua: gom theo shop.
+    for tr in (f36 or {}).get("tracked") or []:
+        sao = [x for x in tr.get("launches") or [] if x["listing_id"] not in da_bao
+               and (x.get("threat") or {}).get("near_identical") and x["threat"].get("level") == "high"]
+        if sao:
+            su.append({"kind": "ban_sao", "shop_id": tr["shop_id"], "shop": tr.get("shop_name"), "n": len(sao),
+                       "items": [{"title": x["title"], "mine": x["threat"]["matched_title"],
+                                  "similarity_pct": round(x["threat"]["similarity"] * 100),
+                                  "cheaper_pct": x["threat"]["price_gap_pct"] if (x["threat"].get("price_gap_pct") or 0) > 0 else None}
+                                 for x in sorted(sao, key=lambda x: thu_tu_de_doa(x["threat"]))[:2]]})
+    for s in (f36 or {}).get("surging") or []:
+        su.append({"kind": "tang_toc", "shop_id": s["shop_id"], "shop": s.get("shop_name"),
+                   "last_week": s["last_week"], "baseline": round(s["baseline"])})
+    for p in f35_theo_sp:
+        g, gia = p.get("ai_price"), p.get("my_price")
+        # Chỉ báo khi lệch khỏi khoảng đề xuất nhiều hơn sai số của AI ở độ tin cậy đó, và ngoài khoảng giá đối thủ thật.
+        e = SAI_SO_GIA.get((g or {}).get("confidence"), SAI_SO_GIA["low"])
+        if g and gia and ((gia > g["high_vnd"] * (1 + e) and gia > g["rival_price_max_vnd"])
+                          or (gia < g["low_vnd"] * (1 - e) and gia < g["rival_price_min_vnd"])):
+            su.append({"kind": "gia", "product_id": p["product_id"], "title": p["title"], "my_price": int(gia),
+                       "vs_suggested_pct": round((gia / g["suggested_vnd"] - 1) * 100),
+                       "low": g["low_vnd"], "high": g["high_vnd"], "n_rivals": g["n_neighbors"],
+                       "rival_min": g["rival_price_min_vnd"], "rival_max": g["rival_price_max_vnd"]})
+    # Cả một loại hàng đắt hơn vùng bán chạy cùng chất liệu; loại đã có việc "điều chỉnh giá" thì không nhắc lại.
+    gia_sp = {f["product_id"] for f in su if f["kind"] == "gia"}
+    diem = (f32 or {}).get("price_points") or []
+    for loai in sorted({d["product_type_name"] for d in diem if d["is_mine"]}):
+        toi = [d for d in diem if d["is_mine"] and d["product_type_name"] == loai]
+        if any(d["listing_id"] in gia_sp for d in toi):
+            continue
+        cl = {c for d in toi for c in d["materials"]}
+        # Biến thể có giá riêng theo chất liệu thì lấy giá của chất liệu đang so, như biểu đồ giá ở FE.
+        doi = [{**d, "price_vnd": min(d.get("price_by_material", {}).get(m, d["price_vnd"]) for m in cl & set(d["materials"]))}
+               if cl else d
+               for d in diem if not d["is_mine"] and d["product_type_name"] == loai and (not cl or cl & set(d["materials"]))]
+        vung = vung_ban_chay(doi)
+        lo, hi = min(d["price_vnd"] for d in toi), max(d["price_vnd"] for d in toi)
+        # Không thêm biên: Olist 2017, biên 0% đã tách được hàng bán kém (RESULT_OLIST_PRICE_BAND_MARGIN).
+        if vung and lo > vung["p75"]:
+            su.append({"kind": "vung_gia", "type": loai, "n_mine": len(toi), "my_min": lo, "my_max": hi,
+                       "low": vung["p25"], "high": vung["p75"], "n": vung["n"], "materials": sorted(cl),
+                       "rival_max": max(d["price_vnd"] for d in doi)})
+    ten_tag = (f34 or {}).get("tag_names") or {}
+    for p in ((f34 or {}).get("per_product") or [])[:3]:
+        x = next((x for x in p["suggestions"] if x["used_by"] >= 2), None)
+        if x:
+            su.append({"kind": "tu_khoa", "product_id": p["product_id"], "title": p["title"],
+                       "tag": ten_tag.get(x["tag_id"], x["tag_id"]), "used_by": x["used_by"], "better_sellers": x["better_sellers"]})
+    # Shop cùng phân khúc giá mà bán gấp nhiều lần: đáng tham khảo (thay nhóm chiến lược k-means, vài shop thì không vững).
+    shops = (f32 or {}).get("shops") or []
+    toi_shop = next((s for s in shops if s["is_me"]), None)
+    for s in shops:
+        if s.get("is_peer") and toi_shop:
+            su.append({"kind": "tham_khao", "shop_id": s["shop_id"], "shop": s.get("shop_name"),
+                       "their_median": s["price_vnd"]["median"], "my_median": toi_shop["price_vnd"]["median"],
+                       "times": round(s["units_90d"] / max(toi_shop["units_90d"], 1))})
+    # Lấy trên mọi danh mục, không chỉ danh mục chính, để không bỏ sót đối thủ ở danh mục phụ.
+    ten_dm = (f32 or {}).get("category_names") or {}
+    for s in ((f32 or {}).get("rival_shops_by_category") or {}).get("all") or (f32 or {}).get("direct_rival_shops") or []:
+        if s["shop_id"] not in theo_doi:
+            su.append({"kind": "theo_doi", "shop_id": s["shop_id"], "shop": s.get("shop_name"), "overlap": s["overlap"],
+                       "categories": [ten_dm.get(c) or c for c in s.get("categories") or []]})
+            break
+    # Đối thủ có đánh giá mà tổng của mình dưới mốc 5, tức chưa sản phẩm nào đạt mốc: nên xin đánh giá.
+    top = (f32 or {}).get("competitors") or []
+    tong_dg = sum(c.get("n_reviews") or 0 for c in top)
+    dg_toi = sum(x.get("n_reviews") or 0 for x in (f32 or {}).get("my_listings") or [])
+    if tong_dg >= DANH_GIA_DU and dg_toi < DANH_GIA_DU:
+        su.append({"kind": "danh_gia", "total": tong_dg, "mine": dg_toi})
+    # Điểm mạnh nên giữ: trả lời khách nhanh nhất danh mục.
+    khac = [s["response_minutes"] for s in shops if not s["is_me"] and s.get("response_minutes") is not None]
+    if toi_shop and toi_shop.get("response_minutes") is not None and khac and toi_shop["response_minutes"] < min(khac):
+        su.append({"kind": "duy_tri", "mine": toi_shop["response_minutes"], "others_min": min(khac), "others_max": max(khac),
+                   "n_others": len(khac)})
+    return su
+
+
+def _muc(f: Dict[str, Any]) -> str:
+    """Mức ưu tiên hiện trên trang: hàng gần như trùng, hàng mới cạnh tranh cao là khẩn cấp; giá lệch, tăng đột biến là quan trọng."""
+    if f["kind"] == "ban_sao" or (f["kind"] == "de_doa" and f.get("level") == "high"):
+        return "gap"
+    if f["kind"] in ("de_doa", "gia", "vung_gia", "tang_toc"):
+        return "quan_trong"
+    return "duy_tri" if f["kind"] == "duy_tri" else "nen_lam"
+
+
+def ke_hoach_luat(su: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Kế hoạch sinh theo luật từ sự thật: xếp theo mức ưu tiên, trong một mức thì theo loại việc."""
+    thu_tu = {"de_doa": 0, "ban_sao": 1, "gia": 2, "vung_gia": 3, "tang_toc": 4, "tham_khao": 5, "tu_khoa": 6,
+              "theo_doi": 7, "danh_gia": 8, "duy_tri": 9}
+    viec, da_co = [], {}
+    for f in sorted(su, key=lambda f: (THU_TU_MUC[_muc(f)], thu_tu[f["kind"]], f.get("level") != "high",
+                                       -abs(f.get("vs_suggested_pct") or 0))):
+        k = f["kind"]
+        da_co[k] = da_co.get(k, 0) + 1
+        if da_co[k] > MOI_LOAI:
+            continue
+        if k == "de_doa":
+            so = (f"gần như trùng {f['mine']}" + (f", rẻ hơn {f['cheaper_pct']}%" if f.get("cheaper_pct") else "")
+                  if f.get("near_identical") else
+                  (f"rẻ hơn {f['mine']} {f['cheaper_pct']}%" if f.get("cheaper_pct") else f"tương tự {f['mine']}")
+                  + f", tương đồng {f['similarity_pct']}%")
+            why = f"{_tien(f['price'])}, {so}." if f.get("price") else f"{so[0].upper()}{so[1:]}."
+            viec.append({"action": f"{'Xem' if f['level'] == 'high' else 'Lưu ý'} \"{f['title']}\" của {f['shop']}",
+                         "why": why, "link": f"/seller/competitors/{f['shop_id']}"})
+        elif k == "ban_sao":
+            ly_do = " ".join(f"{x['title']} gần như trùng {x['mine']}" + (f", rẻ hơn {x['cheaper_pct']}%" if x.get("cheaper_pct") else "") + "."
+                             for x in f["items"])
+            viec.append({"action": f"Đối chiếu {f['n']} mẫu của {f['shop']} gần như trùng hàng bạn",
+                         "why": ly_do, "link": "/seller/insights/competitors#theo-doi"})
+        elif k == "gia":
+            viec.append({"action": f"Điều chỉnh giá {f['title']} về {_tien(f['low'])} – {_tien(f['high'])}",
+                         "why": f"Giá hiện {_tien(f['my_price'])}. {f['n_rivals']} mẫu giống nhất của đối thủ bán "
+                                f"{_tien(f['rival_min'])} – {_tien(f['rival_max'])}.",
+                         "link": f"/seller/insights/pricing?productId={f['product_id']}"})
+        elif k == "vung_gia":
+            gia_toi = _tien(f["my_min"]) if f["my_min"] == f["my_max"] else f"{_tien(f['my_min'])} – {_tien(f['my_max'])}"
+            vuot = (_tien(f["my_min"] - f["high"]) if f["my_min"] == f["my_max"]
+                    else f"{_tien(f['my_min'] - f['high'])} – {_tien(f['my_max'] - f['high'])}")
+            cl = f" {', '.join(f['materials'])}" if f["materials"] else ""
+            # Vùng p25–p75 theo lượng bán chứa ít nhất một nửa lượng bán (giá rời rạc thì nhiều hơn), nên không ghi "50%".
+            it = f" (mới tính từ {f['n']} sản phẩm, ít dữ liệu)" if f["n"] < IT_DU_LIEU_VUNG else ""
+            viec.append({"action": f"Rà soát giá {f['n_mine']} mẫu {f['type'].lower()}: cao hơn giá bán chạy {vuot}",
+                         "why": f"Bạn {gia_toi}. Giá bán chạy của {f['type'].lower()}{cl} {_tien(f['low'])} – {_tien(f['high'])}{it}; "
+                                f"mẫu đắt nhất của đối thủ {_tien(f['rival_max'])}.",
+                         "link": f"/seller/insights/competitors?loai={quote(f['type'])}#gia"})
+        elif k == "tang_toc":
+            viec.append({"action": f"Theo sát {f['shop']}: lượng bán tăng đột biến",
+                         "why": f"{f['last_week']} sản phẩm đã bán tuần này, bình thường {f['baseline']}.",
+                         "link": "/seller/insights/competitors#theo-doi"})
+        elif k == "tham_khao":
+            viec.append({"action": f"Tham khảo cách bán của {f['shop']}",
+                         "why": f"Cùng tầm giá ({_tien(f['their_median'])} so với {_tien(f['my_median'])}), "
+                                f"bán gấp {f['times']} lần trong 90 ngày.",
+                         "link": f"/seller/competitors/{f['shop_id']}"})
+        elif k == "tu_khoa":
+            them = f", {f['better_sellers']} trong đó bán chạy hơn" if f["better_sellers"] else ""
+            # Chỉ nêu sự thật đếm được: chưa có dữ liệu chứng minh thêm từ khoá thì bán tốt hơn.
+            viec.append({"action": f"Cân nhắc từ khoá \"{f['tag']}\" cho {f['title']}",
+                         "why": f"{f['used_by']} mẫu tương tự đang dùng từ khoá này{them}.",
+                         "link": f"/seller/products?edit={f['product_id']}"})
+        elif k == "theo_doi":
+            viec.append({"action": f"Theo dõi {f['shop']}",
+                         "why": f"Có mẫu tương tự {f['overlap']} sản phẩm của bạn, nhiều nhất trong các shop bạn chưa theo dõi.",
+                         "link": f"/seller/competitors/{f['shop_id']}"})
+        elif k == "danh_gia":
+            viec.append({"action": "Xin đánh giá từ khách đã nhận hàng",
+                         "why": f"Sản phẩm của bạn có tổng {f['mine']} lượt đánh giá, chưa mẫu nào đạt mốc {DANH_GIA_DU}; "
+                                f"Top 20 đối thủ có {f['total']}.",
+                         "link": "/seller/orders"})
+        elif k == "duy_tri":
+            lo, hi = _thoi_gian(f["others_min"]), _thoi_gian(f["others_max"])
+            viec.append({"action": f"Giữ tốc độ trả lời khách {_thoi_gian(f['mine'])}",
+                         "why": f"Nhanh nhất trong {f['n_others'] + 1} shop đo được từ chat 90 ngày; "
+                                f"shop khác {lo if lo == hi else f'{lo} – {hi}'}.",
+                         "link": "/seller/chat"})
+        viec[-1]["priority"] = _muc(f)      # thứ tự xếp ở trên đã đi từ khẩn cấp tới duy trì
+        if len(viec) == TOI_DA_VIEC:
+            break
+    return viec

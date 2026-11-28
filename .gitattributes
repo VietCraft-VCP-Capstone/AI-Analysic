@@ -1,0 +1,3 @@
+*.joblib linguist-generated=true
+*.npy linguist-generated=true
+app/core/f29/models/**/*.json linguist-generated=true

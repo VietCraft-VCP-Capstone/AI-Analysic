@@ -287,7 +287,7 @@ if __name__ == "__main__":
     assert "unlock" not in build_meta(), "không truyền unlock thì không được tự bịa ra field này"
     print("✓ build_meta(unlock=...) gắn đúng field, mặc định không có")
 
-    for fn, code in ((lambda: mart_not_ready("mart_demand"), 503),
+    for fn, code in ((lambda: mart_not_ready("niche_score"), 503),
                      (lambda: invalid_param("timeRange", "7d|30d|90d"), 400),
                      (lambda: forbidden(), 403),
                      (lambda: not_found("listing"), 404)):

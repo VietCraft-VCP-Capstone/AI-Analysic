@@ -20,7 +20,8 @@ from app.api.v1.analytics_routes import gan_vao as gan_analytics
 from app.api.v1.cccd_ocr import router as cccd_ocr_router
 from app.api.v1.f42_smart_suggestion import router as smart_suggestion_router
 from app.api.v1.f30_internal import router as f30_internal_router
-from app.api.v1.listing_quality import router as listing_quality_router
+from app.api.v1.llm_internal import router as llm_internal_router
+from app.api.v1.vision_segment import router as vision_segment_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -70,30 +71,55 @@ async def lifespan(app: FastAPI):
     else:
         ra("  [!]  Gateway BE san: TAT. Dat AI_GATEWAY_SECRET giong ben BE de san goi duoc.")
     try:
-        from app.core.listing_intel import embedder
+        from app.core.f29.shared import embedder
         if embedder.available():
-            ra(f"  [OK] Listing Intel: model ONNX san sang o {embedder.MODEL_DIR}")
+            ra(f"  [OK] F29: model SigLIP san sang o {embedder.MODEL_DIR}")
         else:
-            ra(f"  [!!] Listing Intel: THIEU model ONNX o {embedder.MODEL_DIR} (LI_MODEL_DIR).")
-            ra("       Truc anh, thi truong va khop tu khoa chay rut gon. Tai: python -m scripts.li.fetch_models")
+            ra(f"  [!!] F29: THIEU model SigLIP o {embedder.MODEL_DIR} (LI_MODEL_DIR).")
+            ra("       Cac check anh cua F29 tam tat. Tai: python -m scripts.siglip.fetch_models")
     except Exception as e:
         ra(f"  [!] Listing Intel: khong kiem duoc model ONNX: {type(e).__name__}")
     ra("  Swagger:  <dia chi uvicorn in o tren> + /docs")
 
     try:
-        from app.core.f29.price_suggest import MODEL_PATH, _load
-        _load(MODEL_PATH)
-        ra("  [OK] F29 price model: da nap san vao bo nho (warm-up).")
+        from app.services.f42.comparable_pricing import ComparableIndex
+        ComparableIndex.get()
+        ra("  [OK] F42 comparable index (TF-IDF): da fit san (warm-up), request dau khong con cham.")
     except Exception as e:
-        ra(f"  [!] F29 price model khong warm-up duoc: {type(e).__name__}: {e}")
+        ra(f"  [!] F42 comparable index khong warm-up duoc: {type(e).__name__}: {e}")
+
+    def warm_f29():
+        try:
+            from PIL import Image
+
+            from app.core.f29.checks import category, describe
+            from app.core.f29.shared import embedder
+            from app.core.listing_intel import trend_store
+            trend_store.weekly_series()
+            embedder.embed_texts(["warm"])
+            embedder.embed_images([Image.new("RGB", (32, 32))])
+            category._model()
+            describe._model()
+            ra("  [OK] F29: da warm-up SigLIP, B1, B2 va du lieu xu huong.")
+        except Exception as e:
+            ra(f"  [!] F29 warm-up loi: {type(e).__name__}: {e}")
+
+    import threading
+    threading.Thread(target=warm_f29, daemon=True).start()
 
     if settings.ENABLE_INPROCESS_SCHEDULER:
         try:
-            from app.core.f29_scheduler import start_scheduler
+            from app.core.f29.scheduler import start_scheduler
             start_scheduler()
             ra("  [OK] F29 scheduler: da bat (in-process).")
         except Exception as e:
             ra(f"  [!] F29 scheduler KHONG bat duoc: {type(e).__name__}: {e}")
+        try:
+            from app.core.seasonal_dl_scheduler import start as start_seasonal_scheduler
+            start_seasonal_scheduler()
+            ra("  [OK] Seasonal DL scheduler: da kiem tra (in-process).")
+        except Exception as e:
+            ra(f"  [!] Seasonal DL scheduler KHONG bat duoc: {type(e).__name__}: {e}")
     else:
         ra("  [-] F29 scheduler: TAT trong tien trinh web (chay bang worker rieng).")
     ra("=" * 72)
@@ -101,8 +127,13 @@ async def lifespan(app: FastAPI):
     yield
 
     try:
-        from app.core.f29_scheduler import stop_scheduler
+        from app.core.f29.scheduler import stop_scheduler
         stop_scheduler()
+    except Exception:
+        pass
+    try:
+        from app.core.seasonal_dl_scheduler import stop as stop_seasonal_scheduler
+        stop_seasonal_scheduler()
     except Exception:
         pass
 
@@ -190,8 +221,8 @@ def read_ready():
     body: dict[str, Any] = {"status": "ok"}
 
     try:
-        mart_db = db()
-        latest = mart_db["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
+        from app.core.f29.constants import store_db
+        latest = store_db()["listing_health_scores"].find_one({}, sort=[("computed_at", -1)])
         if latest and latest.get("computed_at"):
             raw = latest["computed_at"]
             computed_at = None
@@ -216,7 +247,8 @@ TRANG_THAI_F = gan_analytics(app)
 app.include_router(cccd_ocr_router, prefix=f"{settings.API_V1_STR}/ocr/cccd", tags=["CCCD OCR & Verification"])
 app.include_router(smart_suggestion_router)
 app.include_router(f30_internal_router)
-app.include_router(listing_quality_router)
+app.include_router(llm_internal_router)
+app.include_router(vision_segment_router)
 
 
 

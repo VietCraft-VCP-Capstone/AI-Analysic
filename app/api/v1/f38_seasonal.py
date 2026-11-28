@@ -1,3 +1,4 @@
+import logging
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -9,398 +10,401 @@ if str(ROOT_DIR) not in sys.path:
 
 from fastapi import APIRouter
 
-from app.api.v1._live import la_shop_live
+from app.api.v1._live import db_live, la_shop_live, san_pham_live
 from app.api.v1._mart import db
-from app.api.v1._template import CurrentShop, insufficient, mart_not_ready, meta_from_record, ok
-from app.core.seasonal_taxonomy import get_seasonal_suggestions
-from app.services.market_mining_service import MarketMiningService
-from app.services.llm_seasonal_service import LLMSeasonalService
+from app.api.v1._template import CurrentShop, build_meta, ok
+from app.core import calendar_vn
+from app.core.category_groups import GROUP_LABELS, detect_shop_group
+from app.core.redis_cache import cache_get_json, cache_set_json
+from app.core.shop_lead_time import load_shop_lead_time
+from app.core.keyword_match import build_product_index
+from app.core.seasonal_intel import keyword_shop_coverage, summarize_industry_orders
+from app.services.f38.f38_campaigns import (
+    attach_expected_orders,
+    build_all_campaigns,
+    build_milestone_actions,
+    tao_khuyen_nghi_hanh_dong as _tao_khuyen_nghi_hanh_dong,
+)
+from app.services.f38.f38_constants import (
+    CATEGORY_OCCASION_BLUEPRINTS,
+    CAT_LABELS,
+    CAT_OCCASION_KEYWORDS,
+    EXTERNAL_FRESHNESS_DAYS,
+    VALID_ORDER_FILTER,
+    LUI_SAN_XUAT,
+    MART,
+    TZ_VN,
+    VC_ORDER_WINDOW_DAYS,
+    cutoff_utc_dt as _cutoff_utc_dt,
+)
+from app.services.f38.f38_funnel_and_metrics import (
+    build_route_risks,
+    build_scorecard_metrics as _build_scorecard_metrics,
+)
+from app.core.cost_basis import cost_basis_label, load_cost_model
+from app.core.market_freshness import load_market_freshness
+from app.core.seasonal_uplift import load_platform_order_times, market_uplift_for_camp
+from app.services.f38.f38_keywords import _load_f42_listings
+from app.services.f38.f38_keywords import tinh_opportunity_keywords as _tinh_opportunity_keywords
+from app.services.f38.f38_market_ideas import (
+    build_market_blueprints,
+    build_potential_profiles,
+    build_ready_and_pod_ideas,
+    fetch_external_market_catalog,
+)
+from app.services.f38.f38_readiness import (
+    analyze_product_seasonal_readiness,
+    load_and_audit_shop_products,
+)
+from app.services.f38.f38_story_blueprint import build_idea_draft_blueprint, build_story_and_playbooks
+from app.services.f38.f38_traits_and_scale import (
+    ap_dung_so_sanh as _ap_dung_so_sanh,
+    build_occasion_traits,
+    fmt_trait as _fmt_trait,
+    loi_khuyen_trait as _loi_khuyen_trait,
+)
+from app.services.f38.f38_trends_stl import (
+    lay_chuoi_trend_cho_tu_khoa as _lay_chuoi_trend_cho_tu_khoa,
+    lay_don_hang_lich_su as _lay_don_hang_lich_su,
+    load_vietcraft_real_sold_map as _load_vietcraft_real_sold_map,
+    tinh_stl_don_gian as _tinh_stl_don_gian,
+    tinh_stl_that as _tinh_stl_that,
+    tra_cuu_trend as _tra_cuu_trend,
+)
 
 router = APIRouter()
-
-MART = "seasonal_profile"
-LUI_SAN_XUAT = 21       # BR-209: lùi thời gian in ấn và vận chuyển
-TOP_N = 10
-
-# 6 Chiến dịch mùa vụ & lễ hội lớn bao trùm toàn bộ chu kỳ 1 năm tại Việt Nam
-YEARLY_CAMPAIGNS = [
-    {
-        "id": "halloween",
-        "name": "Lễ Hội Halloween & Thu Đông",
-        "icon": "ghost",
-        "badge": "Lễ hội mùa Thu",
-        "months": [9, 10],
-        "peak_week": 43,
-        "description": "Nhu cầu trang phục cá tính, đồ cosplay, áo hoodie nỉ ấm, thời trang phong cách gothic/streetwear và phụ kiện kỳ bí.",
-        "search_keywords": ["áo hoodie", "áo oversize", "áo vintage", "móc khóa", "áo local brand"],
-        "category_focus": {
-            "thoi-trang": "Set đồ ren đen, áo hoodie nỉ dày rách cá tính, chân váy xếp ly phối ren, áo thun in hình phong cách Halloween",
-            "gia-dung": "Cốc sứ tạo hình ma quái, bình giữ nhiệt mùa thu",
-            "phu-kien": "Túi canvas họa tiết bí ngô, móc khóa ma mị",
-            "trang-tri": "Tranh canvas kinh dị vintage, decal trang trí"
-        }
-    },
-    {
-        "id": "noel",
-        "name": "Giáng Sinh (Noel) & Năm Mới",
-        "icon": "snowflake",
-        "badge": "Mùa lễ hội lớn cuối năm",
-        "months": [11, 12],
-        "peak_week": 51,
-        "description": "Cao điểm mua sắm thời trang dự tiệc cuối năm, áo ấm mùa đông, quà tặng ấm áp cho bạn bè và người thân.",
-        "search_keywords": ["áo giáng sinh", "quà giáng sinh", "trang trí noel", "áo hoodie", "áo len"],
-        "category_focus": {
-            "thoi-trang": "Set áo váy tiệc Giáng sinh nhung đỏ, đầm cúp ngực đính ren du tiệc, áo len họa tiết tuần lộc, áo hoodie đôi",
-            "gia-dung": "Cốc sứ in hình Noel, bình giữ nhiệt mùa đông",
-            "phu-kien": "Túi canvas thổ cẩm Giáng sinh, khăn len choàng cổ",
-            "trang-tri": "Tranh treo tường cây thông tuyết, đèn led trang trí"
-        }
-    },
-    {
-        "id": "tet",
-        "name": "Tết Nguyên Đán & Du Xuân",
-        "icon": "sparkles",
-        "badge": "Đỉnh điểm sức mua toàn sàn",
-        "months": [1, 2],
-        "peak_week": 2,
-        "description": "Thời điểm chi tiêu mạnh nhất của người Việt: sắm sửa trang phục diện Tết, set quà biếu tặng gia đình và đồng nghiệp.",
-        "search_keywords": ["quà tết", "áo tết", "trang trí tết", "lì xì tết"],
-        "category_focus": {
-            "thoi-trang": "Set áo dài cách tân tùng bèo, đầm lụa cúp ngực phối ren đỏ/vàng du xuân, set áo váy mẹ và bé",
-            "gia-dung": "Hộp quà mứt Tết, bộ ấm chén in chữ Tài Lộc",
-            "phu-kien": "Túi gấm may mắn, bao lì xì thiết kế độc quyền",
-            "trang-tri": "Tranh canvas hoa đào hoa mai, câu đối đỏ đón xuân"
-        }
-    },
-    {
-        "id": "valentine_8_3",
-        "name": "Lễ Tình Nhân & Tôn Vinh Phụ Nữ (Valentine, 8/3, 20/10)",
-        "icon": "heart",
-        "badge": "Mùa quà tặng phái đẹp",
-        "months": [2, 3, 10],
-        "peak_week": 7,
-        "description": "Làn sóng mua sắm quà tặng tình nhân, set áo váy hẹn hò lãng mạn và quà tri ân phái đẹp.",
-        "search_keywords": ["quà valentine", "quà 8/3", "quà 20/10", "áo đôi", "quà tặng người yêu"],
-        "category_focus": {
-            "thoi-trang": "Set đầm trễ vai nữ tính, áo 2 dây nhún ngực hoa nhí, váy babydoll hẹn hò, áo thun đôi tình nhân",
-            "gia-dung": "Ly sứ đôi in tên riêng, nến thơm phòng ngủ",
-            "phu-kien": "Túi xách nữ mini, kẹp tóc đính đá lấp lánh",
-            "trang-tri": "Khung ảnh in hình kỷ niệm, tranh hoa hồng nghệ thuật"
-        }
-    },
-    {
-        "id": "he_dulich",
-        "name": "Mùa Hè Sôi Động & Thời Trang Du Lịch Biển",
-        "icon": "sun",
-        "badge": "Mùa du lịch dã ngoại",
-        "months": [5, 6, 7],
-        "peak_week": 22,
-        "description": "Nhu cầu bùng nổ trang phục đi biển, thời trang mát mẻ giải nhiệt, đồ bơi và phụ kiện dã ngoại.",
-        "search_keywords": ["áo phông nam", "áo phông nữ", "in áo thun", "áo thun"],
-        "category_focus": {
-            "thoi-trang": "Áo 2 dây xếp tầng, đầm maxi đi biển, áo croptop hoa quả mùa hè, quần jeans baggy rách",
-            "gia-dung": "Bình giữ nhiệt đá lạnh, ly nước mang đi dã ngoại",
-            "phu-kien": "Túi tote canvas đi biển, nón cói, kính râm",
-            "trang-tri": "Tranh canvas chủ đề nhiệt đới biển xanh"
-        }
-    },
-    {
-        "id": "tuutuong_trungthu",
-        "name": "Mùa Tựu Trường (Back to School) & Trung Thu",
-        "icon": "backpack",
-        "badge": "Mùa học sinh & gia đình",
-        "months": [8, 9],
-        "peak_week": 35,
-        "description": "Làn sóng mua sắm trang phục tựu trường, áo lớp/nhóm, quà tặng Trung thu cho trẻ em và gia đình.",
-        "search_keywords": ["túi tote", "áo lớp", "áo nhóm", "áo đồng phục", "quà 20/11"],
-        "category_focus": {
-            "thoi-trang": "Áo polo oversize phong cách học đường, chân váy xếp ly tennis, áo sơ mi form rộng",
-            "gia-dung": "Bình nước học sinh, cốc sứ văn phòng",
-            "phu-kien": "Balo canvas, túi tote đựng tài liệu, móc khóa",
-            "trang-tri": "Lồng đèn trang trí, tranh Trung thu truyền thống"
-        }
-    }
-]
+log = logging.getLogger("f38_seasonal")
 
 
-def _cua_so_ra_hang(tuan: int, hom_nay: date):
-    """Tính cửa sổ ra hàng chuẩn từ tuần đỉnh lùi lại 21 ngày chuẩn bị."""
-    tuan = max(1, min(52, tuan))
-    for nam in (hom_nay.year, hom_nay.year + 1, hom_nay.year + 2):
-        try:
-            dinh = date.fromisocalendar(nam, tuan, 1)
-        except ValueError:
-            continue
-        if dinh - timedelta(days=LUI_SAN_XUAT + 21) > hom_nay:
-            break
-    else:
-        return None
-    return {
-        "peak_week": f"{dinh.isocalendar()[0]}-W{tuan:02d}",
-        "peak_date": dinh.isoformat(),
-        "start": (dinh - timedelta(days=LUI_SAN_XUAT + 21)).isoformat(),
-        "end": (dinh - timedelta(days=LUI_SAN_XUAT)).isoformat(),
-        "basis": f"Lùi {LUI_SAN_XUAT} ngày cho sản xuất/giao hàng và 3 tuần chạy khuyến mãi bán"
-    }
-
-
-def _tinh_radar_chien_dich(camp_id: str, timing: Dict[str, Any], cat_slug: str) -> Dict[str, Any]:
-    """Tính 5 trục radar chiến lược đo lường tiềm năng mùa vụ so với mặt bằng chung."""
-    axes = ["Sức cầu thị trường", "Cửa sổ chuẩn bị", "Biên lợi nhuận", "Sức mua làm quà", "Tỉ lệ chốt đơn"]
-
-    status = timing.get("status", "upcoming")
-    days_diff = timing.get("days_diff", 30)
-    if status == "active":
-        timing_score = 96
-    elif status == "upcoming":
-        timing_score = max(40, min(95, 95 - int(days_diff * 0.7)))
-    else:
-        timing_score = 35
-
-    seasonal_profiles = {
-        "tet": {
-            "demand": 98,
-            "margin": 90,
-            "gift": 96,
-            "cvr": 94,
-            "takeaways": [
-                "Sức cầu và tỉ lệ chốt đơn đạt đỉnh năm (+98/100): Khách chi tiêu mạnh tay, ít so đo giá lẻ.",
-                "Lợi thế biên lợi nhuận (+90/100): Đóng gói combo hoặc set quà nhiều món giúp nâng giá trị đơn hàng vượt trội.",
-                "Cấp bách chuẩn bị: Cần hoàn thiện ảnh mẫu và đăng bán trước đỉnh vụ 3 tuần để thuật toán sàn kịp tối ưu ranking."
-            ]
-        },
-        "noel": {
-            "demand": 88,
-            "margin": 86,
-            "gift": 92,
-            "cvr": 88,
-            "takeaways": [
-                "Nhu cầu thời trang giữ ấm & dự tiệc bùng nổ (+88/100), ưu tiên gam màu đỏ nhung, trắng kem, xanh rêu.",
-                "Sức mua quà tặng cao (+92/100): Khách chuộng các set quà đóng hộp đẹp mắt hoặc đồ đôi có dấu ấn riêng.",
-                "Thời gian chốt đơn dồn dập vào tuần 50-51: Cần chuẩn bị hàng sẵn sàng để giao hỏa tốc."
-            ]
-        },
-        "valentine_8_3": {
-            "demand": 84,
-            "margin": 94,
-            "gift": 98,
-            "cvr": 88,
-            "takeaways": [
-                "Sức mua làm quà tặng dẫn đầu toàn sàn (+98/100): Sẵn sàng trả giá cao cho sản phẩm cá nhân hóa, thiệp mừng.",
-                "Biên lợi nhuận cao nhất năm (+94/100): Thời trang nữ thiết kế, đồ đôi hoặc quà tặng in khắc theo yêu cầu.",
-                "Cửa sổ mua dồn vào 7 ngày trước lễ: Đẩy mạnh các tùy chọn gói quà để tối đa tỷ lệ chốt đơn."
-            ]
-        },
-        "he_dulich": {
-            "demand": 92,
-            "margin": 78,
-            "gift": 60,
-            "cvr": 85,
-            "takeaways": [
-                "Lượng tiêu thụ số lượng lớn và quay vòng vốn nhanh (+92/100): Áo thun, đồ dã ngoại, phụ kiện đi biển.",
-                "Biên lãi cạnh tranh (+78/100): Cần tập trung vào chất liệu thoáng mát và ưu đãi mua combo 2-3 chiếc.",
-                "Mùa vụ kéo dài 3 tháng hè: Thời gian bán dài, rủi ro tồn kho thấp hơn các dịp lễ ngắn ngày."
-            ]
-        },
-        "tuutuong_trungthu": {
-            "demand": 86,
-            "margin": 82,
-            "gift": 80,
-            "cvr": 86,
-            "takeaways": [
-                "Nhu cầu tập trung vào học sinh, sinh viên và áo đồng phục nhóm/lớp (+86/100).",
-                "Tiềm năng đơn hàng sỉ/số lượng lớn: Các đơn in nhóm lớp thường có quy mô 15-40 sản phẩm/đơn.",
-                "Cần chuẩn bị phôi và kiểm tra năng lực xưởng in từ đầu tháng 8 để tránh quá tải."
-            ]
-        },
-        "halloween": {
-            "demand": 80,
-            "margin": 85,
-            "gift": 68,
-            "cvr": 82,
-            "takeaways": [
-                "Ngách trang phục độc lạ, áo hoodie nỉ ấm và phong cách Gothic/Streetwear có độ trung thành cao (+85/100 biên lãi).",
-                "Cộng đồng trẻ chuộng sự khác biệt và sẵn sàng mua sớm để chuẩn bị tiệc hóa trang.",
-                "Khuyên dùng thiết kế ấn tượng, visual kỳ bí trên ảnh đại diện sản phẩm để thu hút lượt click."
-            ]
-        }
-    }
-
-    profile = seasonal_profiles.get(camp_id, seasonal_profiles["tet"])
-    current_values = [
-        profile["demand"],
-        timing_score,
-        profile["margin"],
-        profile["gift"],
-        profile["cvr"]
-    ]
-    benchmark_values = [60, 50, 65, 52, 60]
-    overall_score = round(sum(current_values) / len(current_values))
-
-    return {
-        "axes": axes,
-        "current_values": current_values,
-        "benchmark_values": benchmark_values,
-        "overall_score": overall_score,
-        "takeaways": profile["takeaways"]
-    }
-
-
-def _tinh_trang_thai_mua(window: Optional[Dict[str, Any]], hom_nay: date) -> Dict[str, Any]:
-    """Tính trạng thái trực quan: đang trong thời điểm vàng hay còn bao nhiêu ngày."""
-    if not window or not window.get("start"):
-        return {"status": "upcoming", "label": "Mùa kế tiếp trong năm", "badge_tone": "neutral", "days_diff": 60}
+def _category_lookup() -> Dict[str, tuple]:
+    """{category_id: (slug, name)} của danh mục thật trên sàn (cache 1 giờ)."""
+    cached = cache_get_json("seasonal:categories:v1")
+    if isinstance(cached, dict):
+        return {k: tuple(v) for k, v in cached.items()}
     try:
-        start_d = datetime.strptime(window["start"], "%Y-%m-%d").date()
-        end_d = datetime.strptime(window["end"], "%Y-%m-%d").date()
-        peak_d = datetime.strptime(window["peak_date"], "%Y-%m-%d").date()
-
-        diff_to_start = (start_d - hom_nay).days
-        diff_to_end = (end_d - hom_nay).days
-
-        if diff_to_start <= 0 and diff_to_end >= 0:
-            return {
-                "status": "active",
-                "label": f"ĐANG TRONG THỜI ĐIỂM VÀNG (còn {diff_to_end} ngày)",
-                "badge_tone": "good",
-                "days_diff": diff_to_end,
-                "is_current": True
-            }
-        elif diff_to_start > 0:
-            return {
-                "status": "upcoming",
-                "label": f"Sắp đến (còn {diff_to_start} ngày nữa bắt đầu)",
-                "badge_tone": "warn" if diff_to_start <= 30 else "neutral",
-                "days_diff": diff_to_start,
-                "is_current": diff_to_start <= 45
-            }
-        else:
-            return {
-                "status": "passed",
-                "label": "Đã qua đỉnh vụ gần nhất",
-                "badge_tone": "neutral",
-                "days_diff": -1,
-                "is_current": False
-            }
-    except Exception:
-        return {"status": "upcoming", "label": "Mùa kế tiếp", "badge_tone": "neutral", "days_diff": 30}
+        cats = {str(c["_id"]): (c.get("slug") or "", c.get("name") or "")
+                for c in db_live()["categories"].find({}, {"slug": 1, "name": 1})}
+    except Exception as exc:
+        log.warning("seasonal: categories lookup failed: %s", exc)
+        return {}
+    cache_set_json("seasonal:categories:v1", {k: list(v) for k, v in cats.items()}, ttl_seconds=3600)
+    return cats
 
 
-@router.get("/api/analytics/forecast/seasonal", tags=["F38 · Hưng"])
+def _detect_shop_category(shop_id: str, explicit_slug: Optional[str]) -> Dict[str, Any]:
+    """Nhóm ngành của shop: seller chọn → dùng; không thì theo danh mục thật của sản phẩm (app.core.category_groups)."""
+    if explicit_slug and explicit_slug in GROUP_LABELS and explicit_slug != "tong-hop":
+        return {"slug": explicit_slug, "name": GROUP_LABELS[explicit_slug], "source": "seller_selected", "share_pct": None}
+    if not la_shop_live(shop_id):
+        return {"slug": "tong-hop", "name": GROUP_LABELS["tong-hop"], "source": "none", "share_pct": None}
+    products = san_pham_live(shop_id) or []
+    has_cat_ids = any(p.get("category_ids") for p in products)
+    return detect_shop_group(products, _category_lookup() if has_cat_ids else {})
+
+
+def _compute_platform_order_rates(shop_id: str, cat_slug: Optional[str], camp_id: str) -> Dict[str, Any]:
+    """Đo tỷ lệ mua combo và dùng voucher từ đơn hàng hoàn tất thật (không nhân hệ số giả lập)."""
+    cache_key = f"seasonal:orders_rates:{shop_id}:{cat_slug or 'all'}:{camp_id}:v2"
+    cached = cache_get_json(cache_key)
+    if isinstance(cached, dict):
+        return cached
+
+    query: Dict[str, Any] = {
+        **VALID_ORDER_FILTER,
+        "seed_ref": {"$exists": False},
+    }
+    if la_shop_live(shop_id):
+        query["shop_id"] = shop_id
+    try:
+        live_orders = list(
+            db_live()["orders"]
+            .find(query, {"items": 1, "coupon_code": 1, "discount_amount": 1})
+            .sort("created_at", -1)
+            .limit(500)
+        )
+    except Exception as exc:
+        log.warning("orders query failed for seasonal rates: %s", exc)
+        return {"raw_combo_rate": None, "raw_voucher_rate": None, "sample_n": 0}
+
+    n = len(live_orders)
+    if n < 10:
+        return {"raw_combo_rate": None, "raw_voucher_rate": None, "sample_n": n}
+
+    orders_with_multi_items = sum(1 for o in live_orders if len(o.get("items") or []) >= 2)
+    orders_with_voucher = sum(
+        1 for o in live_orders if o.get("coupon_code") or float(o.get("discount_amount") or 0) > 0
+    )
+    rates = {
+        "raw_combo_rate": round((orders_with_multi_items / n) * 100.0, 1),
+        "raw_voucher_rate": round((orders_with_voucher / n) * 100.0, 1),
+        "sample_n": n,
+    }
+    cache_set_json(cache_key, rates, ttl_seconds=1800)
+    return rates
+
+
+@router.get("/api/analytics/forecast/seasonal", tags=["F38 · Kế hoạch cao điểm & Lịch ra hàng"])
 def seasonal(
     shop_id: str = CurrentShop,
     categoryId: Optional[str] = None,
     category_slug: Optional[str] = None,
     campaign_id: Optional[str] = None,
-    keyword: Optional[str] = None
+    campaignId: Optional[str] = None,
+    keyword: Optional[str] = None,
 ):
-    coll = db()[MART]
-    if coll.estimated_document_count() == 0:
-        mart_not_ready(MART)
+    # 1. Xác định ngày hiện tại (giờ VN), ngành hàng shop và danh sách đối thủ tham chiếu
+    hom_nay = datetime.now(TZ_VN).date()
+    seller_category = _detect_shop_category(shop_id, category_slug or categoryId)
+    cat_slug = seller_category["slug"]
+    target_camp_id = campaign_id or campaignId
 
-    cat_slug = category_slug or categoryId or "thoi-trang"
+    all_competitors = cache_get_json("seasonal:all_competitors:v1")
+    if not isinstance(all_competitors, list):
+        all_competitors = list(
+            db()["mart_competitor"].find({}, {"_id": 0, "shop_name": 1, "price_vnd": 1, "category_id": 1}).limit(100)
+        )
+        cache_set_json("seasonal:all_competitors:v1", all_competitors, ttl_seconds=1800)
 
-    # Lấy ngày hiện tại
-    if la_shop_live(shop_id):
-        hom_nay = date.today()
+    # 2. Lịch toàn bộ dịp mua sắm trong năm & chọn chiến dịch đang xem
+    # Lead time đo từ đơn đã giao của shop (p90 + dự phòng); thiếu mẫu thì dùng mặc định của từng dịp
+    shop_lead = load_shop_lead_time(shop_id)
+    shop_lead_days = shop_lead.get("lead_days") if shop_lead else None
+    all_campaigns, active_camp = build_all_campaigns(hom_nay, cat_slug, target_camp_id, shop_lead_days=shop_lead_days)
+    primary_kw = active_camp["search_keywords"][0] if active_camp["search_keywords"] else "quà tặng"
+    trend_series = _lay_chuoi_trend_cho_tu_khoa(primary_kw)
+    stl = _tinh_stl_that(trend_series, chu_ky=52)
+
+    ev_info = next(e for e in calendar_vn.SHOPPING_EVENTS if e["key"] == active_camp["id"])
+    ev_win = calendar_vn.calculate_occasion_window(ev_info, hom_nay, shop_lead_days=shop_lead_days) or {
+        "event_date": hom_nay.isoformat(),
+        "cut_off_date": (hom_nay + timedelta(days=21)).isoformat(),
+    }
+    target_ev_d = date.fromisoformat(ev_win["event_date"])
+    cut_off_d = date.fromisoformat(ev_win["cut_off_date"])
+
+    event_dates_by_year: Dict[int, date] = calendar_vn.event_dates_by_year(ev_info, range(2021, hom_nay.year + 2))
+    past_ev = {y: d for y, d in event_dates_by_year.items() if d < hom_nay}
+
+    # 3. Đơn hàng lịch sử của shop & tổng hợp đơn toàn sàn (cache Redis 30 phút)
+    lw_tmp = active_camp.get("launch_window") or {}
+    ind_win_days = (
+        max(7, (date.fromisoformat(lw_tmp["peak_date"]) - date.fromisoformat(lw_tmp["start"])).days)
+        if (lw_tmp.get("peak_date") and lw_tmp.get("start"))
+        else 30
+    )
+    ind_sum_key = f"seasonal:ind_summary:v1:{active_camp['id']}:{ind_win_days}:{hom_nay.isoformat()}"
+    ind_summary = cache_get_json(ind_sum_key)
+    if isinstance(ind_summary, dict) and "ind" in ind_summary and "shop_vals" in ind_summary:
+        shop_orders_hist, industry_orders_hist = _lay_don_hang_lich_su(shop_id, include_industry=False)
     else:
-        ld = db()["listing_daily"].find_one({}, {"date": 1}, sort=[("date", -1)])
-        hom_nay = datetime.strptime(ld["date"], "%Y-%m-%d").date() if ld else date.today()
+        shop_orders_hist, industry_orders_hist = _lay_don_hang_lich_su(shop_id, include_industry=True)
+        ind_summary = summarize_industry_orders(industry_orders_hist, past_ev, ind_win_days, hom_nay)
+        cache_set_json(ind_sum_key, ind_summary, ttl_seconds=1800)
 
-    # Xây dựng danh sách 6 chiến dịch mùa vụ cả năm với trạng thái tính toán trực tiếp
-    campaigns_data = []
-    for camp in YEARLY_CAMPAIGNS:
-        win = _cua_so_ra_hang(camp["peak_week"], hom_nay)
-        timing = _tinh_trang_thai_mua(win, hom_nay)
-        radar = _tinh_radar_chien_dich(camp["id"], timing, cat_slug)
-        campaigns_data.append({
-            "id": camp["id"],
-            "name": camp["name"],
-            "icon": camp["icon"],
-            "badge": camp["badge"],
-            "months": camp["months"],
-            "peak_week": camp["peak_week"],
-            "description": camp["description"],
-            "launch_window": win,
-            "timing": timing,
-            "radar": radar,
-            "category_summary": camp["category_focus"].get(cat_slug, camp["category_focus"]["thoi-trang"]),
-            "search_keywords": camp["search_keywords"]
-        })
+    measured_sample_size = int((ind_summary.get("ind") or {}).get("n_orders") or len(industry_orders_hist))
+    measured_cycles = len(past_ev)
 
-    # Xác định chiến dịch mục tiêu (Active Campaign)
-    # 1. Nếu có query campaign_id -> chọn đúng cái đó
-    # 2. Nếu không -> chọn chiến dịch đang 'active' hoặc 'upcoming' gần nhất
-    active_camp = None
-    if campaign_id:
-        active_camp = next((c for c in campaigns_data if c["id"] == campaign_id), None)
-    if not active_camp:
-        # Ưu tiên mùa đang active, hoặc mùa upcoming có days_diff nhỏ nhất > 0
-        actives = [c for c in campaigns_data if c["timing"]["status"] == "active"]
-        if actives:
-            active_camp = actives[0]
-        else:
-            upcomings = [c for c in campaigns_data if c["timing"]["status"] == "upcoming"]
-            upcomings.sort(key=lambda c: c["timing"]["days_diff"])
-            active_camp = upcomings[0] if upcomings else campaigns_data[0]
+    # 4. Sản phẩm thị trường đa sàn & Hồ sơ Tiềm năng 5 lớp
+    raw_ext_ready, raw_ext_pod = fetch_external_market_catalog(cat_slug, active_camp, hom_nay)
+    # Giá vốn: đo từ dòng hàng trong đơn của shop, thiếu thì toàn sàn, sau cùng mới ước tính (dùng chung với BE)
+    cost_model = load_cost_model(shop_id, hom_nay)
+    real_blueprints = build_market_blueprints(
+        raw_ext_ready, cat_slug, active_camp, primary_kw,
+        market_listings=_load_f42_listings(hom_nay, _cutoff_utc_dt(hom_nay, EXTERNAL_FRESHNESS_DAYS)),
+        cost_model=cost_model,
+    )
+    potential_profiles = build_potential_profiles(
+        real_blueprints, raw_ext_ready, event_dates_by_year, target_ev_d, cut_off_d, hom_nay
+    )
 
-    # Tìm các từ khóa xu hướng thật trên sàn tương ứng với chiến dịch active
-    camp_kw_list = active_camp["search_keywords"]
-    matching_rows = list(coll.find({"entity_id": {"$in": camp_kw_list}}, {"_id": 0}))
-    if not matching_rows:
-        matching_rows = list(coll.find({"has_seasonality": True}, {"_id": 0}).limit(5))
+    # 5. 6 Trục Đặc Điểm Mua Sắm, Radar biểu đồ & Độ lớn toàn ngành đa sàn
+    traits_bundle = build_occasion_traits(
+        shop_id=shop_id,
+        cat_slug=cat_slug,
+        active_camp=active_camp,
+        ev_info=ev_info,
+        target_ev_d=target_ev_d,
+        hom_nay=hom_nay,
+        primary_kw=primary_kw,
+        stl=stl,
+        all_competitors=all_competitors,
+        shop_orders_hist=shop_orders_hist,
+        ind_summary=ind_summary,
+        past_ev=past_ev,
+        ind_win_days=ind_win_days,
+        compute_rates_fn=_compute_platform_order_rates,
+    )
+    occasion_traits = traits_bundle["occasion_traits"]
+    traits_cmp = traits_bundle["traits_cmp"]
+    ind_scale = traits_bundle["ind_scale"]
+    method_meta = traits_bundle["method_meta"]
+    uplift_res = traits_bundle["uplift_res"]
+    orders_growth_pct = traits_bundle["orders_growth_pct"]
+    spending_growth_pct = traits_bundle["spending_growth_pct"]
+    baseline_spending = traits_bundle["baseline_spending"]
+    occasion_spending = traits_bundle["occasion_spending"]
+    lead_time_days = traits_bundle["lead_time_days"]
+    early_order_days = traits_bundle["early_order_days"]
+    peak_clump_pct = traits_bundle["peak_clump_pct"]
+    ind_combo_blend = traits_bundle["ind_combo_blend"]
+    ind_voucher_blend = traits_bundle["ind_voucher_blend"]
+    campaign_radar = traits_bundle["campaign_radar"]
 
-    # Sinh gợi ý thông minh chuyên sâu (Hybrid Data Mining + Gemini) cho chiến dịch active
-    focus_keyword = active_camp["name"]
-    suggestions = get_seasonal_suggestions(focus_keyword, cat_slug)
+    active_camp["occasion_traits"] = occasion_traits
+    active_camp["radar"] = campaign_radar
+    active_camp["milestone_actions"] = build_milestone_actions(active_camp, cat_slug)
 
-    # Đóng gói danh sách sự kiện chi tiết
-    events_payload = []
-    for idx, r in enumerate(matching_rows):
-        kw_name = r.get("entity_id", "")
-        # Sự kiện đầu tiên gắn gợi ý AI chi tiết của chiến dịch
+    # 6. Ý tưởng hàng sẵn, phôi POD & cụm sản phẩm cơ hội
+    ready_ideas, pod_blanks, opportunity_clusters = build_ready_and_pod_ideas(
+        real_blueprints, raw_ext_pod, potential_profiles, traits_cmp, active_camp, hom_nay
+    )
+
+    events_payload: List[Dict[str, Any]] = []
+    for idx, kw in enumerate(active_camp["search_keywords"][:5]):
+        kw_pts = _lay_chuoi_trend_cho_tu_khoa(kw)
+        recent_vals = [p[1] for p in kw_pts[-8:]]
+        ev_item: Dict[str, Any] = {
+            "name": kw,
+            "peak_week_of_year": target_ev_d.isocalendar()[1],
+            # mức quan tâm 8 tuần gần nhất (0–1); không có chuỗi thì để trống thay vì giả 0.4
+            "amplitude": round((sum(recent_vals) / len(recent_vals)) / 100.0, 2) if recent_vals else None,
+            "launch_window": active_camp["launch_window"],
+        }
         if idx == 0:
-            ev_suggs = suggestions
-        else:
-            m_data = MarketMiningService.mine_seasonal_cluster(kw_name, cat_slug)
-            ev_suggs = LLMSeasonalService._synthesize_from_mined_data(kw_name, m_data)
+            # Chỉ từ khóa chính mang danh sách ý tưởng/phôi (bảng điều khiển seller đọc events[0]); tránh lặp 5 lần
+            ev_item["ready_to_ship_ideas"] = ready_ideas
+            ev_item["pod_blanks"] = pod_blanks
+        events_payload.append(ev_item)
 
-        p_val = int(r.get("period_value") or active_camp["peak_week"])
-        events_payload.append({
-            "name": kw_name,
-            "peak_week_of_year": p_val,
-            "amplitude": r.get("amplitude", 0.5),
-            "launch_window": _cua_so_ra_hang(p_val, hom_nay),
-            "ready_to_ship_ideas": ev_suggs.get("ready_to_ship_ideas", []),
-            "pod_blanks": ev_suggs.get("pod_blanks", []),
-            "ai_model": ev_suggs.get("ai_model")
-        })
+    # 7. Sản phẩm thật của shop & độ sẵn sàng đón dịp
+    shop_products, matching_shop_products = load_and_audit_shop_products(shop_id, active_camp, spending_growth_pct, hom_nay=hom_nay)
+    product_index = build_product_index(shop_products)
+    for idea in ready_ideas:
+        idea["shop_coverage"] = keyword_shop_coverage(
+            idea.get("keyword") or idea["title"], shop_products, index=product_index
+        )
 
-    # Lấy 1 record mẫu cho decomposition chart (vẫn giữ để tương thích giao diện)
-    sample_rec = matching_rows[0] if matching_rows else coll.find_one({}, {"_id": 0})
-    meta = meta_from_record(sample_rec, scope="keyword", scope_id=sample_rec.get("entity_id", focus_keyword),
-                            collection=MART, mode="live", sample_size=len(matching_rows), identity_linked=False, confidence="high")
+    # 8. Dự kiến đơn từng dịp, kế hoạch áp dụng, báo cáo thành quả & câu chuyện 4 chương
+    # Đơn dự kiến = mức ngày thường × mức tăng đo từ dữ liệu bán thật (đơn shop/toàn sàn các mùa trước, tốc độ bán Tiki)
+    attach_expected_orders(
+        all_campaigns, shop_orders_hist, hom_nay,
+        platform_orders=load_platform_order_times(hom_nay),
+        market_uplift=lambda camp, st, ev: market_uplift_for_camp(camp, st, ev, hom_nay),
+    )
+    impact, apply_playbooks, story = build_story_and_playbooks(
+        active_camp=active_camp,
+        cat_slug=cat_slug,
+        ready_ideas=ready_ideas,
+        potential_profiles=potential_profiles,
+        occasion_traits=occasion_traits,
+        shop_orders_hist=shop_orders_hist,
+        event_dates_by_year=event_dates_by_year,
+        target_ev_d=target_ev_d,
+        cut_off_d=cut_off_d,
+        lead_time_days=lead_time_days,
+        hom_nay=hom_nay,
+        uplift_res=uplift_res,
+    )
 
-    return ok({
-        "all_campaigns": campaigns_data,
-        "active_campaign": active_camp,
-        "campaign_radar": active_camp.get("radar") if active_camp else None,
-        "selected_category_slug": cat_slug,
-        "keyword": active_camp["name"],
-        "tag_ids": sample_rec.get("tag_ids"),
-        "decomposition": {
-            "trend": sample_rec.get("trend", []),
-            "seasonal": sample_rec.get("seasonal", []),
-            "residual": sample_rec.get("residual", []),
-            "window": "52 tuần gần nhất",
+    # 9. Rủi ro vận chuyển tuyến, độ tin cậy mô hình, Từ khóa hot & Phễu chuyển đổi
+    route_risks = build_route_risks(active_camp, target_ev_d, hom_nay)
+    scorecard_metrics = _build_scorecard_metrics(method_meta, hom_nay)
+    opportunity_keywords = _tinh_opportunity_keywords(
+        active_camp=active_camp,
+        cat_slug=cat_slug,
+        hom_nay=hom_nay,
+        measured_sample_size=measured_sample_size,
+        orders_growth_pct=orders_growth_pct,
+        stl=stl,
+        shop_products=shop_products,
+        past_event_dates=sorted(past_ev.values()),
+    )
+    # Phễu, kênh bán và động cơ mua do backend tính từ đơn/sự kiện thật của shop (một nguồn duy nhất)
+
+    # 10. Bản phác thảo định lượng (Data-Grounded Blueprint) để scope chặt cho LLM
+    idea_draft_blueprint = build_idea_draft_blueprint(
+        cat_slug=cat_slug,
+        active_camp=active_camp,
+        shop_products=shop_products,
+        shop_orders_hist=shop_orders_hist,
+        raw_ext_ready=raw_ext_ready,
+        real_blueprints=real_blueprints,
+        ind_scale=ind_scale,
+        method_meta=method_meta,
+        uplift_res=uplift_res,
+        orders_growth_pct=orders_growth_pct,
+        spending_growth_pct=spending_growth_pct,
+        early_order_days=early_order_days,
+        peak_clump_pct=peak_clump_pct,
+        ind_combo_blend=ind_combo_blend,
+        ind_voucher_blend=ind_voucher_blend,
+        opportunity_keywords=opportunity_keywords,
+    )
+
+    meta = build_meta(
+        scope="platform",
+        scope_id=active_camp["id"],
+        collection=MART,
+        mode="derived",
+        sample_size=len(trend_series),
+        confidence="high" if len(trend_series) >= 100 else "medium",
+    )
+
+    return ok(
+        {
+            "idea_draft_blueprint": idea_draft_blueprint,
+            "all_campaigns": all_campaigns,
+            "active_campaign": active_camp,
+            "occasion_traits": occasion_traits,
+            "selected_category_slug": cat_slug,
+            "seller_category": seller_category,
+            "keyword": active_camp["name"],
+            "primary_keyword": primary_kw,
+            "decomposition": stl,
+            "amplitude": round(sum(stl["seasonal"][:10]) / 10, 2) if stl["seasonal"] else 0.5,
+            "n_points": len(trend_series),
+            "sample_size_n": measured_sample_size,
+            "measured_cycles": measured_cycles,
+            "route_risks": route_risks,
+            "shop_lead_time": shop_lead,
+            # % tăng LƯỢT TÌM KIẾM của dịp (Google Trends), không phải % tăng đơn
+            "search_uplift_pct": traits_bundle.get("search_uplift_pct"),
+            "scorecard_metrics": scorecard_metrics,
+            "opportunity_keywords": opportunity_keywords,
+            # Mỗi nguồn thị trường được thu đến ngày nào; trang hiện cảnh báo khi nguồn cũ
+            "data_freshness": load_market_freshness(hom_nay),
+            "cost_model": {**cost_model, "basis": cost_basis_label(cost_model)},
+            "events": events_payload,
+            "potential_profiles": potential_profiles,
+            "campaign_radar": campaign_radar,
+            "ready_to_ship_ideas": ready_ideas,
+            "pod_blanks": pod_blanks,
+            "opportunity_clusters": opportunity_clusters,
+            # Mô tả chỉ dùng để so khớp từ khóa, không gửi về trình duyệt
+            "shop_products": [{k: v for k, v in p.items() if k != "description"} for p in shop_products],
+            "matching_shop_products": [
+                {k: v for k, v in p.items() if k != "description"} for p in matching_shop_products
+            ],
+            "story": story,
+            "apply_playbooks": apply_playbooks,
+            "impact": impact,
+            "industry_compare": traits_cmp["_meta"],
+            "forecast_method_info": {
+                "method": method_meta.get("method", "seasonal_naive_conformal"),
+                "method_display_name": (
+                    "Seasonal-Naive Conformal (Hiệu chuẩn lỗi thực nghiệm)"
+                    if method_meta.get("method") == "seasonal_naive_conformal"
+                    else "Deep Learning TFT + Lunar-Attention (5-Seed Ensemble)"
+                ),
+                "validated_deep_model": method_meta.get("validated_deep_model", False),
+                "empirical_coverage_pct": scorecard_metrics[0]["actualRatePct"],
+                "improvement_pct": scorecard_metrics[1]["actualRatePct"],
+                "uplift_p10": uplift_res.get("uplift_p10") if uplift_res else None,
+                "uplift_p50": uplift_res.get("uplift_p50") if uplift_res else None,
+                "uplift_p90": uplift_res.get("uplift_p90") if uplift_res else None,
+            },
+            "method": f"Thống kê mô tả từ {measured_sample_size:,} đơn hàng thật + Lịch quốc gia calendar_vn + Kiểm chứng 5 lớp",
+            "limitation": "Không có dữ liệu nào đảm bảo chắc chắn sản phẩm sẽ bán chạy. Seller cần tự kiểm tra bằng chứng và bắt đầu từ bước Thử nhỏ.",
         },
-        "amplitude": sample_rec.get("amplitude", 0.6),
-        "n_points": sample_rec.get("n_points", 104),
-        "events": events_payload,
-        "ready_to_ship_ideas": suggestions.get("ready_to_ship_ideas", []),
-        "pod_blanks": suggestions.get("pod_blanks", []),
-        "ai_model": suggestions.get("ai_model"),
-        "flat_keywords": [],
-        "method": "Hybrid Data-Mining + Generative AI (Gemini 3.5)",
-        "limitation": "Dữ liệu kết hợp xu hướng tìm kiếm người tiêu dùng Việt Nam và số liệu doanh số thực tế trên sàn."
-    }, meta)
+        meta,
+    )

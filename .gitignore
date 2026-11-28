@@ -72,3 +72,6 @@ data/seed_out/*
 vc-data/
 *.onnx
 *.part
+
+# Local tests
+tests/

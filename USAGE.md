@@ -386,6 +386,18 @@ python scripts/validate_mart.py --all --offline    # 9/9
 python scripts/peek.py listing_daily --limit 3     # xem một bảng trên MongoDB
 ```
 
+tải thư viện & model cần thiết 
+
+```
+pip install -r requirements.txt
+mkdir -p ../ai-data-train-prod/models/siglip2-base-patch16-224
+python -m scripts.li.fetch_models
+
+```
+Sau đó bật lại server AI. Log khởi động có dòng [OK] Listing Intel: model ONNX san sang là đã nhận model.
+
+
+
 
 run dự án 
 ```

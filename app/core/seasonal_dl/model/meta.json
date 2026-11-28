@@ -1,0 +1,135 @@
+{
+  "architecture": "Temporal Fusion + Lunar-Shift Attention Quantile Forecaster (Causal Conv1D + GRU + GRN + ±3w Lunar Attention)",
+  "loss": "pinball (q=0.1,0.5,0.9)",
+  "ensemble_size": 5,
+  "seeds": [
+    11,
+    23,
+    37,
+    41,
+    59
+  ],
+  "horizon_weeks": 26,
+  "window_weeks": 52,
+  "quantiles": [
+    0.1,
+    0.5,
+    0.9
+  ],
+  "data": {
+    "source": "Google Trends weekly (trend_interest)",
+    "n_series": 45,
+    "n_weeks": 262,
+    "first_week": "2021-08-15",
+    "last_week": "2026-08-16",
+    "target_semantics": "chỉ số quan tâm tìm kiếm (0-100), KHÔNG phải số đơn"
+  },
+  "backtest": {
+    "folds": [
+      {
+        "n_samples": 1032,
+        "scaled_mae_model": 0.407,
+        "scaled_mae_naive": 0.4216,
+        "wmape_model": 0.2463,
+        "wmape_naive": 0.2763,
+        "coverage_p10_p90": 0.7993,
+        "pinball_model": 0.1384,
+        "pinball_naive_pointmass": 0.2108,
+        "fold": 1,
+        "test_from_week_index": 158,
+        "by_horizon_scaled_mae": {
+          "1-4w": {
+            "model": 0.491,
+            "naive": 0.4716
+          },
+          "5-13w": {
+            "model": 0.4588,
+            "naive": 0.4723
+          },
+          "14-26w": {
+            "model": 0.3452,
+            "naive": 0.3712
+          }
+        }
+      },
+      {
+        "n_samples": 1024,
+        "scaled_mae_model": 0.59,
+        "scaled_mae_naive": 0.674,
+        "wmape_model": 0.3668,
+        "wmape_naive": 0.4579,
+        "coverage_p10_p90": 0.6815,
+        "pinball_model": 0.2279,
+        "pinball_naive_pointmass": 0.337,
+        "fold": 2,
+        "test_from_week_index": 210,
+        "by_horizon_scaled_mae": {
+          "1-4w": {
+            "model": 0.5903,
+            "naive": 0.7298
+          },
+          "5-13w": {
+            "model": 0.6491,
+            "naive": 0.7523
+          },
+          "14-26w": {
+            "model": 0.549,
+            "naive": 0.6026
+          }
+        }
+      }
+    ]
+  },
+  "avg_scaled_mae_model": 0.4985,
+  "avg_scaled_mae_naive": 0.5478,
+  "avg_wmape_model": 0.3065,
+  "avg_wmape_naive": 0.3671,
+  "avg_coverage_p10_p90": 0.7404,
+  "improvement_vs_naive_scaled_mae_pct": 9.0,
+  "validated": false,
+  "validation_rule": "thắng seasonal-naive Ở MỌI FOLD trên cả sMAE và wMAPE với biên >=3%, và coverage P10-P90 thô Ở MỌI FOLD lẫn trung bình trong [0.70,0.90]",
+  "conformal_residual_quantiles": {
+    "naive": {
+      "1-4w": [
+        -0.7409,
+        0.6933
+      ],
+      "5-13w": [
+        -0.7428,
+        0.8854
+      ],
+      "14-26w": [
+        -0.5474,
+        0.7208
+      ]
+    },
+    "model": {
+      "1-4w": [
+        -0.6796,
+        0.6597
+      ],
+      "5-13w": [
+        -0.6071,
+        0.8007
+      ],
+      "14-26w": [
+        -0.4049,
+        0.7546
+      ]
+    }
+  },
+  "conformal_cross_check_coverage": {
+    "naive": {
+      "calibrate_fold1_test_fold2": 0.6742,
+      "calibrate_fold2_test_fold1": 0.8487
+    },
+    "model": {
+      "calibrate_fold1_test_fold2": 0.6689,
+      "calibrate_fold2_test_fold1": 0.811
+    }
+  },
+  "conformal_note": "q10/q90 của (y/scale - dự báo) theo nhóm tầm; cộng vào dự báo để có khoảng 80% đã hiệu chỉnh",
+  "trained_at": "2026-11-15T17:28:00.454647+00:00",
+  "torch": "2.14.1+cpu",
+  "train_seconds": 666.7
+}

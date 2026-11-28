@@ -9,13 +9,14 @@ if str(ROOT_DIR) not in sys.path:
 from fastapi import APIRouter
 
 from app.api.v1._competitor_live import meta_doi_thu, nguon_doi_thu
-from app.api.v1._doi_thu_ai import nhom_chien_luoc
+from app.api.v1._competitor_ai import nhom_chien_luoc
 from app.api.v1._mart import db
 from app.api.v1._template import CurrentShop, insufficient, ok
 
 router = APIRouter()
 
 TOI_THIEU_LISTING = 5       # BR-193
+MSG139 = f"Gian hàng cần tối thiểu {TOI_THIEU_LISTING} sản phẩm công khai để thực hiện so sánh."
 SO_DOI_THU = 5              # BR-191
 
 TRUC = ["listing_count", "avg_rating", "response_speed", "avg_price", "product_diversity"]
@@ -32,6 +33,11 @@ def _chuan_hoa(gia_tri, tat_ca):
     return round((gia_tri - lo) / (hi - lo) * 100, 1)
 
 
+def _thang_sao(v):
+    """Trục sao dùng thang cố định 1–5: min–max (BR-192) kéo chênh 0,03 sao thành cả trục 0–100."""
+    return None if v is None else round((v - 1) / 4 * 100, 1)
+
+
 @router.get("/api/analytics/shop-comparison", tags=["F33 · Nhi"])
 def shop_comparison(shop_id: str = CurrentShop):
     ng = nguon_doi_thu(shop_id)
@@ -42,16 +48,14 @@ def shop_comparison(shop_id: str = CurrentShop):
                               "rating_shrunk": 1, "product_type_id": 1, "revenue_90d_vnd": 1,
                               "computed_at": 1, "model_version": 1}))
     if not cua_toi:
-        return insufficient("Shop chưa có sản phẩm nào nên chưa so sánh được")
+        return insufficient(MSG139)
 
     meta = meta_doi_thu(ng, cua_toi[0], scope="shop", scope_id=shop_id, sample_size=len(cua_toi))
 
     if len(cua_toi) < TOI_THIEU_LISTING:
         meta["unlock"] = {"requirement": "sản phẩm của shop", "unit": "sản phẩm",
                           "current": len(cua_toi), "target": TOI_THIEU_LISTING}
-        return insufficient(
-            f"Shop mới có {len(cua_toi)} sản phẩm, cần tối thiểu {TOI_THIEU_LISTING} "
-            f"mới so sánh được với shop khác", meta)
+        return insufficient(MSG139, meta)
 
     dem_cat = defaultdict(int)
     for r in cua_toi:
@@ -102,7 +106,7 @@ def shop_comparison(shop_id: str = CurrentShop):
     cot = {t: [tho_all[sid][t] for sid in [shop_id, *top] if tho_all[sid][t] is not None] for t in TRUC}
 
     def chuan(sid):
-        return [_chuan_hoa(tho_all[sid][t], cot[t]) for t in TRUC]
+        return [_thang_sao(tho_all[sid][t]) if t == "avg_rating" else _chuan_hoa(tho_all[sid][t], cot[t]) for t in TRUC]
 
     def tho_tron(sid):
         return {t: (round(v, 2) if isinstance(v, float) else v) for t, v in tho_all[sid].items()}
@@ -119,7 +123,8 @@ def shop_comparison(shop_id: str = CurrentShop):
         "segment_reason": f"{dem_cat[phan_khuc]}/{len(cua_toi)} sản phẩm của shop nằm ở danh mục này",
         "axes": TRUC,
         "axes_vi": TEN_TRUC_VI,
-        "normalization": "min-max 0-100 trên shop bạn và 5 đối thủ; 100 là tốt hơn, riêng giá: 100 là đắt nhất",
+        "normalization": ("min-max 0-100 trên shop bạn và 5 đối thủ; riêng điểm đánh giá theo thang cố định 1–5 sao; "
+                          "100 là tốt hơn, riêng giá: 100 là đắt nhất"),
         "neutral_axes": ["avg_price"],
         "ranked_by": xep_theo,
         "me": chuan(shop_id),

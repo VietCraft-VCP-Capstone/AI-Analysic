@@ -8,15 +8,23 @@ class SuggestionRequest(BaseModel):
     category_name: Optional[str] = None
     categoryName: Optional[str] = None
     title: Optional[str] = None
+    product_title: Optional[str] = None
+    productTitle: Optional[str] = None
     keywords: Optional[str] = None
     material: Optional[str] = None
     blank_cost: Optional[float] = None
     blankCost: Optional[float] = None
-    target_margin: Optional[float] = None
-    targetMargin: Optional[float] = None
+    # Biên lợi nhuận dạng tỉ lệ (0.3 = 30%). Chặn 30 (tưởng là %) → giá gấp 31 lần giá vốn.
+    target_margin: Optional[float] = Field(default=None, ge=0, le=3)
+    targetMargin: Optional[float] = Field(default=None, ge=0, le=3)
+    # % hoa hồng sàn seller bị trừ trên giá niêm yết; có thì giá sàn "không bán lỗ" và tiền lời tính sau phí
+    commission_percent: Optional[float] = Field(default=None, ge=0, le=100)
+    commissionPercent: Optional[float] = Field(default=None, ge=0, le=100)
     extra_attributes: Optional[str] = None
     product_type: Optional[str] = None
     productType: Optional[str] = None
+    # Chỉ tính lại giá (seller đổi giá vốn): bỏ lượt gọi LLM viết tên/mô tả
+    pricing_only: bool = False
 
     def get_category_id(self) -> Optional[str]:
         return (self.category_id or self.categoryId or "").strip() or None
@@ -25,7 +33,7 @@ class SuggestionRequest(BaseModel):
         return (self.category_name or self.categoryName or "").strip() or None
 
     def get_title_or_keywords(self) -> str:
-        return (self.title or self.keywords or "").strip()
+        return (self.title or self.product_title or self.productTitle or self.keywords or "").strip()
 
     def get_material(self) -> str:
         return (self.material or "").strip()
@@ -34,11 +42,16 @@ class SuggestionRequest(BaseModel):
         val = self.blank_cost if self.blank_cost is not None else self.blankCost
         return float(val) if val is not None and val > 0 else 0.0
 
+    def get_commission_percent(self) -> float:
+        val = self.commission_percent if self.commission_percent is not None else self.commissionPercent
+        return float(val) if val is not None and val > 0 else 0.0
+
     def get_target_margin(self) -> Optional[float]:
         val = self.target_margin if self.target_margin is not None else self.targetMargin
         return float(val) if val is not None and val > 0 else None
 
 
+# New Refactored Response Models
 class CategoryCandidate(BaseModel):
     id: str
     name: str
@@ -48,7 +61,7 @@ class CategoryCandidate(BaseModel):
 class CategoryResult(BaseModel):
     resolved_id: Optional[str] = None
     resolved_name: Optional[str] = None
-    source: str = "none"
+    source: str = "none"  # "seller_selected" | "tfidf" | "none"
     candidates: List[CategoryCandidate] = Field(default_factory=list)
     needs_confirmation: bool = False
 
@@ -58,25 +71,50 @@ class PriceRange(BaseModel):
     high: int = 0
 
 
+class ComparableItem(BaseModel):
+    title: str
+    price: int
+    similarity: Optional[float] = None  # None khi khớp theo từ khóa (không có điểm tương đồng)
+    source: str  # "tiki" | "vietcraft"
+    sold: Optional[int] = None  # đã bán (None: nguồn không có số liệu)
+    url: Optional[str] = None  # link xem sản phẩm (Tiki/Etsy đầy đủ, sàn VietCraft dạng /product/<id>)
+
+
 class PricingResult(BaseModel):
-    mode: str = "none"
+    mode: str = "none"  # "market" | "market_low_confidence" | "cost_plus" | "none"
+    # "comparables" | "category_market" | "cost_plus" | "none"
+    method: str = "none"
     insufficient_market_data: bool = False
     sample_size: int = 0
     sample_size_after_outlier_filter: int = 0
     p25: int = 0
     p50: int = 0
     p75: int = 0
+    p90: int = 0
     suggested_price: int = 0
     suggested_range: PriceRange = Field(default_factory=PriceRange)
-    confidence: str = "none"
+    confidence: str = "none"  # "high" | "medium" | "low" | "none"
     warnings: List[str] = Field(default_factory=list)
     explanation: str = ""
+    comparables: List[ComparableItem] = Field(default_factory=list)
+    # Giá của mọi sản phẩm làm căn cứ (sau lọc ngoại lai): vẽ thước vị trí giá cho seller
+    price_points: List[int] = Field(default_factory=list)
+    detected_product: Optional[str] = None
+    detected_brand: Optional[str] = None
+    source_label: Optional[str] = None
+    # Google Trends: {keyword, momentum, recent_mean, prev_mean, direction}; None nếu không áp dụng
+    demand_signal: Optional[Dict[str, Any]] = None
+    # Phân vị thị trường thật trước khi áp giá vốn: {p25, p50, p75, p90}
+    market: Optional[Dict[str, int]] = None
+    # Khi có giá vốn: lãi/biên theo từng mức giá, vị thế giá và kết luận (ok | tight | uncompetitive | loss | no_market)
+    cost_analysis: Optional[Dict[str, Any]] = None
 
 
 class TagItem(BaseModel):
     tag: str
     score: float = 0.0
     freq: int = 0
+    source: str = "internal"  # "internal" | "category" | "llm"
 
 
 class TagResult(BaseModel):
@@ -87,7 +125,7 @@ class TagResult(BaseModel):
 
 class TitleItem(BaseModel):
     text: str
-    angle: str = "balanced"
+    angle: str = "balanced"  # "material" | "function" | "style" | "technical" | "balanced"
 
 
 class SpecItem(BaseModel):
@@ -103,7 +141,7 @@ class DescriptionStructure(BaseModel):
 
 
 class ContentResult(BaseModel):
-    source: str = "fallback"
+    source: str = "fallback"  # "llm" | "fallback"
     titles: List[TitleItem] = Field(default_factory=list)
     description: DescriptionStructure = Field(default_factory=DescriptionStructure)
     claims_used: List[str] = Field(default_factory=list)
@@ -118,12 +156,16 @@ class MetaResult(BaseModel):
 
 
 class UnifiedSuggestionResponse(BaseModel):
+    # Kết quả lọc tiêu đề seller: tiêu đề sạch, thuộc tính đã tách, cụm đã bỏ, vấn đề nên sửa
+    input_analysis: Dict[str, Any] = Field(default_factory=dict)
+    # New standardized structure
     category: CategoryResult = Field(default_factory=CategoryResult)
     pricing: PricingResult = Field(default_factory=PricingResult)
     tags: TagResult = Field(default_factory=TagResult)
     content: ContentResult = Field(default_factory=ContentResult)
     meta: MetaResult = Field(default_factory=MetaResult)
 
+    # Backward compatibility with existing Frontend
     category_detected: str = ""
     product_type: str = "general"
     noun: str = "Sản Phẩm"
@@ -132,3 +174,7 @@ class UnifiedSuggestionResponse(BaseModel):
     trending_keywords: List[Dict[str, Any]] = Field(default_factory=list)
     suggested_tags: List[str] = Field(default_factory=list)
     seo_description: str = ""
+    detected_material: Optional[str] = None
+    detected_product: Optional[str] = None
+    detected_brand: Optional[str] = None
+    ai_engine_status: Dict[str, Any] = Field(default_factory=dict)

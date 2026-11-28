@@ -118,8 +118,10 @@ def _so(x: Any) -> Optional[float]:
         return None
 
 
-def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
+def san_pham_live(shop_id: str, gioi_han: int = 200, kem_mo_ta: bool = False) -> List[Dict[str, Any]]:
     """Sản phẩm thật của shop, kèm giá thật lấy từ `product_variants`.
+
+    `kem_mo_ta=True` trả thêm mô tả (cắt 3000 ký tự) để so khớp từ khóa.
 
     Giá đại diện dùng TRUNG VỊ các biến thể đang bán, không dùng trung bình: một biến
     thể cỡ lớn đặt giá cao sẽ kéo trung bình lệch khỏi mức người mua thường thấy.
@@ -136,9 +138,9 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
 
     products = list(live["products"].find(
         {**{"shop_id": oid}, **LOC_SP_THAT},
-        {"title": 1, "tags": 1, "categories": 1, "images": 1, "description": 1,
+        {"title": 1, "tags": 1, "categories": 1, "category_ids": 1, "product_type": 1, "images": 1, "description": 1,
          "average_rating": 1, "rating_count": 1, "created_at": 1, "listing_status": 1,
-         "status": 1, "is_hidden": 1},
+         "status": 1, "is_hidden": 1, "source_idea_id": 1},
     ).limit(gioi_han))
     if not products:
         return []
@@ -164,6 +166,10 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
             "title": p.get("title") or "",
             "tags": p.get("tags") or [],
             "categories": p.get("categories") or [],
+            "category_ids": [str(c) for c in (p.get("category_ids") or [])],
+            "product_type": p.get("product_type"),
+            "images": p.get("images") or [],
+            "image_url": (p.get("images") or [None])[0],
             "n_images": len(p.get("images") or []),
             "description_len": len(p.get("description") or ""),
             "rating": _so(p.get("average_rating")),
@@ -178,6 +184,8 @@ def san_pham_live(shop_id: str, gioi_han: int = 200) -> List[Dict[str, Any]]:
             "product_type_id": doan["product_type_id"],
             "type_source": doan["source"],
             "handmade_hint": doan["handmade_hint"],
+            "source_idea_id": p.get("source_idea_id"),
+            **({"description": str(p.get("description") or "")[:3000]} if kem_mo_ta else {}),
         })
     return ra
 

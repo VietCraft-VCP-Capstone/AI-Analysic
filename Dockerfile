@@ -15,9 +15,16 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 ENV LI_MODEL_DIR=/opt/vietcraft-li/siglip2-base-patch16-224
-COPY app/core/listing_intel/embedder.py app/core/listing_intel/
-COPY scripts/li/fetch_models.py scripts/li/
-RUN python -m scripts.li.fetch_models
+COPY app/core/f29/paths.py app/core/f29/
+COPY app/core/f29/shared/embedder.py app/core/f29/shared/
+COPY scripts/siglip/fetch_models.py scripts/siglip/
+RUN python -m scripts.siglip.fetch_models
+
+# Model tách nền phôi cho mockup POD (BiRefNet-lite, MIT)
+ENV SEG_MODEL_DIR=/opt/vietcraft-seg
+COPY app/services/segment_service.py app/services/
+COPY scripts/seg/ scripts/seg/
+RUN python -m scripts.seg.fetch_model
 
 COPY . .
 

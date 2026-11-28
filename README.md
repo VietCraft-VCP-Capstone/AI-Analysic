@@ -111,7 +111,17 @@ source .venv/bin/activate  # Trên Linux/macOS
 # 3. Cập nhật pip & cài đặt thư viện
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
+
+# 4. Tải model tách nền phôi cho mockup POD (~224MB, một lần mỗi máy)
+python -m scripts.seg.fetch_model
 ```
+
+### 4.3. Model tách nền phôi (mockup POD)
+- Model **BiRefNet-lite** (giấy phép MIT, miễn phí, chạy tại chỗ, không gọi API ngoài).
+- **Không commit vào git** (file 224MB vượt giới hạn 100MB của GitHub). Mỗi máy tự tải về `~/.cache/vietcraft-seg/`
+  (đổi bằng biến `SEG_MODEL_DIR`). Script kiểm SHA-256, chạy lại sẽ bỏ qua nếu đã có.
+- `python run.py` tự tải nếu thiếu. Docker build cũng tự tải (xem `Dockerfile`).
+- Thiếu model thì service vẫn chạy; endpoint `/api/internal/vision/segment` trả 503 và mockup dùng cách ước lượng.
 
 ---
 

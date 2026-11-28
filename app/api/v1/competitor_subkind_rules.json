@@ -1,0 +1,110 @@
+{
+  "Giày dép": [
+    ["football_boots", ["giày đá bóng", "giày bóng đá", "giày đá banh", "đá bóng", "đá banh", "bóng đá", "da bong", "da banh", "bong da", "football", "turf", "futsal", "sân cỏ", "san co"]],
+    ["slide_sandals", ["dép lê", "dep le", "quai ngang", "dép bánh mì", "dep banh mi", "slide", "slides", "slipper", "slippers"]],
+    ["sneaker", ["sneaker", "sneakers", "giày thể thao", "giay the thao", "giày chạy bộ", "giay chay bo"]]
+  ],
+  "Hộp quà": [
+    ["test", ["test", "sản phẩm thử", "thử nghiệm", "placeholder", "giữ chỗ"]],
+    ["gift_box", []]
+  ],
+  "Laptop": [
+    ["gaming_laptop", ["gaming", "gamer", "game thủ", "chiến game", "esports", "esport", "rtx", "gtx"]],
+    ["everyday_laptop", []]
+  ],
+  "Ly tách": [
+    ["ceramic_cup_set", []]
+  ],
+  "Phụ kiện": [
+    ["bandana", ["bandana", "bandanna", "buộc đầu", "buoc dau", "quấn đầu", "quan dau"]],
+    ["decorative_sticker", ["sticker", "stickers", "nhãn dán", "nhan dan", "hình dán", "hinh dan", "decal"]]
+  ],
+  "Quần dài": [
+    ["wide_leg_trousers", []]
+  ],
+  "Set Áo Quần": [
+    ["office_suit_set", ["vest", "blazer", "gile", "gi lê", "gilê", "gilet", "ghi lê", "suit", "comple", "com lê", "veston", "công sở", "cong so"]],
+    ["corset_dress_set", ["đầm corset", "váy corset", "dam corset", "vay corset", "corset dress", "set đầm", "set dam"]],
+    ["casual_top_pants_set", ["quần", "jogger", "jean", "jeans", "short", "shorts"]]
+  ],
+  "Set áo váy": [
+    ["top_skirt_set", ["chân váy", "chan vay", "skirt"]],
+    ["top_pants_set", ["quần", "jean", "jeans", "pants", "short", "shorts"]]
+  ],
+  "Sneaker": [
+    ["casual_sneaker", []]
+  ],
+  "Sweater": [
+    ["hoodie", ["hoodie", "hoodies", "hoddie", "hodie", "hooded", "có mũ", "co mu", "mũ trùm"]],
+    ["crewneck_sweatshirt", ["sweater", "sweatshirt", "crewneck", "crew neck", "cổ tròn", "co tron", "nỉ"]]
+  ],
+  "Thắt Lưng": [
+    ["casual_belt", []]
+  ],
+  "Trang sức": [
+    ["wristwatch", ["đồng hồ", "dong ho", "watch", "smartwatch"]],
+    ["necklace", ["dây chuyền", "day chuyen", "vòng cổ", "vong co", "necklace", "choker", "kiềng"]]
+  ],
+  "Trang trí": [
+    ["board_game", ["board game", "boardgame", "bộ bài", "bo bai", "lá bài", "bài tây", "card game", "trò chơi", "tro choi", "cờ vua", "cờ tướng", "cờ cá ngựa", "cờ caro"]],
+    ["model_kit", ["mô hình", "mo hinh", "lắp ráp", "lap rap", "figure", "figurine"]],
+    ["tet_decoration", ["trang trí tết", "trang tri tet", "decor tết", "treo tết", "câu đối", "cau doi", "chúc mừng năm mới", "nguyên đán"]]
+  ],
+  "Tranh ảnh": [
+    ["multi_panel_wall_art", ["bộ 2", "bộ 3", "bộ 4", "bộ 5", "bộ 6", "bộ ba", "bộ đôi", "2 tấm", "3 tấm", "4 tấm", "5 tấm", "6 tấm", "nhiều tấm", "bộ tranh", "tranh bộ", "set tranh"]],
+    ["single_wall_art", ["tranh", "canvas", "poster"]]
+  ],
+  "Túi": [
+    ["crossbody_bag", ["đeo chéo", "deo cheo", "crossbody", "cross body"]],
+    ["tote_bag", ["tote", "túi vải", "tui vai", "túi canvas", "tui canvas", "shopper"]]
+  ],
+  "Váy Đầm": [
+    ["skirt", ["chân váy", "chan vay", "skirt"]],
+    ["casual_dress", ["hoa nhí", "hoa nhi", "babydoll", "baby doll", "sơ mi", "so mi", "đi biển", "di bien", "công sở", "cong so", "yếm", "suông", "jean", "denim", "kaki", "caro"]],
+    ["party_dress", ["tiệc", "du tiec", "di tiec", "dạ hội", "da hoi", "party", "cúp ngực", "cup nguc", "quây", "body", "bodycon", "hai dây", "2 dây", "corset", "đuôi cá", "duoi ca", "trễ vai", "lệch vai", "hở vai", "hở lưng", "cổ đổ", "kim sa", "sequin", "xẻ tà", "xẻ đùi", "sexy", "gợi cảm", "satin", "evening", "prom"]]
+  ],
+  "Vải len": [
+    ["knit_sweater", []]
+  ],
+  "phụ kiện điện thoại": [
+    ["smartphone", ["ram", "cpu", "gpu", "chipset"]]
+  ],
+  "Áo Lông": [
+    ["faux_fur_jacket", []]
+  ],
+  "Áo dài": [
+    ["modern_ao_dai", ["cách tân", "cach tan", "cải tiến", "cai tien", "tay lửng", "tay loe", "tay phồng", "tay ngắn", "cộc tay", "dáng suông", "4 tà", "bốn tà", "cổ thuyền", "cổ vuông", "trễ vai"]],
+    ["traditional_ao_dai", ["truyền thống", "truyen thong", "cổ đứng", "tay dài", "học sinh", "nữ sinh", "đồng phục"]]
+  ],
+  "Áo khoác": [
+    ["denim_jacket", ["jean", "jeans", "denim", "khoác bò", "áo bò"]],
+    ["knit_cardigan", ["cardigan", "cadigan", "khoác len", "len đan", "áo len"]],
+    ["puffer_jacket", ["phao", "puffer", "lông vũ", "long vu", "trần bông", "chần bông", "tran bong"]],
+    ["zip_hoodie", ["hoodie", "hoodies", "hoddie", "hodie"]],
+    ["windbreaker", ["khoác gió", "khoac gio", "áo gió", "ao gio", "khoác dù", "khoac du", "áo dù", "windbreaker", "khoác thể thao"]],
+    ["faux_fur_jacket", ["lông cừu", "long cuu", "lông nhân tạo", "lông thú", "teddy", "sherpa", "fur", "khoác lông", "khoac long", "áo lông"]]
+  ],
+  "Áo kiểu": [
+    ["graphic_hoodie", ["hoodie", "hoodies", "hoddie", "hodie", "có mũ"]],
+    ["blouse_shirt", ["sơ mi", "so mi", "áo kiểu", "ao kieu", "blouse", "babydoll", "voan", "lụa", "bèo", "tay phồng", "trễ vai", "croptop", "crop top"]]
+  ],
+  "Áo quần bóng đá": [
+    ["team_kit_set", ["bộ quần áo", "bộ áo", "bộ đồ", "quần áo", "kèm quần", "set", "bộ đá banh", "đồ đá bóng", "đồ đá banh", "đồ bóng đá"]],
+    ["fan_tee", ["áo thun", "ao thun", "áo phông", "ao phong", "tee", "t-shirt", "tshirt"]],
+    ["club_jersey", ["áo đấu", "ao dau", "jersey", "sân nhà", "sân khách", "san nha", "san khach", "replica", "áo bóng đá", "ao bong da", "áo đá bóng", "áo đá banh", "player"]]
+  ],
+  "Áo thun": [
+    ["family_set", ["áo gia đình", "thun gia đình", "đôi gia đình", "đồ gia đình", "set gia đình", "ao gia dinh", "family", "bố mẹ", "ba mẹ", "cha mẹ", "mẹ và bé", "bố và bé", "mẹ con", "bố con"]],
+    ["couple_set", ["couple", "áo đôi", "ao doi", "thun đôi", "thun doi", "đồ đôi", "áo cặp", "ao cap", "thun cặp", "đồ cặp", "tình nhân", "tinh nhan"]],
+    ["sports_fan", ["bóng đá", "bong da", "đá bóng", "cổ động", "co dong", "đội tuyển", "doi tuyen", "câu lạc bộ", "clb", "football", "world cup", "cầu thủ"]],
+    ["plain", ["trơn", "plain", "không in", "khong in"]],
+    ["graphic_single", ["in", "graphic", "họa tiết", "hoạ tiết", "thư pháp", "hình in"]],
+    ["plain", ["basic", "cơ bản", "co ban", "một màu", "mot mau"]]
+  ],
+  "Điện Thoại": [
+    ["smartphone", []]
+  ],
+  "Đồ ngủ": [
+    ["pajama_set", []]
+  ]
+}
