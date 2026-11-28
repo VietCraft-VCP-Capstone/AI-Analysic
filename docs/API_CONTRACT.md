@@ -511,7 +511,10 @@ cosine. Chỉ so **cùng loại hàng** (danh mục lá), khác shop, và phải
   độ giống; một bên chưa có loại nhỏ thì như cũ. Áp cho `direct_rivals`, `direct_rival_shops`, `rival_shops_by_category`
   và gợi ý từ khoá F34; không áp cho giá AI và mức cạnh tranh hàng mới. `reasons[]` không có từ hiếm chung thì ghi
   `cùng loại: <tên loại nhỏ>`. Tắt bằng `COMPETITOR_SUBKIND=0`. Đo trên 126 sản phẩm thật, 17 giám khảo chấm từng cặp:
-  đối thủ đưa ra đúng 45% → 81% (luật viết trên nửa số shop, chấm trên nửa còn lại).
+  đối thủ đưa ra đúng 45% → 82% (luật viết trên nửa số shop, chấm trên nửa còn lại; 81% khi chưa có từ điển đồng nghĩa).
+- Từ điển đồng nghĩa (thêm 28/11): `competitor_synonyms.json` đưa tên, từ khoá và tên loại về một cách gọi trước khi tính
+  độ giống (áo phông → áo thun, couple → đôi, máy tính xách tay → laptop…), chỉ cụm không nhập nhằng, không áp vào mô tả.
+  Đổi nhẹ độ giống nên có ảnh hưởng cả giá AI (sai số trên sàn 7,2% → 6,9%). Cùng công tắc `COMPETITOR_SUBKIND=0`.
 - F32 toàn cảnh danh mục (thêm 11/11, chỉ shop thật, `_competitor_landscape.py`, thống kê chứ không phải AI):
   `shops[]` mỗi shop trong danh mục `{shop_id, shop_name, is_me, n_listings, types[{name, count}], materials[] (3 chất liệu
   nhiều nhất, tên chuẩn), new_8w, price_vnd{p25, median, p75}, units_90d, share_pct, rating (rating_shrunk gộp theo số lượt,
