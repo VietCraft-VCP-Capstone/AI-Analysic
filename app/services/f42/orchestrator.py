@@ -18,18 +18,21 @@ from pymongo import MongoClient
 from app.config import settings
 from app.services.f42 import config
 from app.services.f42.ai_engine import MarketAIAdvisor
-from app.services.f42.comparable_pricing import ComparableEstimate, ComparableIndex, _contains, _head_tokens, _prep
+from app.services.f42.comparable_pricing import ComparableEstimate, ComparableIndex, _contains, _head_tokens, _prep, _type_head
 from app.services.f42.content_validator import validate_content
 from app.services.f42.context_resolver import ContextResolver
 from app.services.f42.external_market import ExternalMarketProvider
 from app.services.f42.pricing_engine import (
+    build_cost_analysis,
     compute_pricing,
     detect_material,
     fetch_prices_from_db,
+    SOURCE_LABELS,
+    sample_listings,
     pricing_from_comparables,
     round_price,
 )
-from app.services.f42.vi_text import contains_phrase_lenient, strip_accents
+from app.services.f42.vi_text import clean_tokens, contains_phrase_lenient, strip_accents
 from app.services.f42.schemas import (
     CategoryCandidate,
     CategoryResult,
@@ -48,6 +51,7 @@ from app.services.f42.schemas import (
 )
 from app.services.f42.market_aggregator import MarketDataAggregator
 from app.services.f42.market_crawler import fetch_on_demand, record_seller_query
+from app.services.f42.etsy_crawler import fetch_etsy_on_demand
 from app.services.f42.trend_signal import apply_demand, demand_signal
 from app.services.f42.input_parser import ParsedInput, parse_seller_input
 from app.services.f42.tag_mining import fetch_tags_from_db
@@ -177,6 +181,21 @@ def _vote_category_from_comparables(
     )
 
 
+def _type_term(title: str, material: str = "") -> str:
+    """Tên loại sản phẩm (giữ dấu) + chất liệu: "Váy đầm kiểu dáng đơn giản, màu be" -> "váy đầm"."""
+    head = _type_head(_prep(title))
+    words, i = [], 0
+    for t in clean_tokens(title):
+        if i < len(head) and _prep(t) == head[i]:
+            words.append(t)
+            i += 1
+    if i < len(head) or not words:
+        return ""
+    if material and not contains_phrase_lenient(" ".join(words), material):
+        words.append(material.lower())
+    return " ".join(words)
+
+
 def _resolve_pricing(
     comp_est: Optional[ComparableEstimate],
     internal_market: Dict[str, Any],
@@ -190,7 +209,7 @@ def _resolve_pricing(
     """Một đường định giá duy nhất cho mọi nhánh (có hay không có Gemini)."""
     # 1. Sản phẩm tương đồng
     if comp_est is not None and comp_est.usable and comp_est.p50 > 0 and len(comp_est.comparables) >= 2:
-        return pricing_from_comparables(comp_est, blank_cost=blank_cost)
+        return pricing_from_comparables(comp_est, blank_cost=blank_cost, target_margin=target_margin)
 
     # Tên nêu mẫu cụ thể (OPPO Reno15 F, Vivobook 15) mà không có dữ liệu đúng mẫu: KHÔNG lấy giá "cùng tên
     # trên sàn"/"cả danh mục" — các bước đó gộp mọi hãng (OPPO bị định giá 29 triệu theo iPhone 17, 18 Pro Max)
@@ -216,8 +235,11 @@ def _resolve_pricing(
         return res
 
     # 3. Cả danh mục trên sàn → 4. Cost-Plus → 5. Không gợi ý (compute_pricing tự rẽ nhánh)
-    cat_prices = fetch_prices_from_db(category_id, db_live, material) if category_id and db_live is not None else []
-    return compute_pricing(cat_prices, blank_cost=blank_cost, target_margin=target_margin)
+    cat_rows = fetch_prices_from_db(category_id, db_live, material) if category_id and db_live is not None else []
+    res = compute_pricing([r["price"] for r in cat_rows], blank_cost=blank_cost, target_margin=target_margin)
+    if res.method == "category_market" and res.market:
+        res.comparables = sample_listings(cat_rows, res.market["p25"], res.market["p75"])
+    return res
 
 
 def _apply_quantity_and_condition(res: PricingResult, parsed: ParsedInput) -> None:
@@ -225,10 +247,13 @@ def _apply_quantity_and_condition(res: PricingResult, parsed: ParsedInput) -> No
     if parsed.condition == "used":
         res.warnings.append(next(i for i in parsed.issues if i.startswith("Hàng đã qua sử dụng")))
     q = parsed.quantity
-    if q <= 1 or res.suggested_price <= 0 or res.method == "cost_plus":
+    if q <= 1 or res.suggested_price <= 0:
         return
     unit = res.suggested_price
     res.p25, res.p50, res.p75, res.p90 = (v * q for v in (res.p25, res.p50, res.p75, res.p90))
+    res.price_points = [p * q for p in res.price_points]
+    if res.market:
+        res.market = {k: v * q for k, v in res.market.items()}
     res.suggested_price = unit * q
     res.suggested_range = PriceRange(low=res.suggested_range.low * q, high=res.suggested_range.high * q)
     res.explanation = (res.explanation or "") + (
@@ -236,7 +261,8 @@ def _apply_quantity_and_condition(res: PricingResult, parsed: ParsedInput) -> No
         "Combo thường được giảm nhẹ so với mua lẻ để khuyến khích mua nhiều.").replace(",", ".")
 
 
-def _apply_demand_signal(res: PricingResult, db_data: Any, title: str, blank_cost: float) -> None:
+def _apply_demand_signal(res: PricingResult, db_data: Any, title: str, blank_cost: float,
+                         margin: Optional[float] = None) -> None:
     """Google Trends chỉ dịch giá đề xuất TRONG khoảng giá thị trường thật, không dùng cho Cost-Plus."""
     if res.method not in ("comparables", "internal_similar", "category_market") or res.suggested_price <= 0:
         return
@@ -245,8 +271,9 @@ def _apply_demand_signal(res: PricingResult, db_data: Any, title: str, blank_cos
         return
     out = apply_demand(res.p25, res.p50, res.p75, signal, round_price)
     price = out["price"]
-    if blank_cost > 0:  # dịch xuống cũng không được bán dưới giá vốn × biên tối thiểu
-        price = max(price, round_price(blank_cost * config.COST_MIN_SUGGEST_RATIO))
+    if blank_cost > 0:  # dịch xuống cũng không được thấp hơn giá cho biên lãi mong muốn
+        m = config.DEFAULT_TARGET_MARGIN if margin is None else margin
+        price = max(price, round_price(blank_cost * (1 + m)))
     res.suggested_price = price
     res.explanation = (res.explanation or "") + out["note"]
     res.demand_signal = {**signal, "direction": out["direction"]}
@@ -340,10 +367,17 @@ class F42Orchestrator:
                 # (iPhone 18 Pro Max) thì tìm theo tên mẫu — "điện thoại iphone..." Tiki trả cả Realme, Redmi.
                 model_sig = index.model_signature(title_input)
                 search_term = " ".join(model_sig) or title_input
-                if (not comp_est.usable or comp_est.confidence == "low") and fetch_on_demand(db_data, search_term):
-                    index.invalidate_market()
-                    index.refresh_market(db_data)
-                    comp_est = index.estimate(combined_query)
+                if not comp_est.usable or comp_est.confidence == "low":
+                    crawled = fetch_on_demand(db_data, search_term)
+                    # Tiêu đề dài ("váy đầm kiểu dáng đơn giản, màu be") Tiki/Etsy tìm ra ít: cào thêm theo tên loại
+                    type_term = "" if model_sig else _type_term(title_input, effective_material)
+                    if type_term and type_term != search_term:
+                        crawled = fetch_on_demand(db_data, type_term) or crawled
+                    crawled = fetch_etsy_on_demand(db_data, type_term or search_term) or crawled
+                    if crawled:
+                        index.invalidate_market()
+                        index.refresh_market(db_data)
+                        comp_est = index.estimate(combined_query)
         except Exception as exc:
             # In cả lý do ra console: chỉ ghi tên sự kiện thì không ai biết vì sao giá ra "chưa đủ dữ liệu"
             logger.warning("f42.comparables_failed: %s: %s", type(exc).__name__, exc, extra={"error": str(exc)})
@@ -353,7 +387,7 @@ class F42Orchestrator:
         # ---------------- Gemini (chỉ nội dung) ----------------
         ai_data: Optional[Dict[str, Any]] = None
         ai_errors: List[str] = []
-        if MarketAIAdvisor.is_gemini_available() and title_input:
+        if MarketAIAdvisor.is_gemini_available() and title_input and not req.pricing_only:
             try:
                 raw = MarketAIAdvisor.call_gemini_analysis(
                     title=title_input,
@@ -412,8 +446,9 @@ class F42Orchestrator:
             pricing_res = compute_pricing([], blank_cost=list_cost, target_margin=target_margin)
         pricing_res.detected_product = pricing_res.detected_product or detected_product
         pricing_res.detected_brand = pricing_res.detected_brand or detected_brand
-        _apply_demand_signal(pricing_res, db_data, title_input, list_cost)
+        _apply_demand_signal(pricing_res, db_data, title_input, list_cost, target_margin)
         _apply_quantity_and_condition(pricing_res, parsed)
+        pricing_res.cost_analysis = build_cost_analysis(pricing_res, blank_cost, commission, target_margin, parsed.quantity)
 
         # ---------------- Khối 3: tag ----------------
         try:
@@ -513,7 +548,7 @@ class F42Orchestrator:
                     seen_titles.add(c.title[:140])
                     extra_comps.append(ComparableItem(
                         title=c.title[:140], price=int(round(c.price)), similarity=round(c.similarity, 2),
-                        source="Sàn VietCraft" if c.source == "vietcraft" else "Thị trường TMĐT",
+                        source=SOURCE_LABELS.get(c.source, "Thị trường TMĐT"), sold=int(c.sold or 0), url=c.url,
                     ))
         # Tin "cùng tên trên sàn" chỉ khớp 2-3 chữ đầu ("điện thoại" = mọi hãng): chỉ hiện khi giá lấy từ chúng
         for ic in (internal_market.get("comparables") or []) if pricing_res.method == "internal_similar" else []:
@@ -521,7 +556,7 @@ class F42Orchestrator:
                 seen_titles.add(ic["title"][:140])
                 extra_comps.append(ComparableItem(
                     title=ic["title"][:140], price=ic["price"], similarity=ic.get("similarity"),
-                    source=ic.get("source", "Sàn VietCraft"),
+                    source=ic.get("source", "Sàn VietCraft"), url=ic.get("url"),
                 ))
         pricing_res.comparables = (merged_comps + extra_comps)[:6]
 
@@ -560,7 +595,9 @@ class F42Orchestrator:
             "detected_brand": pricing_res.detected_brand,
             "demand_signal": pricing_res.demand_signal,
             "comparables": [c.model_dump() for c in pricing_res.comparables],
+            "price_points": pricing_res.price_points,
             "market_signals": keyword_data.get("search_signals", []),
+            "cost_analysis": pricing_res.cost_analysis,
             "evidence_stats": {
                 "sample_size": sample_n,
                 "p25": pricing_res.suggested_range.low,

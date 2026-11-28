@@ -7,7 +7,7 @@ OUTLIER_METHOD: str = os.getenv("F42_OUTLIER_METHOD", "iqr")
 IQR_K: float = float(os.getenv("F42_IQR_K", 1.5))
 PERCENTILE_TRIM: Tuple[int, int] = (5, 95)
 COST_FLOOR_RATIO: float = float(os.getenv("F42_COST_FLOOR_RATIO", 1.15))
-COST_MIN_SUGGEST_RATIO: float = float(os.getenv("F42_COST_MIN_SUGGEST_RATIO", 1.30))
+COST_MIN_PROFIT: float = float(os.getenv("F42_COST_MIN_PROFIT", 0.05))   # lãi tối thiểu của mức "Dễ bán" trên giá vốn
 DEFAULT_TARGET_MARGIN: float = float(os.getenv("F42_DEFAULT_TARGET_MARGIN", 0.30))
 PRICE_ROUND_STEP: int = int(os.getenv("F42_PRICE_ROUND_STEP", 1000))
 

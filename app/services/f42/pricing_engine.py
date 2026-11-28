@@ -1,7 +1,7 @@
 import logging
 import math
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from bson import ObjectId
 
@@ -142,33 +142,121 @@ def filter_outliers(
     return sorted_nums
 
 
+# Nhãn nguồn hiển thị cho seller
+SOURCE_LABELS = {"vietcraft": "Sàn VietCraft", "vietcraft_sold": "Sàn VietCraft (giá đã bán)", "tiki": "Tiki",
+                 "tiki_fresh": "Tiki (giá mới cập nhật)", "etsy": "Etsy (quốc tế, đã quy đổi VND)"}
+MAX_PRICE_POINTS = 60
+
+
+def evidence_items(comps: Sequence[Any], k: int = 8) -> List[ComparableItem]:
+    """k tin giống nhất, tin đã bán được xếp trước (giá đã có người trả mới là căn cứ mạnh)."""
+    top = list(comps)[:k]
+    top.sort(key=lambda c: (c.sold <= 0, -c.similarity))
+    return [ComparableItem(title=c.title[:140], price=int(round(c.price)), similarity=round(c.similarity, 3),
+                           source=SOURCE_LABELS.get(c.source, "Thị trường TMĐT"), sold=int(c.sold or 0), url=c.url)
+            for c in top]
+
+
+def _spread(sorted_vals: List[int], k: int = MAX_PRICE_POINTS) -> List[int]:
+    """Lấy tối đa k giá trải đều trên danh sách đã sắp xếp (giữ hình dạng phân bố, không gửi cả 500 giá)."""
+    if len(sorted_vals) <= k:
+        return sorted_vals
+    return [sorted_vals[round(i * (len(sorted_vals) - 1) / (k - 1))] for i in range(k)]
+
+
 def _apply_cost_floor(
-    p25: int, p50: int, p75: int, blank_cost: float, warnings: List[str], cfg=config
+    p25: int, p50: int, p75: int, p90: int, blank_cost: float, warnings: List[str],
+    cfg=config, margin: Optional[float] = None,
 ) -> tuple:
-    """Không bao giờ gợi ý giá khiến seller bán dưới giá vốn + biên tối thiểu."""
+    """
+    Nhìn từ giá vốn `blank_cost` (đã gồm phí sàn): hoà vốn → lãi tối thiểu → biên mong muốn.
+    Gợi ý = trung vị thị trường nhưng không thấp hơn giá cho biên mong muốn; "Dễ bán" không thấp hơn
+    hoà vốn + lãi tối thiểu. Khi phải nâng giá, 4 mức vẫn tách nhau để seller còn thứ hạng để chọn.
+    """
     if blank_cost <= 0:
-        return p25, p50, p75
-    market_p75 = p75
-    if p50 < blank_cost * cfg.COST_FLOOR_RATIO:
+        return p25, p50, p75, p90
+    m = cfg.DEFAULT_TARGET_MARGIN if margin is None else margin
+    step = cfg.PRICE_ROUND_STEP
+    p_min = round_price(blank_cost * (1 + m), step)
+    p_low = round_price(blank_cost * (1 + min(m, cfg.COST_MIN_PROFIT)), step)
+    market_p50, market_p75 = p50, p75
+    raised = p50 < p_min
+    if raised:
+        p50 = p_min
+    p25 = min(max(p25, p_low), p50)
+    if raised:
+        p75 = max(p75, round_price(p50 * 1.08, step))
+        p90 = max(p90, round_price(p75 * 1.08, step))
+    else:
+        p75, p90 = max(p75, p50), max(p90, p75)
+    if market_p50 < blank_cost * cfg.COST_FLOOR_RATIO:
         warnings.append("Giá thị trường của sản phẩm tương tự đang thấp hơn hoặc sát giá vốn của bạn.")
-    min_safe = round_price(blank_cost * cfg.COST_MIN_SUGGEST_RATIO, cfg.PRICE_ROUND_STEP)
-    if p50 < min_safe:
-        p50 = min_safe
-        p25 = max(p25, min_safe)
-        p75 = max(p75, p50)
     if blank_cost > market_p75:
         warnings.append("Giá vốn của bạn cao hơn 75% sản phẩm tương tự, sẽ khó cạnh tranh về giá.")
-    return p25, p50, p75
+    elif raised and p_min > market_p75:
+        warnings.append("Giá để đạt biên lãi mong muốn cao hơn 75% sản phẩm tương tự, sẽ khó cạnh tranh về giá.")
+    return p25, p50, p75, p90
 
 
-def _floor_note(market_p50: int, suggested: int) -> str:
+def _floor_note(market_p50: int, suggested: int, margin: Optional[float] = None) -> str:
     if suggested > market_p50:
-        return (f" Giá đề xuất đã được nâng lên {format_vnd(suggested)} (giá vốn × "
-                f"{str(config.COST_MIN_SUGGEST_RATIO).replace('.', ',')}) để không bán lỗ.")
+        m = config.DEFAULT_TARGET_MARGIN if margin is None else margin
+        return (f" Giá đề xuất đã được nâng lên {format_vnd(suggested)} để đạt biên lãi mong muốn "
+                f"{int(round(m * 100))}% trên giá vốn.")
     return ""
 
 
-def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> PricingResult:
+def build_cost_analysis(res: "PricingResult", cost: float, commission: float, margin: Optional[float],
+                        quantity: int = 1) -> Optional[Dict[str, Any]]:
+    """Lãi và biên của từng mức giá, vị thế giá so với thị trường và kết luận. None nếu chưa có giá vốn hoặc giá."""
+    if cost <= 0 or res.suggested_price <= 0:
+        return None
+    fee = 1 + commission / 100
+    total = cost * max(1, quantity)
+    m = config.DEFAULT_TARGET_MARGIN if margin is None else margin
+
+    def tier(price: int) -> Dict[str, Any]:
+        profit = round(price / fee) - round(total)
+        return {"price": int(price), "profit_vnd": int(profit), "margin_pct": round(profit / total * 100, 1)}
+
+    rec = res.suggested_price
+    out: Dict[str, Any] = {
+        "cost": int(round(total)),
+        "commission_pct": commission,
+        "target_margin_pct": round(m * 100, 1),
+        "break_even_price": round_price(total * fee, config.PRICE_ROUND_STEP),
+        "min_price": round_price(total * (1 + m) * fee, config.PRICE_ROUND_STEP),
+        "tiers": {"low": tier(res.suggested_range.low), "rec": tier(rec),
+                  "high": tier(res.suggested_range.high), "premium": tier(res.p90)},
+        "position": None,
+        "verdict": "no_market",
+        "verdict_text": "Chưa có dữ liệu thị trường, giá tính theo giá vốn cộng biên lãi.",
+    }
+    mk = res.market
+    if res.method == "cost_plus" or not mk:
+        return out
+    if rec <= mk["p25"]:
+        out["position"] = "below_p25"
+    elif rec <= mk["p50"]:
+        out["position"] = "p25_p50"
+    elif rec <= mk["p75"]:
+        out["position"] = "p50_p75"
+    else:
+        out["position"] = "above_p75"
+    be = out["break_even_price"]
+    if mk["p75"] < be:
+        out["verdict"], out["verdict_text"] = "loss", "Phần lớn sản phẩm tương tự bán thấp hơn giá vốn của bạn."
+    elif rec > mk["p75"]:
+        out["verdict"], out["verdict_text"] = "uncompetitive", "Giá để giữ biên lãi mong muốn cao hơn 75% thị trường."
+    elif rec > mk["p50"]:
+        out["verdict"], out["verdict_text"] = "tight", "Giá gợi ý cao hơn trung vị thị trường để giữ biên lãi."
+    else:
+        out["verdict"], out["verdict_text"] = "ok", "Giá gợi ý nằm trong mặt bằng thị trường và còn lãi."
+    return out
+
+
+def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config,
+                             target_margin: Optional[float] = None) -> PricingResult:
     """Chuyển ComparableEstimate thành PricingResult có giải thích và bằng chứng."""
     if not est or not est.usable or est.p50 <= 0 or est.n_used == 0:
         return PricingResult(
@@ -191,7 +279,7 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
 
     warnings: List[str] = []
     m25, m50, m75 = est.p25, est.p50, est.p75  # phân vị thị trường thật, trước khi áp giá vốn
-    p25, p50, p75 = _apply_cost_floor(m25, m50, m75, blank_cost, warnings, cfg)
+    p25, p50, p75, p90 = _apply_cost_floor(m25, m50, m75, est.p90, blank_cost, warnings, cfg, target_margin)
 
     if getattr(est, "match_note", None):
         warnings.append(est.match_note)
@@ -229,20 +317,10 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
     explanation = (
         "; ".join(parts)
         + f". Giá thị trường P25: {format_vnd(m25)}, trung vị P50: {format_vnd(m50)}, P75: {format_vnd(m75)}."
-        + _floor_note(m50, p50)
+        + _floor_note(m50, p50, target_margin)
     )
 
-    comparables = [
-        ComparableItem(
-            title=c.title[:140],
-            price=int(round(c.price)),
-            similarity=round(c.similarity, 3),
-            source={"vietcraft": "Sàn VietCraft", "vietcraft_sold": "Sàn VietCraft (giá đã bán)",
-                    "tiki_fresh": "Tiki (giá mới cập nhật)",
-                    "etsy": "Etsy (quốc tế, đã quy đổi VND)"}.get(c.source, "Thị trường TMĐT")
-        )
-        for c in est.comparables[:8]
-    ]
+    comparables = evidence_items(est.comparables)
 
     source_label = f"Đối chiếu từ {est.n_used} sản phẩm tương đồng (Độ tương đồng TB {int(est.mean_similarity * 100)}%)"
 
@@ -255,13 +333,15 @@ def pricing_from_comparables(est: Any, blank_cost: float = 0.0, cfg=config) -> P
         p25=p25,
         p50=p50,
         p75=p75,
-        p90=max(est.p90, p75),
+        p90=max(p90, p75),
         suggested_price=p50,
         suggested_range=PriceRange(low=p25, high=p75),
         confidence=est.confidence,
         warnings=warnings,
         explanation=explanation,
         comparables=comparables,
+        price_points=sorted(int(round(c.price)) for c in est.comparables)[:MAX_PRICE_POINTS],
+        market={"p25": int(m25), "p50": int(m50), "p75": int(m75), "p90": int(est.p90)},
         detected_product=est.detected_product,
         detected_brand=est.detected_brand,
         source_label=source_label,
@@ -303,13 +383,13 @@ def compute_pricing(
         warnings.append(
             "Không tìm thấy sản phẩm thật sự giống, giá đang tính theo toàn bộ danh mục nên chỉ mang tính tham khảo."
         )
-        m25, m50, m75 = p25, p50, p75
-        p25, p50, p75 = _apply_cost_floor(p25, p50, p75, blank_cost, warnings, cfg)
+        m25, m50, m75, m90 = p25, p50, p75, p90
+        p25, p50, p75, p90 = _apply_cost_floor(p25, p50, p75, p90, blank_cost, warnings, cfg, target_margin)
 
         explanation = (
             f"Dựa trên {sample_filtered} sản phẩm cùng danh mục trên sàn (sau khi lọc ngoại lai), "
             f"khoảng giá phổ biến {format_vnd(m25)} – {format_vnd(m75)}, trung vị {format_vnd(m50)}. "
-            f"Mức đề xuất: {format_vnd(p50)}." + _floor_note(m50, p50)
+            f"Mức đề xuất: {format_vnd(p50)}." + _floor_note(m50, p50, target_margin)
         )
 
         return PricingResult(
@@ -328,6 +408,8 @@ def compute_pricing(
             warnings=warnings,
             explanation=explanation,
             source_label=f"Thống kê {sample_filtered} sản phẩm cùng danh mục",
+            price_points=_spread(sorted(int(round(p)) for p in filtered_prices)),
+            market={"p25": int(m25), "p50": int(m50), "p75": int(m75), "p90": int(m90)},
         )
 
     # Nhánh 2: Thiếu dữ liệu thị trường nhưng có giá vốn (Cost-Plus)
@@ -496,9 +578,9 @@ def fetch_prices_from_db(
     category_id: Optional[str],
     db_live: Any,
     material: Optional[str] = None
-) -> List[float]:
+) -> List[Dict[str, Any]]:
     """
-    Giá (mỗi sản phẩm một giá) của các sản phẩm đang bán cùng danh mục.
+    Sản phẩm đang bán cùng danh mục (mỗi sản phẩm một giá), để vừa tính giá vừa cho seller xem căn cứ.
     Nếu có >= MIN_SAMPLE_LOW sản phẩm cùng chất liệu thì ưu tiên nhóm đó.
     """
     if not category_id or db_live is None:
@@ -507,13 +589,23 @@ def fetch_prices_from_db(
     if ObjectId.is_valid(category_id):
         ors.append({"category_ids": ObjectId(category_id)})
     rows = fetch_live_listings(db_live, {"$or": ors}, limit=500)
-    prices = [r["price"] for r in rows]
     if material:
-        mat_prices = [
-            r["price"] for r in rows
+        mat_rows = [
+            r for r in rows
             if any(contains_phrase_lenient(m, material) for m in r["materials"])
             or contains_phrase_lenient(r["title"], material)
         ]
-        if len(mat_prices) >= config.MIN_SAMPLE_LOW:
-            return mat_prices
-    return prices
+        if len(mat_rows) >= config.MIN_SAMPLE_LOW:
+            return mat_rows
+    return rows
+
+
+def sample_listings(rows: List[Dict[str, Any]], low: float, high: float, k: int = 6) -> List[ComparableItem]:
+    """Vài sản phẩm trải đều trong khoảng giá phổ biến [low, high]: cho seller thấy giá đang dựa vào đâu."""
+    inside = sorted((r for r in rows if low <= r["price"] <= high), key=lambda r: r["price"])
+    if not inside:
+        return []
+    picks = sorted({round(i * (len(inside) - 1) / max(1, k - 1)) for i in range(k)})
+    return [ComparableItem(title=inside[i]["title"][:140], price=int(round(inside[i]["price"])), source="Sàn VietCraft",
+                           url=f"/product/{inside[i]['_id']}" if inside[i].get("_id") else None)
+            for i in picks]
