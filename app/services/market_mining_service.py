@@ -32,7 +32,7 @@ SEASONAL_ATTRIBUTE_CLUSTERS = {
         "gia-dung": "Ly sứ in hoa & Bình giữ nhiệt quà tặng",
         "phu-kien": "Túi Tote Canvas & Set phụ kiện quà tặng mẹ",
         "trang-tri": "Khung tranh in hoa & Nến thơm thư giãn",
-        "default": "Set quà tặng phái đẹp & Mỹ phẩm thủ công"
+        "default": "Set quà tặng phái đẹp & Mỹ phẩm"
     },
     "quà valentine": {
         "thoi-trang": "Áo thun cặp đôi & Đồ đôi dạo phố",
